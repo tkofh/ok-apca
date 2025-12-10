@@ -26,6 +26,25 @@ class ColorImpl implements Color {
 }
 
 /**
+ * Compute the tent function value for gamut mapping.
+ *
+ * The tent function scales from 0 at L=0, peaks at L=lMax, back to 0 at L=1.
+ * Using min() instead of branching: min(L/lMax, (1-L)/(1-lMax))
+ */
+function computeTent(L: number, lMax: number): number {
+	// Handle edge cases
+	if (L <= 0 || L >= 1) {
+		return 0
+	}
+	if (lMax <= 0 || lMax >= 1) {
+		return 0
+	}
+
+	// Simplified tent: min of both slopes
+	return Math.min(L / lMax, (1 - L) / (1 - lMax))
+}
+
+/**
  * Clamp chroma to fit within the sRGB gamut boundary for the given hue and lightness.
  *
  * Uses the "tent function" approach: maximum chroma occurs at lMax (the lightness
@@ -39,18 +58,8 @@ export function gamutMap(color: Color, boundary?: GamutBoundary): Color {
 	// Clamp lightness to valid range
 	const L = Math.max(0, Math.min(1, lightness))
 
-	// Handle edge cases where tent function would divide by zero
-	if (L <= 0 || L >= 1) {
-		return new ColorImpl(hue, 0, L)
-	}
-
-	if (lMax <= 0 || lMax >= 1) {
-		// Degenerate boundary - shouldn't happen for valid hues, but handle gracefully
-		return new ColorImpl(hue, 0, L)
-	}
-
-	// Tent function: scales from 0 at L=0, peaks at L=lMax, back to 0 at L=1
-	const tent = L <= lMax ? L / lMax : (1 - L) / (1 - lMax)
+	// Tent function: min(L/lMax, (1-L)/(1-lMax))
+	const tent = computeTent(L, lMax)
 
 	// Maximum chroma at this lightness
 	const maxChroma = cPeak * tent
@@ -59,6 +68,48 @@ export function gamutMap(color: Color, boundary?: GamutBoundary): Color {
 	const clampedChroma = Math.min(Math.max(0, chroma), maxChroma)
 
 	return new ColorImpl(hue, clampedChroma, L)
+}
+
+/**
+ * Solve for target Y adjusted value based on contrast mode.
+ * Extracted to reduce cognitive complexity of applyContrast.
+ */
+function solveTargetYadj(Yadj: number, x: number, apcaT: number, mode: ContrastMode): number {
+	if (mode === 'force-light') {
+		return solveApcaReverse(Yadj, x, apcaT).targetY
+	}
+	if (mode === 'force-dark') {
+		return solveApcaNormal(Yadj, x, apcaT).targetY
+	}
+	if (mode === 'prefer-light') {
+		return solvePreferLight(Yadj, x, apcaT)
+	}
+	// prefer-dark
+	return solvePreferDark(Yadj, x, apcaT)
+}
+
+/**
+ * Solve for prefer-light mode: try reverse (lighter) first, fall back to normal.
+ */
+function solvePreferLight(Yadj: number, x: number, apcaT: number): number {
+	const { targetY: YR, inGamut: xrg } = solveApcaReverse(Yadj, x, apcaT)
+	if (xrg) {
+		return YR
+	}
+	const { targetY: YN, inGamut: xng } = solveApcaNormal(Yadj, x, apcaT)
+	return xng ? YN : YR
+}
+
+/**
+ * Solve for prefer-dark mode: try normal (darker) first, fall back to reverse.
+ */
+function solvePreferDark(Yadj: number, x: number, apcaT: number): number {
+	const { targetY: YN, inGamut: xng } = solveApcaNormal(Yadj, x, apcaT)
+	if (xng) {
+		return YN
+	}
+	const { targetY: YR, inGamut: xrg } = solveApcaReverse(Yadj, x, apcaT)
+	return xrg ? YR : YN
 }
 
 /**
@@ -99,12 +150,8 @@ export function applyContrast(
 	// APCA threshold for Bézier smoothing
 	const apcaT = 0.022
 
-	// Solve APCA for target Y in both polarities
-	const { targetY: YN, inGamut: xng } = solveApcaNormal(YADJ, x, apcaT)
-	const { targetY: YR, inGamut: xrg } = solveApcaReverse(YADJ, x, apcaT)
-
-	// Select which solution to use based on mode and gamut validity
-	const targetYadj = selectContrastY(mode, YN, YR, xng, xrg)
+	// Solve for target Y adjusted value based on contrast mode
+	const targetYadj = solveTargetYadj(YADJ, x, apcaT, mode)
 
 	// Invert soft-toe to get actual Y
 	const targetY = invertSoftToe(targetYadj)
@@ -249,44 +296,6 @@ function solveApcaReverse(
 	const inGamut = targetY >= -epsilon && targetY <= 1 + epsilon
 
 	return { targetY: Math.max(0, Math.min(1, targetY)), inGamut }
-}
-
-/**
- * Select which contrast Y to use based on mode and gamut validity.
- */
-function selectContrastY(
-	mode: ContrastMode,
-	Yn: number,
-	Yr: number,
-	xng: boolean,
-	xrg: boolean,
-): number {
-	switch (mode) {
-		case 'force-light':
-			// Always use normal polarity (darker contrast = lighter background perception)
-			return Yn
-		case 'force-dark':
-			// Always use reverse polarity (lighter contrast = darker background perception)
-			return Yr
-		case 'prefer-light':
-			// Use normal if valid, otherwise reverse
-			if (xng) {
-				return Yn
-			}
-			if (xrg) {
-				return Yr
-			}
-			return Yn // Fallback to normal
-		case 'prefer-dark':
-			// Use reverse if valid, otherwise normal
-			if (xrg) {
-				return Yr
-			}
-			if (xng) {
-				return Yn
-			}
-			return Yr // Fallback to reverse
-	}
 }
 
 /**

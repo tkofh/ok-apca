@@ -1,5 +1,5 @@
-export { applyContrast, gamutMap } from './color.ts'
 export type { Color } from './color.ts'
+export { applyContrast, gamutMap } from './color.ts'
 export { computeYConversionCoefficients, findGamutBoundary } from './gamut.ts'
 export { generateColorCss } from './generator.ts'
 export type {

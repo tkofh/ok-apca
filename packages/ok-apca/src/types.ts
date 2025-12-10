@@ -1,7 +1,7 @@
 export type ContrastMode = 'force-light' | 'prefer-light' | 'prefer-dark' | 'force-dark'
 
 export interface ContrastOptions {
-	readonly modes: ContrastMode[]
+	readonly mode: ContrastMode
 	readonly selector?: string
 }
 

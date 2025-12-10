@@ -29,23 +29,15 @@ describe('generateColorCss', () => {
 			hue: 30,
 			selector: '.color',
 			contrast: {
-				modes: ['force-light', 'prefer-light', 'prefer-dark', 'force-dark'],
+				mode: 'force-light',
 			},
 		})
 
 		// Should contain contrast selector
 		expect(css).toContain('.color.contrast {')
 
-		// Should contain polarity constants
-		expect(css).toContain('--polarity-force-light: 0;')
-		expect(css).toContain('--polarity-prefer-light: 1;')
-		expect(css).toContain('--polarity-prefer-dark: 2;')
-		expect(css).toContain('--polarity-force-dark: 3;')
-
-		// Should contain Y-conversion coefficients
-		expect(css).toContain('--_YC0-COEF:')
-		expect(css).toContain('--_YC1-COEF:')
-		expect(css).toContain('--_YC2-COEF:')
+		// Should contain simplified Y calculation
+		expect(css).toContain('--_y:')
 
 		// Should output contrast color
 		expect(css).toContain('--o-color-contrast: oklch(')
@@ -56,7 +48,7 @@ describe('generateColorCss', () => {
 			hue: 30,
 			selector: '.color',
 			contrast: {
-				modes: ['force-light'],
+				mode: 'force-light',
 				selector: '&[data-contrast]',
 			},
 		})
@@ -69,7 +61,7 @@ describe('generateColorCss', () => {
 			hue: 30,
 			selector: '.color',
 			contrast: {
-				modes: ['force-light'],
+				mode: 'force-light',
 				selector: '.has-contrast',
 			},
 		})
@@ -115,7 +107,7 @@ describe('generateColorCss', () => {
 			hue: 200,
 			selector: '[data-color]',
 			contrast: {
-				modes: ['prefer-light', 'prefer-dark'],
+				mode: 'prefer-light',
 			},
 		})
 
@@ -148,27 +140,63 @@ describe('generateColorCss output structure', () => {
 		expect(css).toContain('var(--_c)')
 	})
 
-	it('produces contrast CSS with APCA calculation chain', () => {
+	it('produces contrast CSS with APCA calculation chain for force-light', () => {
 		const css = generateColorCss({
 			hue: 60,
 			selector: '.test',
 			contrast: {
-				modes: ['force-light'],
+				mode: 'force-light',
 			},
 		})
 
 		// Should have Y conversion
 		expect(css).toContain('--_y:')
-		expect(css).toContain('--_y-adj:')
 
-		// Should have APCA solving variables
-		expect(css).toContain('--_xn:')
+		// Should only have reverse polarity (--_xr) for force-light (lighter text)
+		expect(css).not.toContain('--_xn:')
 		expect(css).toContain('--_xr:')
 
-		// Should have Cardano's formula variables
-		expect(css).toContain('--_p:')
-		expect(css).toContain('--_q:')
-		expect(css).toContain('--_d:')
+		// Should have contrast lightness (simplified cube root)
 		expect(css).toContain('--_contrast-l:')
+	})
+
+	it('produces contrast CSS with APCA calculation chain for force-dark', () => {
+		const css = generateColorCss({
+			hue: 60,
+			selector: '.test',
+			contrast: {
+				mode: 'force-dark',
+			},
+		})
+
+		// Should only have normal polarity (--_xn) for force-dark (darker text)
+		expect(css).toContain('--_xn:')
+		expect(css).not.toContain('--_xr:')
+	})
+
+	it('produces contrast CSS with both polarities for prefer modes', () => {
+		const cssPreferLight = generateColorCss({
+			hue: 60,
+			selector: '.test',
+			contrast: {
+				mode: 'prefer-light',
+			},
+		})
+
+		// Should have both polarities for prefer-light (needs fallback)
+		expect(cssPreferLight).toContain('--_xn:')
+		expect(cssPreferLight).toContain('--_xr:')
+
+		const cssPreferDark = generateColorCss({
+			hue: 60,
+			selector: '.test',
+			contrast: {
+				mode: 'prefer-dark',
+			},
+		})
+
+		// Should have both polarities for prefer-dark (needs fallback)
+		expect(cssPreferDark).toContain('--_xn:')
+		expect(cssPreferDark).toContain('--_xr:')
 	})
 })

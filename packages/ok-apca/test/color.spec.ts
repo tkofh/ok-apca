@@ -135,21 +135,20 @@ describe('applyContrast', () => {
 			expect(result.hue).toBe(input.hue)
 		})
 
-		it('returns darker color for force-light mode on mid-tone', () => {
+		it('returns lighter color for force-light mode on mid-tone', () => {
 			const input = { hue: 30, chroma: 0.15, lightness: 0.5 }
 			const result = applyContrast(input, 60, 'force-light')
 
-			// force-light means we want a light background, so dark text
-			// dark text = lower luminance = likely lower lightness
-			expect(result.lightness).toBeLessThan(input.lightness)
+			// force-light means the contrast text should be light
+			expect(result.lightness).toBeGreaterThan(input.lightness)
 		})
 
-		it('returns lighter color for force-dark mode on mid-tone', () => {
+		it('returns darker color for force-dark mode on mid-tone', () => {
 			const input = { hue: 30, chroma: 0.15, lightness: 0.5 }
 			const result = applyContrast(input, 60, 'force-dark')
 
-			// force-dark means we want a dark background, so light text
-			expect(result.lightness).toBeGreaterThan(input.lightness)
+			// force-dark means the contrast text should be dark
+			expect(result.lightness).toBeLessThan(input.lightness)
 		})
 	})
 
@@ -172,50 +171,50 @@ describe('applyContrast', () => {
 		})
 
 		it('produces increasingly different lightness for higher contrast', () => {
-			// Use a light color so there's room to go darker for force-light
+			// Use a dark color so there's room to go darker for force-dark
 			const input = { hue: 30, chroma: 0.15, lightness: 0.8 }
 
-			const low = applyContrast(input, 30, 'force-light')
-			const mid = applyContrast(input, 60, 'force-light')
-			const high = applyContrast(input, 90, 'force-light')
+			const low = applyContrast(input, 30, 'force-dark')
+			const mid = applyContrast(input, 60, 'force-dark')
+			const high = applyContrast(input, 90, 'force-dark')
 
-			// Higher contrast should mean lower lightness (for force-light)
+			// Higher contrast should mean lower lightness (for force-dark)
 			expect(low.lightness).toBeGreaterThan(mid.lightness)
 			expect(mid.lightness).toBeGreaterThan(high.lightness)
 		})
 	})
 
 	describe('polarity modes', () => {
-		it('prefer-light chooses darker when possible', () => {
-			const input = { hue: 30, chroma: 0.1, lightness: 0.7 }
+		it('prefer-light chooses lighter when possible', () => {
+			const input = { hue: 30, chroma: 0.1, lightness: 0.3 }
 			const result = applyContrast(input, 50, 'prefer-light')
 
-			// From a light color, prefer-light should go darker
-			expect(result.lightness).toBeLessThan(input.lightness)
-		})
-
-		it('prefer-dark chooses lighter when possible', () => {
-			const input = { hue: 30, chroma: 0.1, lightness: 0.3 }
-			const result = applyContrast(input, 50, 'prefer-dark')
-
-			// From a dark color, prefer-dark should go lighter
+			// From a dark color, prefer-light should go lighter
 			expect(result.lightness).toBeGreaterThan(input.lightness)
 		})
 
-		it('force-light always goes darker even from dark input', () => {
-			const input = { hue: 30, chroma: 0.1, lightness: 0.2 }
-			const result = applyContrast(input, 50, 'force-light')
+		it('prefer-dark chooses darker when possible', () => {
+			const input = { hue: 30, chroma: 0.1, lightness: 0.7 }
+			const result = applyContrast(input, 50, 'prefer-dark')
 
-			// Even from dark, force-light demands darker (towards 0)
-			expect(result.lightness).toBeLessThanOrEqual(input.lightness)
+			// From a light color, prefer-dark should go darker
+			expect(result.lightness).toBeLessThan(input.lightness)
 		})
 
-		it('force-dark always goes lighter even from light input', () => {
+		it('force-light always goes lighter even from light input', () => {
 			const input = { hue: 30, chroma: 0.1, lightness: 0.8 }
+			const result = applyContrast(input, 50, 'force-light')
+
+			// Even from light, force-light demands lighter (towards 1)
+			expect(result.lightness).toBeGreaterThanOrEqual(input.lightness)
+		})
+
+		it('force-dark always goes darker even from dark input', () => {
+			const input = { hue: 30, chroma: 0.1, lightness: 0.2 }
 			const result = applyContrast(input, 50, 'force-dark')
 
-			// Even from light, force-dark demands lighter (towards 1)
-			expect(result.lightness).toBeGreaterThanOrEqual(input.lightness)
+			// Even from dark, force-dark demands darker (towards 0)
+			expect(result.lightness).toBeLessThanOrEqual(input.lightness)
 		})
 	})
 

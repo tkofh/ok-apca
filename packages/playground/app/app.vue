@@ -1,44 +1,43 @@
 <script setup lang="ts">
-import { generateColorCss, type ContrastMode } from 'ok-apca'
+import { type ContrastMode, generateColorCss } from 'ok-apca'
+import type { ComputedRef, Ref } from 'vue'
 
-const hue = ref(240)
-const chroma = ref(50)
-const lightness = ref(50)
-const contrast = ref(60)
-const polarity = ref(1)
+const hue: Ref<number> = ref(240)
+const chroma: Ref<number> = ref(50)
+const lightness: Ref<number> = ref(50)
+const contrast: Ref<number> = ref(60)
+const mode: Ref<ContrastMode> = ref<ContrastMode>('prefer-light')
 
-const polarityModes: ContrastMode[] = [
+const contrastModes: ContrastMode[] = [
 	'force-light',
 	'prefer-light',
 	'prefer-dark',
 	'force-dark',
 ]
 
-const generatedCss = computed(() => {
+const generatedCss: ComputedRef<string> = computed(() => {
 	return generateColorCss({
 		hue: hue.value,
 		selector: '.preview',
 		contrast: {
-			modes: polarityModes,
+			mode: mode.value,
 			selector: '&',
 		},
 	})
 })
 
-const tag = useStyleTag('')
+const tag: ReturnType<typeof useStyleTag> = useStyleTag('')
 
 watchEffect(() => {
-  if(generatedCss.value !== tag.css.value) {
-    tag.css.value = generatedCss.value
-  }
+	if (generatedCss.value !== tag.css.value) {
+		tag.css.value = generatedCss.value
+	}
 })
 
-
-const previewStyle = computed(() => ({
+const previewStyle: ComputedRef<Record<string, number>> = computed(() => ({
 	'--lightness': lightness.value,
 	'--chroma': chroma.value,
 	'--contrast': contrast.value,
-	'--polarity': polarity.value,
 }))
 </script>
 
@@ -66,14 +65,10 @@ const previewStyle = computed(() => ({
 			</label>
 
 			<label>
-				Polarity
-				<select v-model.number="polarity">
-					<option
-						v-for="(mode, index) in polarityModes"
-						:key="mode"
-						:value="index"
-					>
-						{{ mode }}
+				Mode
+				<select v-model="mode">
+					<option v-for="m in contrastModes" :key="m" :value="m">
+						{{ m }}
 					</option>
 				</select>
 			</label>

@@ -30,7 +30,7 @@ export function outdent(input: string | TemplateStringsArray, ...values: any[]):
 	let result = ''
 	for (const [index, part] of parts.entries()) {
 		result += part.replaceAll(stripIndentRe, '$1')
-		if (index < values.length - 1) {
+		if (index < values.length) {
 			result += printValue(
 				values[index],
 				(result.split(newlineSplitRe).at(-1) ?? '').match(leadingIndentRe)?.[0] ?? '',
