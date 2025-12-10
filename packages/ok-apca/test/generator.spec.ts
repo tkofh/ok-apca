@@ -43,6 +43,18 @@ describe('generateColorCss', () => {
 		expect(css).toContain('--o-color-contrast: oklch(')
 	})
 
+	it('uses default contrast selector (&.contrast) when not provided', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.color',
+			contrast: {
+				mode: 'force-light',
+			},
+		})
+
+		expect(css).toContain('.color.contrast {')
+	})
+
 	it('uses custom contrast selector when provided', () => {
 		const css = generateColorCss({
 			hue: 30,
@@ -67,6 +79,19 @@ describe('generateColorCss', () => {
 		})
 
 		expect(css).toContain('.color .has-contrast {')
+	})
+
+	it('handles complex selectors with combinators', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: 'div.color[data-theme="dark"]',
+			contrast: {
+				mode: 'force-light',
+				selector: '&:hover',
+			},
+		})
+
+		expect(css).toContain('div.color[data-theme="dark"]:hover {')
 	})
 
 	it('normalizes hue values outside 0-360 range', () => {
@@ -118,6 +143,38 @@ describe('generateColorCss', () => {
 			const lMax = lMaxMatch[1]
 			expect(lMax).not.toMatch(/0{4,}$/)
 		}
+	})
+
+	it('generates different CSS for different hues', () => {
+		const css30 = generateColorCss({
+			hue: 30,
+			selector: '.color',
+		})
+
+		const css180 = generateColorCss({
+			hue: 180,
+			selector: '.color',
+		})
+
+		// Different hues should produce different gamut boundaries
+		expect(css30).not.toBe(css180)
+
+		// Should contain different hue values
+		expect(css30).toContain('30')
+		expect(css180).toContain('180')
+	})
+
+	it('generates CSS without contrast when contrast option omitted', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.color',
+		})
+
+		// Should not contain contrast-specific variables
+		expect(css).not.toContain('--o-color-contrast')
+		expect(css).not.toContain('--_y:')
+		expect(css).not.toContain('--_xn')
+		expect(css).not.toContain('--_xr')
 	})
 })
 
@@ -198,5 +255,52 @@ describe('generateColorCss output structure', () => {
 		// Should have both polarities for prefer-dark (needs fallback)
 		expect(cssPreferDark).toContain('--_xn:')
 		expect(cssPreferDark).toContain('--_xr:')
+	})
+
+	it('includes heuristic correction boost in contrast CSS', () => {
+		const css = generateColorCss({
+			hue: 60,
+			selector: '.test',
+			contrast: {
+				mode: 'prefer-light',
+			},
+		})
+
+		// Should have heuristic boost calculations
+		expect(css).toContain('--_boost-dark:')
+		expect(css).toContain('--_boost-mid:')
+		expect(css).toContain('--_boost-contrast:')
+		expect(css).toContain('--_contrast-adjusted:')
+	})
+
+	it('produces different output for each contrast mode', () => {
+		const forceLight = generateColorCss({
+			hue: 60,
+			selector: '.test',
+			contrast: { mode: 'force-light' },
+		})
+
+		const forceDark = generateColorCss({
+			hue: 60,
+			selector: '.test',
+			contrast: { mode: 'force-dark' },
+		})
+
+		const preferLight = generateColorCss({
+			hue: 60,
+			selector: '.test',
+			contrast: { mode: 'prefer-light' },
+		})
+
+		const preferDark = generateColorCss({
+			hue: 60,
+			selector: '.test',
+			contrast: { mode: 'prefer-dark' },
+		})
+
+		// All should be unique
+		expect(forceLight).not.toBe(forceDark)
+		expect(forceLight).not.toBe(preferLight)
+		expect(forceDark).not.toBe(preferDark)
 	})
 })
