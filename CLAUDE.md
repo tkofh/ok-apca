@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-okcolor - A TypeScript library that generates static CSS for gamut-mapped OKLCH colors with APCA-based contrast colors. The CSS runs without JavaScript; all computation is done at build time.
+ok-apca - A TypeScript library that generates static CSS for gamut-mapped OKLCH colors with APCA-based contrast colors. The CSS runs without JavaScript; all computation is done at build time.
 
 ## Architecture
 
 This is a turborepo monorepo using pnpm workspaces:
 
-- `packages/okcolor` - The main library package
+- `packages/ok-apca` - The main library package
 
 ### How It Works
 

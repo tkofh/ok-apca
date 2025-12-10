@@ -1,36 +1,232 @@
 /**
- * Simple heuristic corrections for APCA contrast accuracy.
+ * Heuristic corrections for APCA contrast accuracy.
  *
- * Based on error pattern analysis, applies safety margins to prevent
- * under-delivery of contrast, especially for high-contrast targets.
+ * The CSS implementation uses simplified math (Y = L³) that ignores chroma's
+ * contribution to luminance. This causes under-delivery of contrast, especially
+ * for dark base colors, mid-lightness colors, and high contrast targets.
+ *
+ * The correction formula is:
+ *   boost = darkBoost * max(0, 0.3 - L) +
+ *           midBoost * max(0, 1 - |L - 0.5| * 2.5) +
+ *           contrastBoost * max(0, target - 30)
+ *
+ * Where:
+ *   - darkBoost scales the correction for dark bases (L < 0.3)
+ *   - midBoost scales the correction for mid-lightness (peaks at L = 0.5)
+ *   - contrastBoost adds a percentage boost for contrast targets above 30 Lc
  */
 
 import { gamutMap } from './color.ts'
 import { applyContrast } from './contrast.ts'
-import type { ContrastMode, GamutBoundary } from './types.ts'
+import { measureContrast } from './measure.ts'
+import type { ContrastMode } from './types.ts'
 
 /**
- * Heuristic correction coefficients for a specific hue and mode.
+ * Heuristic correction coefficients.
  */
 export interface HeuristicCoefficients {
-	/** Multiplier for high contrast (≥60 Lc) */
-	readonly highContrastBoost: number
-	/** Multiplier for very high contrast (≥90 Lc) */
-	readonly veryHighContrastBoost: number
-	/** Fixed addition for dark bases (L < 0.3) */
-	readonly darkBaseBoost: number
-	/** Multiplier for chroma compensation (applied to baseC - 0.15) */
-	readonly chromaCompensation: number
+	/** Boost multiplier for dark bases: boost = darkBoost * max(0, 0.3 - L) */
+	readonly darkBoost: number
+	/** Boost multiplier for mid-lightness: boost = midBoost * max(0, 1 - |L - 0.5| * 2.5) */
+	readonly midBoost: number
+	/** Boost multiplier for contrast: boost += contrastBoost * max(0, target - 30) */
+	readonly contrastBoost: number
 }
 
 /**
- * Default heuristic coefficients based on error analysis.
+ * Result of fitting heuristic coefficients for a hue.
  */
-export const DEFAULT_HEURISTIC: HeuristicCoefficients = {
-	highContrastBoost: 0.15, // 15% boost for contrast ≥60
-	veryHighContrastBoost: 0.22, // Additional 22% for contrast ≥90
-	darkBaseBoost: 8.0, // +8 Lc for dark bases
-	chromaCompensation: 20.0, // Scale chroma effect
+export interface HeuristicFitResult {
+	/** The fitted coefficients */
+	readonly coefficients: HeuristicCoefficients
+	/** Mean absolute error after correction */
+	readonly mae: number
+	/** Worst-case under-delivery (negative = under-delivered) */
+	readonly worstUnderDelivery: number
+	/** Percentage of samples that under-deliver after correction */
+	readonly underDeliveryRate: number
+	/** Number of valid (non-gamut-limited) samples */
+	readonly sampleCount: number
+}
+
+/**
+ * A sample point with error data.
+ */
+interface SamplePoint {
+	readonly baseL: number
+	readonly target: number
+	readonly error: number // actual - target (negative = under-delivered)
+	readonly maxPossible: number // maximum achievable contrast
+}
+
+/**
+ * Cache for fitted heuristic coefficients by hue and mode.
+ */
+const fittedCoefficientsCache = new Map<string, HeuristicFitResult>()
+
+/**
+ * Compute a single sample point for error analysis.
+ */
+function computeSamplePoint(
+	hue: number,
+	chroma: number,
+	lightness: number,
+	targetContrast: number,
+	mode: ContrastMode,
+): SamplePoint {
+	const baseColor = gamutMap({ hue, chroma, lightness })
+	const contrastColor = applyContrast({ hue, chroma, lightness }, targetContrast, mode)
+	const actual = Math.abs(measureContrast(baseColor, contrastColor))
+	const error = actual - targetContrast
+
+	// Compute maximum possible contrast (to black or white)
+	const black = gamutMap({ hue, chroma: 0, lightness: 0 })
+	const white = gamutMap({ hue, chroma: 0, lightness: 1 })
+	const toBlack = Math.abs(measureContrast(baseColor, black))
+	const toWhite = Math.abs(measureContrast(baseColor, white))
+	const maxPossible = Math.max(toBlack, toWhite)
+
+	return {
+		baseL: baseColor.lightness,
+		target: targetContrast,
+		error,
+		maxPossible,
+	}
+}
+
+/**
+ * Sample error data for a given hue and contrast mode.
+ */
+function sampleErrors(hue: number, mode: ContrastMode): SamplePoint[] {
+	const lightnessSteps = 21
+	const chromaSteps = 5
+	const contrastSteps = 16
+
+	const samples: SamplePoint[] = []
+
+	for (let lIdx = 0; lIdx < lightnessSteps; lIdx++) {
+		const lightness = lIdx / (lightnessSteps - 1)
+
+		for (let cIdx = 0; cIdx < chromaSteps; cIdx++) {
+			const chroma = (cIdx / (chromaSteps - 1)) * 0.4
+
+			// Sample contrast from 30 to 105 (accessibility-relevant range)
+			for (let contIdx = 0; contIdx < contrastSteps; contIdx++) {
+				const targetContrast = 30 + (contIdx / (contrastSteps - 1)) * 75
+				samples.push(computeSamplePoint(hue, chroma, lightness, targetContrast, mode))
+			}
+		}
+	}
+
+	return samples
+}
+
+/**
+ * Compute the correction boost for given parameters.
+ */
+function computeBoost(baseL: number, target: number, coeffs: HeuristicCoefficients): number {
+	// Dark base term: peaks at L=0, falls to 0 at L=0.3
+	const darkTerm = coeffs.darkBoost * Math.max(0, 0.3 - baseL)
+
+	// Mid-lightness term: peaks at L=0.5, falls to 0 at L=0.1 and L=0.9
+	const midTerm = coeffs.midBoost * Math.max(0, 1 - Math.abs(baseL - 0.5) * 2.5)
+
+	// Contrast term: scales with contrast above 30 Lc
+	const contrastTerm = coeffs.contrastBoost * Math.max(0, target - 30)
+
+	return darkTerm + midTerm + contrastTerm
+}
+
+/**
+ * Evaluate coefficients on sample data.
+ */
+function evaluateCoefficients(
+	samples: SamplePoint[],
+	coeffs: HeuristicCoefficients,
+): { mae: number; worstUnderDelivery: number; underDeliveryRate: number; validCount: number } {
+	let totalAbsError = 0
+	let worstUnder = 0
+	let underCount = 0
+	let validCount = 0
+
+	for (const s of samples) {
+		// Skip gamut-limited cases (impossible to achieve target)
+		if (s.maxPossible < s.target - 0.5) {
+			continue
+		}
+		validCount++
+
+		const boost = computeBoost(s.baseL, s.target, coeffs)
+		const correctedError = s.error + boost
+
+		totalAbsError += Math.abs(correctedError)
+		if (correctedError < -0.5) {
+			underCount++
+			worstUnder = Math.min(worstUnder, correctedError)
+		}
+	}
+
+	return {
+		mae: validCount > 0 ? totalAbsError / validCount : 0,
+		worstUnderDelivery: worstUnder,
+		underDeliveryRate: validCount > 0 ? underCount / validCount : 0,
+		validCount,
+	}
+}
+
+/**
+ * Fit heuristic coefficients for a specific hue and contrast mode.
+ *
+ * Uses grid search to find coefficients that minimize under-delivery
+ * while keeping average error reasonable. Results are cached internally
+ * to avoid redundant computation.
+ *
+ * @param hue - The hue to fit (0-360)
+ * @param mode - The contrast mode to fit
+ * @returns Fitted coefficients and validation metrics
+ */
+export function fitHeuristicCoefficients(hue: number, mode: ContrastMode): HeuristicFitResult {
+	const cacheKey = `${hue}:${mode}`
+	const cached = fittedCoefficientsCache.get(cacheKey)
+	if (cached) {
+		return cached
+	}
+
+	const samples = sampleErrors(hue, mode)
+
+	// Grid search for best coefficients
+	// Starting point for search
+	let bestCoeffs: HeuristicCoefficients = { darkBoost: 25, midBoost: 15, contrastBoost: 0.12 }
+	let bestScore = Number.POSITIVE_INFINITY
+
+	for (let darkBoost = 20; darkBoost <= 30; darkBoost += 5) {
+		for (let midBoost = 10; midBoost <= 20; midBoost += 5) {
+			for (let contrastBoost = 0.1; contrastBoost <= 0.14; contrastBoost += 0.02) {
+				const coeffs = { darkBoost, midBoost, contrastBoost }
+				const result = evaluateCoefficients(samples, coeffs)
+
+				// Score: prioritize low under-delivery, then low MAE
+				const score = result.underDeliveryRate * 1000 + result.mae
+				if (score < bestScore) {
+					bestScore = score
+					bestCoeffs = coeffs
+				}
+			}
+		}
+	}
+
+	const validation = evaluateCoefficients(samples, bestCoeffs)
+
+	const result: HeuristicFitResult = {
+		coefficients: bestCoeffs,
+		mae: validation.mae,
+		worstUnderDelivery: validation.worstUnderDelivery,
+		underDeliveryRate: validation.underDeliveryRate,
+		sampleCount: validation.validCount,
+	}
+
+	fittedCoefficientsCache.set(cacheKey, result)
+	return result
 }
 
 /**
@@ -38,125 +234,14 @@ export const DEFAULT_HEURISTIC: HeuristicCoefficients = {
  *
  * @param targetContrast - Requested contrast value (0-108)
  * @param baseL - Base color lightness (0-1)
- * @param baseC - Base color chroma (0-0.4)
- * @param coeffs - Heuristic coefficients (uses defaults if not provided)
+ * @param coeffs - Heuristic coefficients
  * @returns Adjusted contrast value
  */
 export function applyHeuristicCorrection(
 	targetContrast: number,
 	baseL: number,
-	baseC: number,
-	coeffs: HeuristicCoefficients = DEFAULT_HEURISTIC,
+	coeffs: HeuristicCoefficients,
 ): number {
-	let safetyMargin = 0
-
-	// High contrast boost (≥60 Lc)
-	if (targetContrast >= 60) {
-		safetyMargin += targetContrast * coeffs.highContrastBoost
-	}
-
-	// Very high contrast boost (≥90 Lc)
-	if (targetContrast >= 90) {
-		safetyMargin += targetContrast * coeffs.veryHighContrastBoost
-	}
-
-	// Dark base boost (L < 0.3)
-	if (baseL < 0.3) {
-		safetyMargin += coeffs.darkBaseBoost
-	}
-
-	// Chroma compensation (C > 0.15)
-	if (baseC > 0.15) {
-		safetyMargin += (baseC - 0.15) * coeffs.chromaCompensation
-	}
-
-	return targetContrast + safetyMargin
-}
-
-/**
- * Generate CSS for heuristic correction.
- *
- * Creates CSS variables that apply safety margins based on the heuristic.
- *
- * @param coeffs - Heuristic coefficients
- * @returns CSS string with correction variables
- */
-export function generateHeuristicCorrectionCss(
-	coeffs: HeuristicCoefficients = DEFAULT_HEURISTIC,
-): string {
-	// Format numbers for CSS (6 decimal places max)
-	const fmt = (n: number) => n.toFixed(6).replace(/\.?0+$/, '')
-
-	return `
-    /* Heuristic safety margins to prevent under-contrast */
-    --_safety-high: calc(max(0, sign(var(--contrast) - 60)) * var(--contrast) * ${fmt(coeffs.highContrastBoost)});
-    --_safety-very-high: calc(max(0, sign(var(--contrast) - 90)) * var(--contrast) * ${fmt(coeffs.veryHighContrastBoost)});
-    --_safety-dark: calc(max(0, sign(0.3 - var(--_l))) * ${fmt(coeffs.darkBaseBoost)});
-    --_safety-chroma: calc(max(0, var(--_c) - 0.15) * ${fmt(coeffs.chromaCompensation)});
-    --_contrast-adjusted: calc(var(--contrast) + var(--_safety-high) + var(--_safety-very-high) + var(--_safety-dark) + var(--_safety-chroma));`.trim()
-}
-
-/**
- * Validate heuristic correction effectiveness.
- *
- * Tests the heuristic on sample data and reports under-delivery rates.
- *
- * @param hue - Hue to test
- * @param mode - Contrast mode
- * @param boundary - Gamut boundary
- * @param samples - Test samples (baseL, baseC, targetContrast tuples)
- * @param coeffs - Heuristic coefficients
- * @returns Validation metrics
- */
-export function validateHeuristic(
-	hue: number,
-	mode: ContrastMode,
-	boundary: GamutBoundary,
-	samples: Array<{ baseL: number; baseC: number; targetContrast: number }>,
-	coeffs: HeuristicCoefficients = DEFAULT_HEURISTIC,
-): {
-	totalSamples: number
-	underDeliveryCount: number
-	underDeliveryRate: number
-	avgError: number
-	maxUnderDelivery: number
-} {
-	let underCount = 0
-	let totalError = 0
-	let maxUnder = 0
-
-	for (const sample of samples) {
-		const { baseL, baseC, targetContrast } = sample
-
-		// Apply heuristic correction
-		const adjustedContrast = applyHeuristicCorrection(targetContrast, baseL, baseC, coeffs)
-
-		// Use CSS-matching solver with adjusted contrast
-		const _baseColor = gamutMap({ hue, chroma: baseC, lightness: baseL })
-		const _contrastColor = applyContrast(
-			{ hue, chroma: baseC, lightness: baseL },
-			adjustedContrast,
-			mode,
-		)
-
-		// Verify actual contrast (imported from measure.ts in actual usage)
-		// For now, simplified - actual implementation would use measureContrast
-		const actualContrast = Math.abs(Math.random() * 100) /* placeholder - needs measureContrast */
-		const error = actualContrast - targetContrast
-
-		totalError += error
-
-		if (error < 0) {
-			underCount++
-			maxUnder = Math.max(maxUnder, Math.abs(error))
-		}
-	}
-
-	return {
-		totalSamples: samples.length,
-		underDeliveryCount: underCount,
-		underDeliveryRate: underCount / samples.length,
-		avgError: totalError / samples.length,
-		maxUnderDelivery: maxUnder,
-	}
+	const boost = computeBoost(baseL, targetContrast, coeffs)
+	return targetContrast + boost
 }

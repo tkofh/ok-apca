@@ -88,8 +88,23 @@ export function solveApcaReverse(Y: number, x: number, apcaT: number): ApcaSolut
 }
 
 /**
+ * Estimate APCA contrast between two Y values.
+ * Uses simplified formula: higher Y difference generally means higher contrast.
+ * For accurate measurement, the actual APCA formula depends on polarity.
+ */
+function estimateContrast(baseY: number, targetY: number): number {
+	// Use the appropriate APCA formula based on polarity
+	if (targetY < baseY) {
+		// Normal polarity (darker foreground): Lc = 1.14 * (Ybg^0.56 - Yfg^0.57) - 0.027
+		return 1.14 * (baseY ** 0.56 - targetY ** 0.57) - 0.027
+	}
+	// Reverse polarity (lighter foreground): Lc = 1.14 * (Yfg^0.62 - Ybg^0.65) - 0.027
+	return 1.14 * (targetY ** 0.62 - baseY ** 0.65) - 0.027
+}
+
+/**
  * Solve for prefer-light mode: try reverse (lighter) first, fall back to normal.
- * When both are out of gamut, choose the option furthest from the base.
+ * When both are out of gamut, choose the option that achieves higher contrast.
  */
 export function solvePreferLight(Y: number, x: number, apcaT: number) {
 	const { targetY: YR, inGamut: xrg } = solveApcaReverse(Y, x, apcaT)
@@ -100,13 +115,15 @@ export function solvePreferLight(Y: number, x: number, apcaT: number) {
 	if (xng) {
 		return YN
 	}
-	// Both out of gamut - choose whichever is furthest from base Y
-	return Math.abs(YR - Y) >= Math.abs(YN - Y) ? YR : YN
+	// Both out of gamut - choose whichever achieves higher contrast
+	const contrastR = estimateContrast(Y, YR)
+	const contrastN = estimateContrast(Y, YN)
+	return contrastR >= contrastN ? YR : YN
 }
 
 /**
  * Solve for prefer-dark mode: try normal (darker) first, fall back to reverse.
- * When both are out of gamut, choose the option furthest from the base.
+ * When both are out of gamut, choose the option that achieves higher contrast.
  */
 export function solvePreferDark(Y: number, x: number, apcaT: number) {
 	const { targetY: YN, inGamut: xng } = solveApcaNormal(Y, x, apcaT)
@@ -117,8 +134,10 @@ export function solvePreferDark(Y: number, x: number, apcaT: number) {
 	if (xrg) {
 		return YR
 	}
-	// Both out of gamut - choose whichever is furthest from base Y
-	return Math.abs(YN - Y) >= Math.abs(YR - Y) ? YN : YR
+	// Both out of gamut - choose whichever achieves higher contrast
+	const contrastN = estimateContrast(Y, YN)
+	const contrastR = estimateContrast(Y, YR)
+	return contrastN >= contrastR ? YN : YR
 }
 
 /**

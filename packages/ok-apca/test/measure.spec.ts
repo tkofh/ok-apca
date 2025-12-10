@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { findGamutBoundary } from '../src/color.ts'
 import { applyContrast } from '../src/contrast.ts'
-import { findGamutBoundary } from '../src/gamut.ts'
 import { measureContrast } from '../src/measure.ts'
 
 describe('measureContrast', () => {
@@ -13,7 +13,7 @@ describe('measureContrast', () => {
 	})
 
 	it('returns value close to target for applyContrast result', () => {
-		const boundary = findGamutBoundary(30)
+		const _boundary = findGamutBoundary(30)
 		const base = { hue: 30, chroma: 0.1, lightness: 0.5 }
 		const targetContrast = 60
 

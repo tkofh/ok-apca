@@ -1,5 +1,21 @@
-import { findGamutBoundary } from './gamut.ts'
-import { DEFAULT_HEURISTIC, type HeuristicCoefficients } from './heuristic.ts'
+/**
+ * CSS generation for OKLCH colors with APCA-based contrast.
+ *
+ * This module generates static CSS that computes gamut-mapped colors
+ * and APCA-compliant contrast colors at runtime using CSS custom properties.
+ *
+ * The generated CSS accepts these input variables:
+ * - `--lightness` (0-100): Perceptual lightness
+ * - `--chroma` (0-100): Color saturation
+ * - `--contrast` (0-108): Target APCA Lc value (only with contrast option)
+ *
+ * And outputs:
+ * - `--o-color`: The gamut-mapped OKLCH color
+ * - `--o-color-contrast`: The contrast color (only with contrast option)
+ */
+
+import { findGamutBoundary } from './color.ts'
+import { fitHeuristicCoefficients, type HeuristicCoefficients } from './heuristic.ts'
 import type { ColorGeneratorOptions, ContrastMode, GamutBoundary } from './types.ts'
 import { outdent } from './util.ts'
 
@@ -102,37 +118,43 @@ function generateTargetYCss(mode: ContrastMode) {
 			return '--_target-y: clamp(0, var(--_xn), 1);'
 		case 'prefer-light':
 			// Prefer light: use reverse if in gamut, fall back to normal if in gamut,
-			// otherwise choose whichever is furthest from base Y
+			// otherwise choose whichever achieves higher contrast
 			return outdent`
-        --_xr-dist: calc(abs(clamp(0, var(--_xr), 1) - var(--_y)));
-        --_xn-dist: calc(abs(clamp(0, var(--_xn), 1) - var(--_y)));
-        --_furthest: calc(
-          max(0, sign(var(--_xr-dist) - var(--_xn-dist) + 0.0001)) * clamp(0, var(--_xr), 1) +
-          max(0, sign(var(--_xn-dist) - var(--_xr-dist))) * clamp(0, var(--_xn), 1)
+        /* Estimate contrast for each polarity using APCA formulas */
+        /* Normal (darker): Lc = 1.14 * (Ybg^0.56 - Yfg^0.57) - 0.027 */
+        --_xn-contrast: calc(1.14 * (pow(var(--_y), 0.56) - pow(clamp(0, var(--_xn), 1), 0.57)) - 0.027);
+        /* Reverse (lighter): Lc = 1.14 * (Yfg^0.62 - Ybg^0.65) - 0.027 */
+        --_xr-contrast: calc(1.14 * (pow(clamp(0, var(--_xr), 1), 0.62) - pow(var(--_y), 0.65)) - 0.027);
+        --_best-fallback: calc(
+          max(0, sign(var(--_xr-contrast) - var(--_xn-contrast) + 0.0001)) * clamp(0, var(--_xr), 1) +
+          max(0, sign(var(--_xn-contrast) - var(--_xr-contrast))) * clamp(0, var(--_xn), 1)
         );
         --_target-y: clamp(
           0,
           var(--_xr-in-gamut) * var(--_xr) +
           (1 - var(--_xr-in-gamut)) * var(--_xn-in-gamut) * var(--_xn) +
-          (1 - var(--_xr-in-gamut)) * (1 - var(--_xn-in-gamut)) * var(--_furthest),
+          (1 - var(--_xr-in-gamut)) * (1 - var(--_xn-in-gamut)) * var(--_best-fallback),
           1
         );
       `
 		case 'prefer-dark':
 			// Prefer dark: use normal if in gamut, fall back to reverse if in gamut,
-			// otherwise choose whichever is furthest from base Y
+			// otherwise choose whichever achieves higher contrast
 			return outdent`
-        --_xn-dist: calc(abs(clamp(0, var(--_xn), 1) - var(--_y)));
-        --_xr-dist: calc(abs(clamp(0, var(--_xr), 1) - var(--_y)));
-        --_furthest: calc(
-          max(0, sign(var(--_xn-dist) - var(--_xr-dist) + 0.0001)) * clamp(0, var(--_xn), 1) +
-          max(0, sign(var(--_xr-dist) - var(--_xn-dist))) * clamp(0, var(--_xr), 1)
+        /* Estimate contrast for each polarity using APCA formulas */
+        /* Normal (darker): Lc = 1.14 * (Ybg^0.56 - Yfg^0.57) - 0.027 */
+        --_xn-contrast: calc(1.14 * (pow(var(--_y), 0.56) - pow(clamp(0, var(--_xn), 1), 0.57)) - 0.027);
+        /* Reverse (lighter): Lc = 1.14 * (Yfg^0.62 - Ybg^0.65) - 0.027 */
+        --_xr-contrast: calc(1.14 * (pow(clamp(0, var(--_xr), 1), 0.62) - pow(var(--_y), 0.65)) - 0.027);
+        --_best-fallback: calc(
+          max(0, sign(var(--_xn-contrast) - var(--_xr-contrast) + 0.0001)) * clamp(0, var(--_xn), 1) +
+          max(0, sign(var(--_xr-contrast) - var(--_xn-contrast))) * clamp(0, var(--_xr), 1)
         );
         --_target-y: clamp(
           0,
           var(--_xn-in-gamut) * var(--_xn) +
           (1 - var(--_xn-in-gamut)) * var(--_xr-in-gamut) * var(--_xr) +
-          (1 - var(--_xn-in-gamut)) * (1 - var(--_xr-in-gamut)) * var(--_furthest),
+          (1 - var(--_xn-in-gamut)) * (1 - var(--_xr-in-gamut)) * var(--_best-fallback),
           1
         );
       `
@@ -143,12 +165,12 @@ function generateHeuristicCss(coeffs: HeuristicCoefficients): string {
 	const fmt = (n: number) => formatNumber(n, 6)
 
 	return outdent`
-		/* Heuristic safety margins to prevent under-contrast */
-		--_safety-high: calc(max(0, sign(var(--contrast) - 60)) * var(--contrast) * ${fmt(coeffs.highContrastBoost)});
-		--_safety-very-high: calc(max(0, sign(var(--contrast) - 90)) * var(--contrast) * ${fmt(coeffs.veryHighContrastBoost)});
-		--_safety-dark: calc(max(0, sign(0.3 - var(--_l))) * ${fmt(coeffs.darkBaseBoost)});
-		--_safety-chroma: calc(max(0, var(--_c) - 0.15) * ${fmt(coeffs.chromaCompensation)});
-		--_contrast-adjusted: calc(var(--contrast) + var(--_safety-high) + var(--_safety-very-high) + var(--_safety-dark) + var(--_safety-chroma));
+		/* Heuristic correction to prevent under-delivery of contrast */
+		/* boost = darkBoost * max(0, 0.3 - L) + midBoost * max(0, 1 - |L - 0.5| * 2.5) + contrastBoost * max(0, target - 30) */
+		--_boost-dark: calc(${fmt(coeffs.darkBoost)} * max(0, 0.3 - var(--_l)));
+		--_boost-mid: calc(${fmt(coeffs.midBoost)} * max(0, 1 - abs(var(--_l) - 0.5) * 2.5));
+		--_boost-contrast: calc(${fmt(coeffs.contrastBoost)} * max(0, var(--contrast) - 30));
+		--_contrast-adjusted: calc(var(--contrast) + var(--_boost-dark) + var(--_boost-mid) + var(--_boost-contrast));
 	`
 }
 
@@ -162,8 +184,8 @@ function generateContrastCss(
 	const lMax = formatNumber(boundary.lMax)
 	const cPeak = formatNumber(boundary.cPeak)
 
-	// Always use default heuristic coefficients
-	const coeffs = DEFAULT_HEURISTIC
+	// Fit heuristic coefficients for this specific hue and mode
+	const { coefficients: coeffs } = fitHeuristicCoefficients(hue, mode)
 
 	// Determine which polarities we need based on mode
 	// force-dark needs normal (darker), force-light needs reverse (lighter)
@@ -222,6 +244,29 @@ function generateContrastCss(
   `
 }
 
+/**
+ * Generate CSS for an OKLCH color with optional APCA-based contrast.
+ *
+ * The generated CSS uses CSS custom properties for runtime configuration:
+ * - Set `--lightness` (0-100) and `--chroma` (0-100) to control the color
+ * - Set `--contrast` (0-108) to control the contrast level (if contrast enabled)
+ *
+ * Output variables:
+ * - `--o-color`: The gamut-mapped OKLCH color
+ * - `--o-color-contrast`: The contrast color (if contrast enabled)
+ *
+ * @example
+ * ```ts
+ * const css = generateColorCss({
+ *   hue: 30,
+ *   selector: '.orange',
+ *   contrast: { mode: 'prefer-dark' }
+ * })
+ * ```
+ *
+ * @param options - Configuration options
+ * @returns CSS string ready to embed in a stylesheet
+ */
 export function generateColorCss(options: ColorGeneratorOptions) {
 	const hue = ((options.hue % 360) + 360) % 360
 	const boundary = findGamutBoundary(hue)
