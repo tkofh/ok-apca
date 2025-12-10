@@ -4,7 +4,7 @@ const newlineWithIndentRe = /(?:\r\n|\r|\n)([ \t]*)(?:\S|$)/
 const edgeSpaceRe = /^[ \t]*(?:\r\n|\r|\n)|(?:\r\n|\r|\n)[ \t]*$/g
 const newlineSplitRe = /\r\n|\r|\n/
 
-function printValue(value: unknown, prefix: string): string {
+function printValue(value: unknown, prefix: string) {
 	if (
 		typeof value === 'string' ||
 		(Array.isArray(value) && value.every((v) => typeof v === 'string'))
@@ -19,7 +19,7 @@ function printValue(value: unknown, prefix: string): string {
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: the official way to type variadic template literal values
-export function outdent(input: string | TemplateStringsArray, ...values: any[]): string {
+export function outdent(input: string | TemplateStringsArray, ...values: any[]) {
 	const parts = typeof input === 'string' ? [input] : input
 
 	const stripIndentRe = new RegExp(

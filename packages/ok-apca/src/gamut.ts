@@ -1,11 +1,10 @@
 import Color from 'colorjs.io'
-import type { GamutBoundary, YConversionCoefficients } from './types.ts'
 
 /**
  * Find the sRGB gamut boundary for a given hue by sampling lightness values
  * and finding the maximum in-gamut chroma at each lightness.
  */
-export function findGamutBoundary(hue: number): GamutBoundary {
+export function findGamutBoundary(hue: number) {
 	const samples = 1000
 	let maxChroma = 0
 	let lightnessAtMaxChroma = 0
@@ -30,7 +29,7 @@ export function findGamutBoundary(hue: number): GamutBoundary {
  * Binary search to find the maximum chroma that stays within sRGB gamut
  * for a given lightness and hue.
  */
-function findMaxChromaAtLightness(hue: number, lightness: number): number {
+function findMaxChromaAtLightness(hue: number, lightness: number) {
 	let low = 0
 	let high = 0.4
 	const tolerance = 0.0001
@@ -61,7 +60,7 @@ function findMaxChromaAtLightness(hue: number, lightness: number): number {
  *
  * where yc0, yc1, yc2 are polynomials in chroma with hue-dependent coefficients.
  */
-export function computeYConversionCoefficients(hue: number): YConversionCoefficients {
+export function computeYConversionCoefficients(hue: number) {
 	const hRad = (hue * Math.PI) / 180
 	const cosH = Math.cos(hRad)
 	const sinH = Math.sin(hRad)

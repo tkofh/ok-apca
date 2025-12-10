@@ -26,6 +26,7 @@
 	},
 	"devDependencies": {
 		"colorjs.io": "^0.5.2",
+		"ml-matrix": "^6.12.1",
 		"tsdown": "^0.9.0",
 		"typescript": "^5.7.2",
 		"vitest": "^2.1.8"

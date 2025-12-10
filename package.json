@@ -6,6 +6,7 @@
 		"dev": "turbo run dev",
 		"check": "biome check .",
 		"check:fix": "biome check --write .",
+		"check:fix:force": "biome check --write --unsafe .",
 		"format": "biome format --write ."
 	},
 	"devDependencies": {

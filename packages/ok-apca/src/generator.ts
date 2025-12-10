@@ -1,14 +1,23 @@
+import { computeCorrectionCoefficients } from './correction.ts'
 import { findGamutBoundary } from './gamut.ts'
-import type { ColorGeneratorOptions, ContrastMode, GamutBoundary } from './types.ts'
+import type {
+	ColorGeneratorOptions,
+	ContrastMode,
+	CorrectionCoefficients,
+	GamutBoundary,
+} from './types.ts'
 import { outdent } from './util.ts'
 
-function formatNumber(n: number, precision: number = 10): string {
+/** Default chroma value used for computing correction coefficients */
+const DEFAULT_CORRECTION_CHROMA = 0.12
+
+function formatNumber(n: number, precision = 10) {
 	const formatted = n.toFixed(precision)
 	// Remove trailing zeros but keep at least one decimal place
 	return formatted.replace(/\.?0+$/, '') || '0'
 }
 
-function generateBaseColorCss(selector: string, hue: number, boundary: GamutBoundary): string {
+function generateBaseColorCss(selector: string, hue: number, boundary: GamutBoundary) {
 	const lMax = formatNumber(boundary.lMax)
 	const cPeak = formatNumber(boundary.cPeak)
 
@@ -41,7 +50,7 @@ function generateBaseColorCss(selector: string, hue: number, boundary: GamutBoun
  * Generate CSS for normal polarity APCA (darker contrast color).
  * Used for force-dark and prefer-dark modes.
  */
-function generateNormalPolarityCss(): string {
+function generateNormalPolarityCss() {
 	return outdent`
     /* Normal polarity: solve for darker Y */
     --_xn-min: calc(
@@ -67,7 +76,7 @@ function generateNormalPolarityCss(): string {
  * Generate CSS for reverse polarity APCA (lighter contrast color).
  * Used for force-light and prefer-light modes.
  */
-function generateReversePolarityCss(): string {
+function generateReversePolarityCss() {
 	return outdent`
     /* Reverse polarity: solve for lighter Y */
     --_xr-min: calc(
@@ -89,9 +98,36 @@ function generateReversePolarityCss(): string {
 }
 
 /**
+ * Generate CSS for the polynomial correction term.
+ *
+ * correction = a + b*baseL + c*targetL + d*baseL*targetL + e*baseL² + f*targetL²
+ */
+function generateCorrectionCss(coeffs: CorrectionCoefficients) {
+	const a = formatNumber(coeffs.a)
+	const b = formatNumber(coeffs.b)
+	const c = formatNumber(coeffs.c)
+	const d = formatNumber(coeffs.d)
+	const e = formatNumber(coeffs.e)
+	const f = formatNumber(coeffs.f)
+
+	return outdent`
+    /* Polynomial error correction */
+    --_correction: calc(
+      ${a} +
+      ${b} * var(--_l) +
+      ${c} * var(--_contrast-l-raw) +
+      ${d} * var(--_l) * var(--_contrast-l-raw) +
+      ${e} * var(--_l) * var(--_l) +
+      ${f} * var(--_contrast-l-raw) * var(--_contrast-l-raw)
+    );
+    --_contrast-l: clamp(0, calc(var(--_contrast-l-raw) - var(--_correction)), 1);
+  `
+}
+
+/**
  * Generate CSS for target Y selection based on mode.
  */
-function generateTargetYCss(mode: ContrastMode): string {
+function generateTargetYCss(mode: ContrastMode) {
 	switch (mode) {
 		case 'force-light':
 			// Light contrast text = reverse polarity (higher Y)
@@ -128,13 +164,16 @@ function generateContrastCss(
 	hue: number,
 	boundary: GamutBoundary,
 	mode: ContrastMode,
-): string {
+	correction?: CorrectionCoefficients,
+) {
 	const lMax = formatNumber(boundary.lMax)
 	const cPeak = formatNumber(boundary.cPeak)
 
 	// Determine which polarities we need based on mode
-	const needsNormal = mode === 'force-light' || mode === 'prefer-light' || mode === 'prefer-dark'
-	const needsReverse = mode === 'force-dark' || mode === 'prefer-light' || mode === 'prefer-dark'
+	// force-dark needs normal (darker), force-light needs reverse (lighter)
+	// prefer modes need both for fallback
+	const needsNormal = mode === 'force-dark' || mode === 'prefer-light' || mode === 'prefer-dark'
+	const needsReverse = mode === 'force-light' || mode === 'prefer-light' || mode === 'prefer-dark'
 
 	// Build polarity-specific CSS (only include what's needed)
 	const polarityCss = [
@@ -143,6 +182,15 @@ function generateContrastCss(
 	]
 		.filter(Boolean)
 		.join('\n\n    ')
+
+	// Generate correction or simple assignment for contrast-l
+	const contrastLCss = correction
+		? outdent`
+      /* Raw contrast lightness from cube root (inverse of Y = L³) */
+      --_contrast-l-raw: clamp(0, pow(var(--_target-y), 1 / 3), 1);
+
+      ${generateCorrectionCss(correction)}`
+		: '/* Contrast lightness from cube root (inverse of Y = L³) */\n      --_contrast-l: clamp(0, pow(var(--_target-y), 1 / 3), 1);'
 
 	return outdent`
     ${selector}${contrastSelector} {
@@ -161,8 +209,7 @@ function generateContrastCss(
       /* Target Y selection (mode: ${mode}) */
       ${generateTargetYCss(mode)}
 
-      /* Contrast lightness from cube root (inverse of Y = L³) */
-      --_contrast-l: clamp(0, pow(var(--_target-y), 1 / 3), 1);
+      ${contrastLCss}
 
       /* Gamut-map contrast color's chroma using simplified tent */
       --_contrast-tent: min(
@@ -180,7 +227,7 @@ function generateContrastCss(
   `
 }
 
-export function generateColorCss(options: ColorGeneratorOptions): string {
+export function generateColorCss(options: ColorGeneratorOptions) {
 	const hue = ((options.hue % 360) + 360) % 360
 	const boundary = findGamutBoundary(hue)
 
@@ -189,12 +236,22 @@ export function generateColorCss(options: ColorGeneratorOptions): string {
 	if (options.contrast) {
 		const contrastSelector = options.contrast.selector ?? '&.contrast'
 
+		// Resolve correction: default to true, compute if boolean true, use as-is if object
+		const correctionOption = options.contrast.correction ?? true
+		let correction: CorrectionCoefficients | undefined
+		if (correctionOption === true) {
+			correction = computeCorrectionCoefficients(hue, DEFAULT_CORRECTION_CHROMA, boundary)
+		} else if (correctionOption !== false) {
+			correction = correctionOption
+		}
+
 		css += `\n\n${generateContrastCss(
 			options.selector,
 			contrastSelector.startsWith('&') ? contrastSelector.slice(1) : ` ${contrastSelector}`,
 			hue,
 			boundary,
 			options.contrast.mode,
+			correction,
 		)}`
 	}
 
