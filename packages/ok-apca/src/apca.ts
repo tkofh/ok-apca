@@ -89,6 +89,7 @@ export function solveApcaReverse(Y: number, x: number, apcaT: number): ApcaSolut
 
 /**
  * Solve for prefer-light mode: try reverse (lighter) first, fall back to normal.
+ * When both are out of gamut, choose the option furthest from the base.
  */
 export function solvePreferLight(Y: number, x: number, apcaT: number) {
 	const { targetY: YR, inGamut: xrg } = solveApcaReverse(Y, x, apcaT)
@@ -96,11 +97,16 @@ export function solvePreferLight(Y: number, x: number, apcaT: number) {
 		return YR
 	}
 	const { targetY: YN, inGamut: xng } = solveApcaNormal(Y, x, apcaT)
-	return xng ? YN : YR
+	if (xng) {
+		return YN
+	}
+	// Both out of gamut - choose whichever is furthest from base Y
+	return Math.abs(YR - Y) >= Math.abs(YN - Y) ? YR : YN
 }
 
 /**
  * Solve for prefer-dark mode: try normal (darker) first, fall back to reverse.
+ * When both are out of gamut, choose the option furthest from the base.
  */
 export function solvePreferDark(Y: number, x: number, apcaT: number) {
 	const { targetY: YN, inGamut: xng } = solveApcaNormal(Y, x, apcaT)
@@ -108,7 +114,11 @@ export function solvePreferDark(Y: number, x: number, apcaT: number) {
 		return YN
 	}
 	const { targetY: YR, inGamut: xrg } = solveApcaReverse(Y, x, apcaT)
-	return xrg ? YR : YN
+	if (xrg) {
+		return YR
+	}
+	// Both out of gamut - choose whichever is furthest from base Y
+	return Math.abs(YN - Y) >= Math.abs(YR - Y) ? YN : YR
 }
 
 /**

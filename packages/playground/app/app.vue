@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import {
+	applyContrast,
+	applyContrastPrecise,
 	type ContrastMode,
-	computeCorrectionCoefficients,
 	findGamutBoundary,
 	generateColorCss,
-	measureContrastError,
 } from 'ok-apca'
 import type { ComputedRef, Ref } from 'vue'
 
@@ -13,7 +13,6 @@ const chroma: Ref<number> = ref(50)
 const lightness: Ref<number> = ref(50)
 const contrast: Ref<number> = ref(60)
 const mode: Ref<ContrastMode> = ref<ContrastMode>('prefer-light')
-const showCorrection: Ref<boolean> = ref(true)
 
 const contrastModes: ContrastMode[] = [
 	'force-light',
@@ -29,7 +28,6 @@ const generatedCss: ComputedRef<string> = computed(() => {
 		contrast: {
 			mode: mode.value,
 			selector: '&',
-			correction: showCorrection.value,
 		},
 	})
 })
@@ -43,18 +41,8 @@ const errorStats = computed(() => {
 		lightness: lightness.value / 100, // Convert from 0-100 to 0-1
 	}
 
-	// Without correction
-	const errorNoCorr = measureContrastError(color, contrast.value, mode.value, boundary)
-
-	// With correction
-	const correction = computeCorrectionCoefficients(hue.value, 0.12, boundary)
-	const errorWithCorr = measureContrastError(
-		color,
-		contrast.value,
-		mode.value,
-		boundary,
-		correction,
-	)
+	const cssResult = applyContrast(color, contrast.value, mode.value, boundary)
+	const preciseResult = applyContrastPrecise(color, contrast.value, mode.value, boundary)
 
 	// Compute approximate APCA contrast values
 	function computeAPCA(Ybg: number, Yfg: number): number {
@@ -68,21 +56,14 @@ const errorStats = computed(() => {
 	}
 
 	const baseL = color.lightness
+	const absoluteError = Math.abs(cssResult.lightness - preciseResult.lightness)
 
 	return {
 		targetContrast: contrast.value,
-		noCorr: {
-			cssLc: computeAPCA(baseL, errorNoCorr.cssLightness),
-			preciseLc: computeAPCA(baseL, errorNoCorr.preciseLightness),
-			errorLc: computeAPCA(baseL, errorNoCorr.cssLightness) - computeAPCA(baseL, errorNoCorr.preciseLightness),
-			errorL: (errorNoCorr.absoluteError * 100).toFixed(2),
-		},
-		withCorr: {
-			cssLc: computeAPCA(baseL, errorWithCorr.cssLightness),
-			preciseLc: computeAPCA(baseL, errorWithCorr.preciseLightness),
-			errorLc: computeAPCA(baseL, errorWithCorr.cssLightness) - computeAPCA(baseL, errorWithCorr.preciseLightness),
-			errorL: (errorWithCorr.absoluteError * 100).toFixed(2),
-		},
+		cssLc: computeAPCA(baseL, cssResult.lightness),
+		preciseLc: computeAPCA(baseL, preciseResult.lightness),
+		errorLc: computeAPCA(baseL, cssResult.lightness) - computeAPCA(baseL, preciseResult.lightness),
+		errorL: (absoluteError * 100).toFixed(2),
 	}
 })
 
@@ -137,11 +118,6 @@ const previewStyle: ComputedRef<Record<string, number>> = computed(() => ({
 						</option>
 					</select>
 				</label>
-
-				<label class="checkbox-label">
-					<input v-model="showCorrection" type="checkbox" />
-					Enable correction
-				</label>
 			</div>
 
 			<div class="stats">
@@ -153,31 +129,16 @@ const previewStyle: ComputedRef<Record<string, number>> = computed(() => ({
 
 				<div class="stat-group">
 					<h4>Precise (accurate):</h4>
-					<div class="stat-value">{{ errorStats.noCorr.preciseLc.toFixed(2) }} Lc</div>
+					<div class="stat-value">{{ errorStats.preciseLc.toFixed(2) }} Lc</div>
 				</div>
 
 				<div class="stat-group">
-					<h4>CSS without correction:</h4>
-					<div class="stat-value">{{ errorStats.noCorr.cssLc.toFixed(2) }} Lc</div>
-					<div class="stat-error" :class="{ negative: errorStats.noCorr.errorLc < 0 }">
-						{{ errorStats.noCorr.errorLc >= 0 ? '+' : '' }}{{ errorStats.noCorr.errorLc.toFixed(2) }} Lc error
+					<h4>CSS (simplified):</h4>
+					<div class="stat-value">{{ errorStats.cssLc.toFixed(2) }} Lc</div>
+					<div class="stat-error" :class="{ negative: errorStats.errorLc < 0 }">
+						{{ errorStats.errorLc >= 0 ? '+' : '' }}{{ errorStats.errorLc.toFixed(2) }} Lc error
 					</div>
-					<div class="stat-detail">{{ errorStats.noCorr.errorL }}% L error</div>
-				</div>
-
-				<div class="stat-group">
-					<h4>CSS with correction:</h4>
-					<div class="stat-value">{{ errorStats.withCorr.cssLc.toFixed(2) }} Lc</div>
-					<div class="stat-error" :class="{ negative: errorStats.withCorr.errorLc < 0 }">
-						{{ errorStats.withCorr.errorLc >= 0 ? '+' : '' }}{{ errorStats.withCorr.errorLc.toFixed(2) }} Lc error
-					</div>
-					<div class="stat-detail">{{ errorStats.withCorr.errorL }}% L error</div>
-				</div>
-
-				<div class="stat-group improvement">
-					<div class="stat-detail">
-						Correction typically provides ±2 Lc accuracy
-					</div>
+					<div class="stat-detail">{{ errorStats.errorL }}% L error</div>
 				</div>
 			</div>
 		</div>
@@ -243,17 +204,6 @@ body {
 	margin-top: 0.25rem;
 }
 
-.checkbox-label {
-	flex-direction: row;
-	align-items: center;
-	gap: 0.5rem;
-}
-
-.checkbox-label input[type="checkbox"] {
-	width: auto;
-	margin: 0;
-}
-
 .stats {
 	background: #2a2a2a;
 	border: 1px solid #3a3a3a;
@@ -308,20 +258,6 @@ body {
 .stat-detail {
 	font-size: 0.75rem;
 	color: #808080;
-}
-
-.improvement {
-	background: #1e3a5f;
-	border: 1px solid #2a5080;
-	border-radius: 4px;
-	padding: 0.75rem;
-	margin-top: 0.5rem;
-}
-
-.improvement .stat-detail {
-	color: #a0c0e0;
-	text-align: center;
-	margin: 0;
 }
 
 .preview {

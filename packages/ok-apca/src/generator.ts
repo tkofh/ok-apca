@@ -1,15 +1,6 @@
-import { computeCorrectionCoefficients } from './correction.ts'
 import { findGamutBoundary } from './gamut.ts'
-import type {
-	ColorGeneratorOptions,
-	ContrastMode,
-	CorrectionCoefficients,
-	GamutBoundary,
-} from './types.ts'
+import type { ColorGeneratorOptions, ContrastMode, GamutBoundary } from './types.ts'
 import { outdent } from './util.ts'
-
-/** Default chroma value used for computing correction coefficients */
-const DEFAULT_CORRECTION_CHROMA = 0.12
 
 function formatNumber(n: number, precision = 10) {
 	const formatted = n.toFixed(precision)
@@ -98,33 +89,6 @@ function generateReversePolarityCss() {
 }
 
 /**
- * Generate CSS for the polynomial correction term.
- *
- * correction = a + b*baseL + c*targetL + d*baseL*targetL + e*baseL² + f*targetL²
- */
-function generateCorrectionCss(coeffs: CorrectionCoefficients) {
-	const a = formatNumber(coeffs.a)
-	const b = formatNumber(coeffs.b)
-	const c = formatNumber(coeffs.c)
-	const d = formatNumber(coeffs.d)
-	const e = formatNumber(coeffs.e)
-	const f = formatNumber(coeffs.f)
-
-	return outdent`
-    /* Polynomial error correction */
-    --_correction: calc(
-      ${a} +
-      ${b} * var(--_l) +
-      ${c} * var(--_contrast-l-raw) +
-      ${d} * var(--_l) * var(--_contrast-l-raw) +
-      ${e} * var(--_l) * var(--_l) +
-      ${f} * var(--_contrast-l-raw) * var(--_contrast-l-raw)
-    );
-    --_contrast-l: clamp(0, calc(var(--_contrast-l-raw) - var(--_correction)), 1);
-  `
-}
-
-/**
  * Generate CSS for target Y selection based on mode.
  */
 function generateTargetYCss(mode: ContrastMode) {
@@ -136,22 +100,38 @@ function generateTargetYCss(mode: ContrastMode) {
 			// Dark contrast text = normal polarity (lower Y)
 			return '--_target-y: clamp(0, var(--_xn), 1);'
 		case 'prefer-light':
+			// Prefer light: use reverse if in gamut, fall back to normal if in gamut,
+			// otherwise choose whichever is furthest from base Y
 			return outdent`
-        /* Prefer light: use reverse if in gamut, otherwise fall back to normal */
+        --_xr-dist: calc(abs(clamp(0, var(--_xr), 1) - var(--_y)));
+        --_xn-dist: calc(abs(clamp(0, var(--_xn), 1) - var(--_y)));
+        --_furthest: calc(
+          max(0, sign(var(--_xr-dist) - var(--_xn-dist) + 0.0001)) * clamp(0, var(--_xr), 1) +
+          max(0, sign(var(--_xn-dist) - var(--_xr-dist))) * clamp(0, var(--_xn), 1)
+        );
         --_target-y: clamp(
           0,
           var(--_xr-in-gamut) * var(--_xr) +
-          (1 - var(--_xr-in-gamut)) * var(--_xn),
+          (1 - var(--_xr-in-gamut)) * var(--_xn-in-gamut) * var(--_xn) +
+          (1 - var(--_xr-in-gamut)) * (1 - var(--_xn-in-gamut)) * var(--_furthest),
           1
         );
       `
 		case 'prefer-dark':
+			// Prefer dark: use normal if in gamut, fall back to reverse if in gamut,
+			// otherwise choose whichever is furthest from base Y
 			return outdent`
-        /* Prefer dark: use normal if in gamut, otherwise fall back to reverse */
+        --_xn-dist: calc(abs(clamp(0, var(--_xn), 1) - var(--_y)));
+        --_xr-dist: calc(abs(clamp(0, var(--_xr), 1) - var(--_y)));
+        --_furthest: calc(
+          max(0, sign(var(--_xn-dist) - var(--_xr-dist) + 0.0001)) * clamp(0, var(--_xn), 1) +
+          max(0, sign(var(--_xr-dist) - var(--_xn-dist))) * clamp(0, var(--_xr), 1)
+        );
         --_target-y: clamp(
           0,
           var(--_xn-in-gamut) * var(--_xn) +
-          (1 - var(--_xn-in-gamut)) * var(--_xr),
+          (1 - var(--_xn-in-gamut)) * var(--_xr-in-gamut) * var(--_xr) +
+          (1 - var(--_xn-in-gamut)) * (1 - var(--_xr-in-gamut)) * var(--_furthest),
           1
         );
       `
@@ -164,7 +144,6 @@ function generateContrastCss(
 	hue: number,
 	boundary: GamutBoundary,
 	mode: ContrastMode,
-	correction?: CorrectionCoefficients,
 ) {
 	const lMax = formatNumber(boundary.lMax)
 	const cPeak = formatNumber(boundary.cPeak)
@@ -183,15 +162,6 @@ function generateContrastCss(
 		.filter(Boolean)
 		.join('\n\n    ')
 
-	// Generate correction or simple assignment for contrast-l
-	const contrastLCss = correction
-		? outdent`
-      /* Raw contrast lightness from cube root (inverse of Y = L³) */
-      --_contrast-l-raw: clamp(0, pow(var(--_target-y), 1 / 3), 1);
-
-      ${generateCorrectionCss(correction)}`
-		: '/* Contrast lightness from cube root (inverse of Y = L³) */\n      --_contrast-l: clamp(0, pow(var(--_target-y), 1 / 3), 1);'
-
 	return outdent`
     ${selector}${contrastSelector} {
       /* Runtime input: --contrast (0-108 APCA Lc) */
@@ -209,7 +179,8 @@ function generateContrastCss(
       /* Target Y selection (mode: ${mode}) */
       ${generateTargetYCss(mode)}
 
-      ${contrastLCss}
+      /* Contrast lightness from cube root (inverse of Y = L³) */
+      --_contrast-l: clamp(0, pow(var(--_target-y), 1 / 3), 1);
 
       /* Gamut-map contrast color's chroma using simplified tent */
       --_contrast-tent: min(
@@ -236,22 +207,12 @@ export function generateColorCss(options: ColorGeneratorOptions) {
 	if (options.contrast) {
 		const contrastSelector = options.contrast.selector ?? '&.contrast'
 
-		// Resolve correction: default to true, compute if boolean true, use as-is if object
-		const correctionOption = options.contrast.correction ?? true
-		let correction: CorrectionCoefficients | undefined
-		if (correctionOption === true) {
-			correction = computeCorrectionCoefficients(hue, DEFAULT_CORRECTION_CHROMA, boundary)
-		} else if (correctionOption !== false) {
-			correction = correctionOption
-		}
-
 		css += `\n\n${generateContrastCss(
 			options.selector,
 			contrastSelector.startsWith('&') ? contrastSelector.slice(1) : ` ${contrastSelector}`,
 			hue,
 			boundary,
 			options.contrast.mode,
-			correction,
 		)}`
 	}
 
