@@ -11,6 +11,21 @@ export interface Color {
 }
 
 /**
+ * Internal class implementation of Color.
+ */
+class ColorImpl implements Color {
+	readonly hue: number
+	readonly chroma: number
+	readonly lightness: number
+
+	constructor(hue: number, chroma: number, lightness: number) {
+		this.hue = hue
+		this.chroma = chroma
+		this.lightness = lightness
+	}
+}
+
+/**
  * Clamp chroma to fit within the sRGB gamut boundary for the given hue and lightness.
  *
  * Uses the "tent function" approach: maximum chroma occurs at lMax (the lightness
@@ -26,12 +41,12 @@ export function gamutMap(color: Color, boundary?: GamutBoundary): Color {
 
 	// Handle edge cases where tent function would divide by zero
 	if (L <= 0 || L >= 1) {
-		return { hue, chroma: 0, lightness: L }
+		return new ColorImpl(hue, 0, L)
 	}
 
 	if (lMax <= 0 || lMax >= 1) {
 		// Degenerate boundary - shouldn't happen for valid hues, but handle gracefully
-		return { hue, chroma: 0, lightness: L }
+		return new ColorImpl(hue, 0, L)
 	}
 
 	// Tent function: scales from 0 at L=0, peaks at L=lMax, back to 0 at L=1
@@ -43,7 +58,7 @@ export function gamutMap(color: Color, boundary?: GamutBoundary): Color {
 	// Clamp chroma to gamut boundary
 	const clampedChroma = Math.min(Math.max(0, chroma), maxChroma)
 
-	return { hue, chroma: clampedChroma, lightness: L }
+	return new ColorImpl(hue, clampedChroma, L)
 }
 
 /**
@@ -101,7 +116,7 @@ export function applyContrast(
 	const contrastC = (C + requestedChroma) / 2
 
 	// Gamut-map the result at the new lightness
-	return gamutMap({ hue, chroma: contrastC, lightness: contrastL }, gamutBoundary)
+	return gamutMap(new ColorImpl(hue, contrastC, contrastL), gamutBoundary)
 }
 
 /**

@@ -1,23 +1,23 @@
 export type ContrastMode = 'force-light' | 'prefer-light' | 'prefer-dark' | 'force-dark'
 
 export interface ContrastOptions {
-	modes: ContrastMode[]
-	selector?: string
+	readonly modes: ContrastMode[]
+	readonly selector?: string
 }
 
 export interface ColorGeneratorOptions {
-	hue: number
-	selector: string
-	contrast?: ContrastOptions
+	readonly hue: number
+	readonly selector: string
+	readonly contrast?: ContrastOptions
 }
 
 export interface GamutBoundary {
-	lMax: number
-	cPeak: number
+	readonly lMax: number
+	readonly cPeak: number
 }
 
 export interface YConversionCoefficients {
-	yc0Coef: number
-	yc1Coef: number
-	yc2Coef: number
+	readonly yc0Coef: number
+	readonly yc1Coef: number
+	readonly yc2Coef: number
 }
