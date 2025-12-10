@@ -22,23 +22,21 @@ import type { ContrastMode, GamutBoundary } from './types.ts'
  * @param color - The requested color (may be out of gamut)
  * @param contrast - Target APCA Lc value (0-108)
  * @param mode - How to select between lighter/darker contrast colors
- * @param boundary - Optional pre-computed gamut boundary for the hue
  * @returns The contrast color, gamut-mapped to the sRGB boundary
  */
 export function applyContrast(
 	color: Color,
 	contrast: number,
 	mode: ContrastMode,
-	boundary?: GamutBoundary,
 ) {
 	const { hue, chroma: requestedChroma } = color
-	const gamutBoundary = boundary ?? findGamutBoundary(hue)
+	const gamutBoundary = findGamutBoundary(hue)
 
 	// Clamp contrast to valid APCA range
 	const x = Math.max(0, Math.min(108, contrast)) / 100 // Normalize to 0-1.08
 
 	// Gamut-map the input to get the base color for APCA calculations
-	const baseColor = gamutMap(color, gamutBoundary)
+	const baseColor = gamutMap(color)
 	const L = baseColor.lightness
 	const C = baseColor.chroma
 
@@ -58,7 +56,7 @@ export function applyContrast(
 	const contrastC = (C + requestedChroma) / 2
 
 	// Gamut-map the result at the new lightness
-	return gamutMap(new ColorImpl(hue, contrastC, contrastL), gamutBoundary)
+	return gamutMap(new ColorImpl(hue, contrastC, contrastL))
 }
 
 /**
@@ -83,23 +81,21 @@ function solveTargetYadjPrecise(Yadj: number, x: number, apcaT: number, mode: Co
  * @param color - The requested color (may be out of gamut)
  * @param contrast - Target APCA Lc value (0-108)
  * @param mode - How to select between lighter/darker contrast colors
- * @param boundary - Optional pre-computed gamut boundary for the hue
  * @returns The contrast color, gamut-mapped to the sRGB boundary
  */
 export function applyContrastPrecise(
 	color: Color,
 	contrast: number,
 	mode: ContrastMode,
-	boundary?: GamutBoundary,
 ) {
 	const { hue, chroma: requestedChroma } = color
-	const gamutBoundary = boundary ?? findGamutBoundary(hue)
+	const gamutBoundary = findGamutBoundary(hue)
 
 	// Clamp contrast to valid APCA range
 	const x = Math.max(0, Math.min(108, contrast)) / 100 // Normalize to 0-1.08
 
 	// Gamut-map the input to get the base color for APCA calculations
-	const baseColor = gamutMap(color, gamutBoundary)
+	const baseColor = gamutMap(color)
 	const L = baseColor.lightness
 	const C = baseColor.chroma
 
@@ -128,5 +124,5 @@ export function applyContrastPrecise(
 	const contrastC = (C + requestedChroma) / 2
 
 	// Gamut-map the result at the new lightness
-	return gamutMap(new ColorImpl(hue, contrastC, contrastL), gamutBoundary)
+	return gamutMap(new ColorImpl(hue, contrastC, contrastL))
 }

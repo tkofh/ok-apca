@@ -1,10 +1,25 @@
 import Color from 'colorjs.io'
+import type { GamutBoundary } from './types.ts'
+
+/**
+ * Private cache of gamut boundaries by hue.
+ */
+const gamutBoundaryCache = new Map<number, GamutBoundary>()
 
 /**
  * Find the sRGB gamut boundary for a given hue by sampling lightness values
  * and finding the maximum in-gamut chroma at each lightness.
+ *
+ * Results are cached to avoid redundant computation.
  */
-export function findGamutBoundary(hue: number) {
+export function findGamutBoundary(hue: number): GamutBoundary {
+	// Check cache first
+	const cached = gamutBoundaryCache.get(hue)
+	if (cached !== undefined) {
+		return cached
+	}
+
+	// Compute boundary
 	const samples = 1000
 	let maxChroma = 0
 	let lightnessAtMaxChroma = 0
@@ -19,10 +34,14 @@ export function findGamutBoundary(hue: number) {
 		}
 	}
 
-	return {
+	const boundary = {
 		lMax: lightnessAtMaxChroma,
 		cPeak: maxChroma,
 	}
+
+	// Cache and return
+	gamutBoundaryCache.set(hue, boundary)
+	return boundary
 }
 
 /**

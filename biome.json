@@ -101,7 +101,7 @@
 				"useTrimStartEnd": "error"
 			},
 			"suspicious": {
-				"noConsole": "error",
+				"noConsole": "off",
 				"noEmptyBlockStatements": "error",
 				"noEvolvingTypes": "error",
 				"noDuplicateCustomProperties": "error",

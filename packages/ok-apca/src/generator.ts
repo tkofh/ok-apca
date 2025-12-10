@@ -1,4 +1,5 @@
 import { findGamutBoundary } from './gamut.ts'
+import { DEFAULT_HEURISTIC, type HeuristicCoefficients } from './heuristic.ts'
 import type { ColorGeneratorOptions, ContrastMode, GamutBoundary } from './types.ts'
 import { outdent } from './util.ts'
 
@@ -138,6 +139,19 @@ function generateTargetYCss(mode: ContrastMode) {
 	}
 }
 
+function generateHeuristicCss(coeffs: HeuristicCoefficients): string {
+	const fmt = (n: number) => formatNumber(n, 6)
+
+	return outdent`
+		/* Heuristic safety margins to prevent under-contrast */
+		--_safety-high: calc(max(0, sign(var(--contrast) - 60)) * var(--contrast) * ${fmt(coeffs.highContrastBoost)});
+		--_safety-very-high: calc(max(0, sign(var(--contrast) - 90)) * var(--contrast) * ${fmt(coeffs.veryHighContrastBoost)});
+		--_safety-dark: calc(max(0, sign(0.3 - var(--_l))) * ${fmt(coeffs.darkBaseBoost)});
+		--_safety-chroma: calc(max(0, var(--_c) - 0.15) * ${fmt(coeffs.chromaCompensation)});
+		--_contrast-adjusted: calc(var(--contrast) + var(--_safety-high) + var(--_safety-very-high) + var(--_safety-dark) + var(--_safety-chroma));
+	`
+}
+
 function generateContrastCss(
 	selector: string,
 	contrastSelector: string,
@@ -147,6 +161,9 @@ function generateContrastCss(
 ) {
 	const lMax = formatNumber(boundary.lMax)
 	const cPeak = formatNumber(boundary.cPeak)
+
+	// Always use default heuristic coefficients
+	const coeffs = DEFAULT_HEURISTIC
 
 	// Determine which polarities we need based on mode
 	// force-dark needs normal (darker), force-light needs reverse (lighter)
@@ -162,10 +179,17 @@ function generateContrastCss(
 		.filter(Boolean)
 		.join('\n\n    ')
 
+	// Heuristic correction CSS (always enabled)
+	const heuristicCss = `\n\n${generateHeuristicCss(coeffs)}\n`
+
+	// Use adjusted contrast
+	const contrastVar = 'var(--_contrast-adjusted)'
+
 	return outdent`
     ${selector}${contrastSelector} {
-      /* Runtime input: --contrast (0-108 APCA Lc) */
-      --_x: clamp(0, var(--contrast) / 100, 1.08);
+      /* Runtime input: --contrast (0-108 APCA Lc) */${heuristicCss}
+
+      --_x: clamp(0, ${contrastVar} / 100, 1.08);
 
       /* Simplified L to luminance Y (ignoring chroma contribution) */
       --_y: pow(var(--_l), 3);

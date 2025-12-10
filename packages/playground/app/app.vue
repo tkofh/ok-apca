@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import {
 	applyContrast,
-	applyContrastPrecise,
 	type ContrastMode,
-	findGamutBoundary,
+	gamutMap,
 	generateColorCss,
+	measureContrast,
 } from 'ok-apca'
 import type { ComputedRef, Ref } from 'vue'
 
@@ -32,38 +32,27 @@ const generatedCss: ComputedRef<string> = computed(() => {
 	})
 })
 
-// Compute error statistics
+// Compute APCA contrast achieved by CSS
 const errorStats = computed(() => {
-	const boundary = findGamutBoundary(hue.value)
 	const color = {
 		hue: hue.value,
 		chroma: chroma.value / 100, // Convert from 0-100 to 0-1
 		lightness: lightness.value / 100, // Convert from 0-100 to 0-1
 	}
 
-	const cssResult = applyContrast(color, contrast.value, mode.value, boundary)
-	const preciseResult = applyContrastPrecise(color, contrast.value, mode.value, boundary)
+	// Get the gamut-mapped base color (what's actually displayed)
+	const baseColor = gamutMap(color)
 
-	// Compute approximate APCA contrast values
-	function computeAPCA(Ybg: number, Yfg: number): number {
-		const ybg = Ybg ** 3
-		const yfg = Yfg ** 3
+	const cssResult = applyContrast(color, contrast.value, mode.value)
 
-		if (ybg > yfg) {
-			return (1.14 * (ybg ** 0.56 - yfg ** 0.57) - 0.027) * 100
-		}
-		return (1.14 * (yfg ** 0.62 - ybg ** 0.65) - 0.027) * 100
-	}
-
-	const baseL = color.lightness
-	const absoluteError = Math.abs(cssResult.lightness - preciseResult.lightness)
+	// Use proper APCA measurement with sRGB-derived luminance
+	// This matches what Chrome DevTools reports
+	const cssLc = measureContrast(baseColor, cssResult)
 
 	return {
 		targetContrast: contrast.value,
-		cssLc: computeAPCA(baseL, cssResult.lightness),
-		preciseLc: computeAPCA(baseL, preciseResult.lightness),
-		errorLc: computeAPCA(baseL, cssResult.lightness) - computeAPCA(baseL, preciseResult.lightness),
-		errorL: (absoluteError * 100).toFixed(2),
+		cssLc,
+		errorLc: cssLc - contrast.value,
 	}
 })
 
@@ -128,17 +117,11 @@ const previewStyle: ComputedRef<Record<string, number>> = computed(() => ({
 				</div>
 
 				<div class="stat-group">
-					<h4>Precise (accurate):</h4>
-					<div class="stat-value">{{ errorStats.preciseLc.toFixed(2) }} Lc</div>
-				</div>
-
-				<div class="stat-group">
-					<h4>CSS (simplified):</h4>
+					<h4>CSS Result:</h4>
 					<div class="stat-value">{{ errorStats.cssLc.toFixed(2) }} Lc</div>
 					<div class="stat-error" :class="{ negative: errorStats.errorLc < 0 }">
 						{{ errorStats.errorLc >= 0 ? '+' : '' }}{{ errorStats.errorLc.toFixed(2) }} Lc error
 					</div>
-					<div class="stat-detail">{{ errorStats.errorL }}% L error</div>
 				</div>
 			</div>
 		</div>

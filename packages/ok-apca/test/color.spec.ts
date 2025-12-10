@@ -1,6 +1,7 @@
 import Color from 'colorjs.io'
 import { describe, expect, it } from 'vitest'
-import { applyContrast, gamutMap } from '../src/color.ts'
+import { gamutMap } from '../src/color.ts'
+import { applyContrast } from '../src/contrast.ts'
 import { findGamutBoundary } from '../src/gamut.ts'
 
 describe('gamutMap', () => {
@@ -85,7 +86,7 @@ describe('gamutMap', () => {
 			const hue = 30
 			const boundary = findGamutBoundary(hue)
 
-			const result = gamutMap({ hue, chroma: 1, lightness: boundary.lMax }, boundary)
+			const result = gamutMap({ hue, chroma: 1, lightness: boundary.lMax })
 
 			// Should allow up to cPeak at lMax
 			expect(result.chroma).toBeCloseTo(boundary.cPeak, 3)
@@ -95,22 +96,12 @@ describe('gamutMap', () => {
 			const hue = 30
 			const boundary = findGamutBoundary(hue)
 
-			const atPeak = gamutMap({ hue, chroma: 1, lightness: boundary.lMax }, boundary)
-			const belowPeak = gamutMap({ hue, chroma: 1, lightness: boundary.lMax / 2 }, boundary)
-			const abovePeak = gamutMap({ hue, chroma: 1, lightness: (1 + boundary.lMax) / 2 }, boundary)
+			const atPeak = gamutMap({ hue, chroma: 1, lightness: boundary.lMax })
+			const belowPeak = gamutMap({ hue, chroma: 1, lightness: boundary.lMax / 2 })
+			const abovePeak = gamutMap({ hue, chroma: 1, lightness: (1 + boundary.lMax) / 2 })
 
 			expect(belowPeak.chroma).toBeLessThan(atPeak.chroma)
 			expect(abovePeak.chroma).toBeLessThan(atPeak.chroma)
-		})
-	})
-
-	describe('pre-computed boundary', () => {
-		it('uses provided boundary instead of computing', () => {
-			const customBoundary = { lMax: 0.5, cPeak: 0.2 }
-			const result = gamutMap({ hue: 30, chroma: 0.3, lightness: 0.5 }, customBoundary)
-
-			// At lMax with max request, should get cPeak
-			expect(result.chroma).toBeCloseTo(0.2, 4)
 		})
 	})
 })
@@ -223,7 +214,7 @@ describe('applyContrast', () => {
 			const boundary = findGamutBoundary(30)
 			// Request high chroma that will be clamped
 			const input = { hue: 30, chroma: 0.35, lightness: 0.5 }
-			const result = applyContrast(input, 30, 'prefer-light', boundary)
+			const result = applyContrast(input, 30, 'prefer-light')
 
 			// The contrast color chroma should be between 0 and the requested
 			expect(result.chroma).toBeGreaterThanOrEqual(0)
@@ -255,18 +246,5 @@ describe('applyContrast', () => {
 		})
 	})
 
-	describe('pre-computed boundary', () => {
-		it('uses provided boundary for both base and contrast gamut mapping', () => {
-			const boundary = findGamutBoundary(30)
-			const input = { hue: 30, chroma: 0.2, lightness: 0.5 }
 
-			const result = applyContrast(input, 60, 'prefer-light', boundary)
-
-			// Result should have valid ranges
-			expect(result.lightness).toBeGreaterThanOrEqual(0)
-			expect(result.lightness).toBeLessThanOrEqual(1)
-			expect(result.chroma).toBeGreaterThanOrEqual(0)
-			expect(result.hue).toBe(input.hue)
-		})
-	})
 })

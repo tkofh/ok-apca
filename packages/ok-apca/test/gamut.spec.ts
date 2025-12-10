@@ -1,6 +1,6 @@
 import Color from 'colorjs.io'
 import { describe, expect, it } from 'vitest'
-import { computeYConversionCoefficients, findGamutBoundary } from '../src/index.ts'
+import { computeYConversionCoefficients, findGamutBoundary } from '../src/gamut.ts'
 
 describe('findGamutBoundary', () => {
 	it('finds the gamut boundary for red hue (0)', () => {

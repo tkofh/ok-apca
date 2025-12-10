@@ -3,7 +3,6 @@
  */
 
 import { findGamutBoundary } from './gamut.ts'
-import type { GamutBoundary } from './types.ts'
 
 /**
  * Represents an OKLCH color with hue, chroma, and lightness components.
@@ -57,9 +56,9 @@ function computeTent(L: number, lMax: number) {
  *
  * This function matches the CSS implementation exactly.
  */
-export function gamutMap(color: Color, boundary?: GamutBoundary) {
+export function gamutMap(color: Color) {
 	const { hue, chroma, lightness } = color
-	const { lMax, cPeak } = boundary ?? findGamutBoundary(hue)
+	const { lMax, cPeak } = findGamutBoundary(hue)
 
 	// Clamp lightness to valid range
 	const L = Math.max(0, Math.min(1, lightness))
