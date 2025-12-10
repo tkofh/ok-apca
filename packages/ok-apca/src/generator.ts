@@ -133,9 +133,8 @@ function generateContrastCss(
 	const cPeak = formatNumber(boundary.cPeak)
 
 	// Determine which polarities we need based on mode
-	// Normal polarity = darker Y (for dark text), Reverse polarity = lighter Y (for light text)
-	const needsNormal = mode === 'force-dark' || mode === 'prefer-light' || mode === 'prefer-dark'
-	const needsReverse = mode === 'force-light' || mode === 'prefer-light' || mode === 'prefer-dark'
+	const needsNormal = mode === 'force-light' || mode === 'prefer-light' || mode === 'prefer-dark'
+	const needsReverse = mode === 'force-dark' || mode === 'prefer-light' || mode === 'prefer-dark'
 
 	// Build polarity-specific CSS (only include what's needed)
 	const polarityCss = [

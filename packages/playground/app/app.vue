@@ -45,23 +45,27 @@ const previewStyle: ComputedRef<Record<string, number>> = computed(() => ({
 	<div class="playground">
 		<div class="controls">
 			<label>
-				Hue: {{ hue }}
-				<input v-model.number="hue" type="range" min="0" max="360" />
+				Hue
+				<input v-model.number="hue" type="number" min="0" max="360" step="0.1" />
+				<input v-model.number="hue" type="range" min="0" max="360" step="0.1" />
 			</label>
 
 			<label>
-				Chroma: {{ chroma }}
-				<input v-model.number="chroma" type="range" min="0" max="100" />
+				Chroma
+				<input v-model.number="chroma" type="number" min="0" max="40" step="0.1" />
+				<input v-model.number="chroma" type="range" min="0" max="40" step="0.1" />
 			</label>
 
 			<label>
-				Lightness: {{ lightness }}
-				<input v-model.number="lightness" type="range" min="0" max="100" />
+				Lightness
+				<input v-model.number="lightness" type="number" min="0" max="100" step="0.1" />
+				<input v-model.number="lightness" type="range" min="0" max="100" step="0.1" />
 			</label>
 
 			<label>
-				Contrast: {{ contrast }}
-				<input v-model.number="contrast" type="range" min="0" max="108" />
+				Contrast
+				<input v-model.number="contrast" type="number" min="0" max="108" step="0.1" />
+				<input v-model.number="contrast" type="range" min="0" max="108" step="0.1" />
 			</label>
 
 			<label>

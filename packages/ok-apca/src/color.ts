@@ -50,6 +50,8 @@ function computeTent(L: number, lMax: number): number {
  * Uses the "tent function" approach: maximum chroma occurs at lMax (the lightness
  * where peak chroma exists for this hue), and decreases linearly to 0 at both
  * L=0 and L=1.
+ *
+ * This function matches the CSS implementation exactly.
  */
 export function gamutMap(color: Color, boundary?: GamutBoundary): Color {
 	const { hue, chroma, lightness } = color
@@ -70,50 +72,59 @@ export function gamutMap(color: Color, boundary?: GamutBoundary): Color {
 	return new ColorImpl(hue, clampedChroma, L)
 }
 
+// -----------------------------------------------------------------------------
+// CSS-matching implementations (predict generated CSS behavior)
+// -----------------------------------------------------------------------------
+
 /**
- * Solve for target Y adjusted value based on contrast mode.
- * Extracted to reduce cognitive complexity of applyContrast.
+ * Solve for target Y based on contrast mode (CSS-matching version).
+ * No soft-toe adjustment, uses simplified Y = L³.
  */
-function solveTargetYadj(Yadj: number, x: number, apcaT: number, mode: ContrastMode): number {
+function solveTargetY(Y: number, x: number, apcaT: number, mode: ContrastMode): number {
 	if (mode === 'force-light') {
-		return solveApcaReverse(Yadj, x, apcaT).targetY
+		return solveApcaReverse(Y, x, apcaT).targetY
 	}
 	if (mode === 'force-dark') {
-		return solveApcaNormal(Yadj, x, apcaT).targetY
+		return solveApcaNormal(Y, x, apcaT).targetY
 	}
 	if (mode === 'prefer-light') {
-		return solvePreferLight(Yadj, x, apcaT)
+		return solvePreferLight(Y, x, apcaT)
 	}
 	// prefer-dark
-	return solvePreferDark(Yadj, x, apcaT)
+	return solvePreferDark(Y, x, apcaT)
 }
 
 /**
  * Solve for prefer-light mode: try reverse (lighter) first, fall back to normal.
  */
-function solvePreferLight(Yadj: number, x: number, apcaT: number): number {
-	const { targetY: YR, inGamut: xrg } = solveApcaReverse(Yadj, x, apcaT)
+function solvePreferLight(Y: number, x: number, apcaT: number): number {
+	const { targetY: YR, inGamut: xrg } = solveApcaReverse(Y, x, apcaT)
 	if (xrg) {
 		return YR
 	}
-	const { targetY: YN, inGamut: xng } = solveApcaNormal(Yadj, x, apcaT)
+	const { targetY: YN, inGamut: xng } = solveApcaNormal(Y, x, apcaT)
 	return xng ? YN : YR
 }
 
 /**
  * Solve for prefer-dark mode: try normal (darker) first, fall back to reverse.
  */
-function solvePreferDark(Yadj: number, x: number, apcaT: number): number {
-	const { targetY: YN, inGamut: xng } = solveApcaNormal(Yadj, x, apcaT)
+function solvePreferDark(Y: number, x: number, apcaT: number): number {
+	const { targetY: YN, inGamut: xng } = solveApcaNormal(Y, x, apcaT)
 	if (xng) {
 		return YN
 	}
-	const { targetY: YR, inGamut: xrg } = solveApcaReverse(Yadj, x, apcaT)
+	const { targetY: YR, inGamut: xrg } = solveApcaReverse(Y, x, apcaT)
 	return xrg ? YR : YN
 }
 
 /**
  * Compute a contrast color that achieves the target APCA contrast value.
+ *
+ * This function matches the CSS implementation exactly, using:
+ * - Simplified Y = L³ (no chroma contribution)
+ * - No soft-toe adjustment
+ * - Simple cube root for L recovery
  *
  * @param color - The requested color (may be out of gamut)
  * @param contrast - Target APCA Lc value (0-108)
@@ -138,10 +149,90 @@ export function applyContrast(
 	const L = baseColor.lightness
 	const C = baseColor.chroma
 
+	// Simplified Y = L³ (matches CSS, ignores chroma contribution)
+	const Y = L ** 3
+
+	// APCA threshold for Bézier smoothing
+	const apcaT = 0.022
+
+	// Solve for target Y based on contrast mode (no soft-toe)
+	const targetY = solveTargetY(Y, x, apcaT, mode)
+
+	// Simple cube root for L recovery (matches CSS)
+	const contrastL = Math.max(0, Math.min(1, targetY ** (1 / 3)))
+
+	// Compute contrast chroma: average of gamut-mapped and requested
+	const contrastC = (C + requestedChroma) / 2
+
+	// Gamut-map the result at the new lightness
+	return gamutMap(new ColorImpl(hue, contrastC, contrastL), gamutBoundary)
+}
+
+// -----------------------------------------------------------------------------
+// Precise implementations (accurate color math)
+// -----------------------------------------------------------------------------
+
+/**
+ * Solve for target Y adjusted value based on contrast mode (precise version).
+ * Uses soft-toe adjustment for accurate low-luminance handling.
+ */
+function solveTargetYadjPrecise(
+	Yadj: number,
+	x: number,
+	apcaT: number,
+	mode: ContrastMode,
+): number {
+	if (mode === 'force-light') {
+		return solveApcaReverse(Yadj, x, apcaT).targetY
+	}
+	if (mode === 'force-dark') {
+		return solveApcaNormal(Yadj, x, apcaT).targetY
+	}
+	if (mode === 'prefer-light') {
+		return solvePreferLight(Yadj, x, apcaT)
+	}
+	// prefer-dark
+	return solvePreferDark(Yadj, x, apcaT)
+}
+
+/**
+ * Compute a contrast color using precise color math.
+ *
+ * This function uses accurate OKLCH to luminance conversion including:
+ * - Full polynomial Y conversion with chroma contribution
+ * - APCA soft-toe adjustment for low luminance
+ * - Cardano's formula for cubic root solving
+ *
+ * Use this when you need accurate color calculations rather than
+ * predicting CSS output.
+ *
+ * @param color - The requested color (may be out of gamut)
+ * @param contrast - Target APCA Lc value (0-108)
+ * @param mode - How to select between lighter/darker contrast colors
+ * @param boundary - Optional pre-computed gamut boundary for the hue
+ * @returns The contrast color, gamut-mapped to the sRGB boundary
+ */
+export function applyContrastPrecise(
+	color: Color,
+	contrast: number,
+	mode: ContrastMode,
+	boundary?: GamutBoundary,
+): Color {
+	const { hue, chroma: requestedChroma } = color
+	const gamutBoundary = boundary ?? findGamutBoundary(hue)
+
+	// Clamp contrast to valid APCA range
+	const x = Math.max(0, Math.min(108, contrast)) / 100 // Normalize to 0-1.08
+
+	// Gamut-map the input to get the base color for APCA calculations
+	const baseColor = gamutMap(color, gamutBoundary)
+	const L = baseColor.lightness
+	const C = baseColor.chroma
+
 	// Compute Y-conversion coefficients for this hue and chroma
 	const { yc0, yc1, yc2 } = computeYCoefficients(hue, C)
 
-	// Convert base L,C to luminance Y
+	// Convert base L,C to luminance Y using full polynomial
 	const Y = yc0 + yc1 * L + yc2 * L * L + L * L * L
 
 	// Apply APCA soft-toe adjustment for low luminance
@@ -151,7 +242,7 @@ export function applyContrast(
 	const apcaT = 0.022
 
 	// Solve for target Y adjusted value based on contrast mode
-	const targetYadj = solveTargetYadj(YADJ, x, apcaT, mode)
+	const targetYadj = solveTargetYadjPrecise(YADJ, x, apcaT, mode)
 
 	// Invert soft-toe to get actual Y
 	const targetY = invertSoftToe(targetYadj)
@@ -165,6 +256,139 @@ export function applyContrast(
 	// Gamut-map the result at the new lightness
 	return gamutMap(new ColorImpl(hue, contrastC, contrastL), gamutBoundary)
 }
+
+// -----------------------------------------------------------------------------
+// Error measurement utilities
+// -----------------------------------------------------------------------------
+
+/**
+ * Result of comparing CSS-matching and precise contrast calculations.
+ */
+export interface ContrastError {
+	/** Lightness from CSS-matching implementation */
+	readonly cssLightness: number
+	/** Lightness from precise implementation */
+	readonly preciseLightness: number
+	/** Absolute difference in lightness (0-1 scale) */
+	readonly absoluteError: number
+	/** Relative error as a fraction of precise lightness */
+	readonly relativeError: number
+	/** Chroma from CSS-matching implementation */
+	readonly cssChroma: number
+	/** Chroma from precise implementation */
+	readonly preciseChroma: number
+}
+
+/**
+ * Measure the error between CSS-matching and precise contrast calculations.
+ *
+ * This is useful for understanding how much the CSS simplifications
+ * deviate from accurate color math for specific inputs.
+ *
+ * @param color - The input color
+ * @param contrast - Target APCA Lc value (0-108)
+ * @param mode - How to select between lighter/darker contrast colors
+ * @param boundary - Optional pre-computed gamut boundary for the hue
+ * @returns Error metrics comparing the two implementations
+ */
+export function measureContrastError(
+	color: Color,
+	contrast: number,
+	mode: ContrastMode,
+	boundary?: GamutBoundary,
+): ContrastError {
+	const gamutBoundary = boundary ?? findGamutBoundary(color.hue)
+
+	const cssResult = applyContrast(color, contrast, mode, gamutBoundary)
+	const preciseResult = applyContrastPrecise(color, contrast, mode, gamutBoundary)
+
+	const absoluteError = Math.abs(cssResult.lightness - preciseResult.lightness)
+	const relativeError =
+		preciseResult.lightness > 0 ? absoluteError / preciseResult.lightness : absoluteError
+
+	return {
+		cssLightness: cssResult.lightness,
+		preciseLightness: preciseResult.lightness,
+		absoluteError,
+		relativeError,
+		cssChroma: cssResult.chroma,
+		preciseChroma: preciseResult.chroma,
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Shared helper functions
+// -----------------------------------------------------------------------------
+
+/**
+ * Solve APCA equation for normal polarity (darker contrast color).
+ * Normal: Lc = 1.14 * (Ybg^0.56 - Yfg^0.57) - 0.027
+ */
+function solveApcaNormal(
+	Y: number,
+	x: number,
+	apcaT: number,
+): { targetY: number; inGamut: boolean } {
+	// Solve for target Y at the threshold first (for Bézier smoothing)
+	const xnmin = signedPow(Y ** 0.56 - (apcaT + 0.027) / 1.14, 1 / 0.57)
+	const xnv = -Math.abs((Math.abs(xnmin) ** 0.43 * apcaT) / 0.6498)
+
+	let targetY: number
+	if (x >= apcaT) {
+		// Direct APCA inverse
+		targetY = signedPow(Y ** 0.56 - (x + 0.027) / 1.14, 1 / 0.57)
+	} else {
+		// Bézier smoothing for low contrast values
+		const t = x / apcaT
+		const t2 = t * t
+		const t3 = t2 * t
+		targetY = Y + (-3 * Y + 3 * xnmin - xnv) * t2 + (2 * Y - 2 * xnmin + xnv) * t3
+	}
+
+	// Check if result is in gamut (0 <= Y <= 1)
+	const epsilon = 0.0001
+	const inGamut = targetY >= -epsilon && targetY <= 1 + epsilon
+
+	return { targetY: Math.max(0, Math.min(1, targetY)), inGamut }
+}
+
+/**
+ * Solve APCA equation for reverse polarity (lighter contrast color).
+ * Reverse: Lc = 1.14 * (Yfg^0.62 - Ybg^0.65) - 0.027
+ */
+function solveApcaReverse(
+	Y: number,
+	x: number,
+	apcaT: number,
+): { targetY: number; inGamut: boolean } {
+	// Solve for target Y at the threshold first (for Bézier smoothing)
+	const xrmin = signedPow(Y ** 0.65 + (apcaT + 0.027) / 1.14, 1 / 0.62)
+	const xrv = -Math.abs((Math.abs(xrmin) ** 0.38 * -apcaT) / 0.7068)
+
+	let targetY: number
+	if (x >= apcaT) {
+		// Direct APCA inverse
+		// Reverse formula: need to solve for Yfg where Lc = 1.14 * (Yfg^0.62 - Ybg^0.65) - 0.027
+		// Yfg^0.62 = (Lc + 0.027) / 1.14 + Ybg^0.65
+		targetY = (Y ** 0.65 + (x + 0.027) / 1.14) ** (1 / 0.62)
+	} else {
+		// Bézier smoothing for low contrast values
+		const t = x / apcaT
+		const t2 = t * t
+		const t3 = t2 * t
+		targetY = Y + (-3 * Y + 3 * xrmin - xrv) * t2 + (2 * Y - 2 * xrmin + xrv) * t3
+	}
+
+	// Check if result is in gamut (0 <= Y <= 1)
+	const epsilon = 0.0001
+	const inGamut = targetY >= -epsilon && targetY <= 1 + epsilon
+
+	return { targetY: Math.max(0, Math.min(1, targetY)), inGamut }
+}
+
+// -----------------------------------------------------------------------------
+// Precise-only helper functions
+// -----------------------------------------------------------------------------
 
 /**
  * Compute Y-conversion coefficients for a specific hue and chroma.
@@ -230,72 +454,6 @@ function invertSoftToe(Yadj: number): number {
 		return t * 0.022
 	}
 	return Yadj
-}
-
-/**
- * Solve APCA equation for normal polarity (darker contrast color).
- * Normal: Lc = 1.14 * (Ybg^0.56 - Yfg^0.57) - 0.027
- */
-function solveApcaNormal(
-	Yadj: number,
-	x: number,
-	apcaT: number,
-): { targetY: number; inGamut: boolean } {
-	// Solve for target Y at the threshold first (for Bézier smoothing)
-	const xnmin = signedPow(Yadj ** 0.56 - (apcaT + 0.027) / 1.14, 1 / 0.57)
-	const xnv = -Math.abs((Math.abs(xnmin) ** 0.43 * apcaT) / 0.6498)
-
-	let targetY: number
-	if (x >= apcaT) {
-		// Direct APCA inverse
-		targetY = signedPow(Yadj ** 0.56 - (x + 0.027) / 1.14, 1 / 0.57)
-	} else {
-		// Bézier smoothing for low contrast values
-		const t = x / apcaT
-		const t2 = t * t
-		const t3 = t2 * t
-		targetY = Yadj + (-3 * Yadj + 3 * xnmin - xnv) * t2 + (2 * Yadj - 2 * xnmin + xnv) * t3
-	}
-
-	// Check if result is in gamut (0 <= Y <= 1)
-	const epsilon = 0.0001
-	const inGamut = targetY >= -epsilon && targetY <= 1 + epsilon
-
-	return { targetY: Math.max(0, Math.min(1, targetY)), inGamut }
-}
-
-/**
- * Solve APCA equation for reverse polarity (lighter contrast color).
- * Reverse: Lc = 1.14 * (Yfg^0.62 - Ybg^0.65) - 0.027
- */
-function solveApcaReverse(
-	Yadj: number,
-	x: number,
-	apcaT: number,
-): { targetY: number; inGamut: boolean } {
-	// Solve for target Y at the threshold first (for Bézier smoothing)
-	const xrmin = signedPow(Yadj ** 0.65 + (apcaT + 0.027) / 1.14, 1 / 0.62)
-	const xrv = -Math.abs((Math.abs(xrmin) ** 0.38 * -apcaT) / 0.7068)
-
-	let targetY: number
-	if (x >= apcaT) {
-		// Direct APCA inverse
-		// Reverse formula: need to solve for Yfg where Lc = 1.14 * (Yfg^0.62 - Ybg^0.65) - 0.027
-		// Yfg^0.62 = (Lc + 0.027) / 1.14 + Ybg^0.65
-		targetY = (Yadj ** 0.65 + (x + 0.027) / 1.14) ** (1 / 0.62)
-	} else {
-		// Bézier smoothing for low contrast values
-		const t = x / apcaT
-		const t2 = t * t
-		const t3 = t2 * t
-		targetY = Yadj + (-3 * Yadj + 3 * xrmin - xrv) * t2 + (2 * Yadj - 2 * xrmin + xrv) * t3
-	}
-
-	// Check if result is in gamut (0 <= Y <= 1)
-	const epsilon = 0.0001
-	const inGamut = targetY >= -epsilon && targetY <= 1 + epsilon
-
-	return { targetY: Math.max(0, Math.min(1, targetY)), inGamut }
 }
 
 /**
