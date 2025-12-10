@@ -1,0 +1,10 @@
+{
+  "enabledMcpjsonServers": [
+    {
+      "jetbrains": {
+        "url": "http://localhost:64342/sse",
+        "type": "sse"
+      }
+    }
+  ]
+}

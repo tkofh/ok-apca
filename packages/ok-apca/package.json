@@ -1,0 +1,36 @@
+{
+	"name": "ok-apca",
+	"version": "0.0.0",
+	"author": {
+		"name": "Tim Morris",
+		"email": "tim@tkofh.dev",
+		"url": "https://tkofh.dev"
+	},
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"devDependencies": {
+		"colorjs.io": "^0.5.2",
+		"tsdown": "^0.9.0",
+		"typescript": "^5.7.2",
+		"vitest": "^2.1.8"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}

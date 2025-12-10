@@ -1,0 +1,23 @@
+{
+	"name": "playground",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"build": "nuxt build",
+		"dev": "nuxt dev",
+		"generate": "nuxt generate",
+		"preview": "nuxt preview",
+		"postinstall": "nuxt prepare"
+	},
+	"dependencies": {
+		"nuxt": "^4.2.1",
+		"ok-apca": "workspace:*",
+		"vue": "^3.5.25",
+		"vue-router": "^4.6.3"
+	},
+	"devDependencies": {
+		"@vueuse/core": "^14.1.0",
+		"@vueuse/nuxt": "^14.1.0",
+		"typescript": "^5.9.2"
+	}
+}
