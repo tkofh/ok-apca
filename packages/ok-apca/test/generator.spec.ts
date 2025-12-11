@@ -15,9 +15,9 @@ describe('generateColorCss', () => {
 		expect(css).toContain('var(--lightness)')
 		expect(css).toContain('var(--chroma)')
 
-		// Should contain build-time constants
-		expect(css).toContain('--_L-MAX:')
-		expect(css).toContain('--_C-PEAK:')
+		// Should contain build-time constants (new names)
+		expect(css).toContain('--_lum-max:')
+		expect(css).toContain('--_chr-peak:')
 
 		// Should output the color
 		expect(css).toContain('--o-color: oklch(')
@@ -36,8 +36,8 @@ describe('generateColorCss', () => {
 		// Should contain contrast selector
 		expect(css).toContain('.color.contrast {')
 
-		// Should contain simplified Y calculation
-		expect(css).toContain('--_y:')
+		// Should contain simplified Y calculation (new name)
+		expect(css).toContain('--_Y-bg:')
 
 		// Should output contrast color
 		expect(css).toContain('--o-color-contrast: oklch(')
@@ -137,7 +137,7 @@ describe('generateColorCss', () => {
 		})
 
 		// Check that numbers are properly formatted (no trailing zeros like "0.5000000000")
-		const lMaxMatch = css.match(/--_L-MAX:\s*([\d.]+)/)
+		const lMaxMatch = css.match(/--_lum-max:\s*([\d.]+)/)
 		expect(lMaxMatch).not.toBeNull()
 		if (lMaxMatch) {
 			const lMax = lMaxMatch[1]
@@ -170,11 +170,11 @@ describe('generateColorCss', () => {
 			selector: '.color',
 		})
 
-		// Should not contain contrast-specific variables
+		// Should not contain contrast-specific variables (new names)
 		expect(css).not.toContain('--o-color-contrast')
-		expect(css).not.toContain('--_y:')
-		expect(css).not.toContain('--_xn')
-		expect(css).not.toContain('--_xr')
+		expect(css).not.toContain('--_Y-bg:')
+		expect(css).not.toContain('--_Y-dark')
+		expect(css).not.toContain('--_Y-light')
 	})
 })
 
@@ -185,16 +185,16 @@ describe('generateColorCss output structure', () => {
 			selector: '.test',
 		})
 
-		// The tent function should reference L-MAX
-		expect(css).toContain('var(--_L-MAX)')
+		// The tent function should reference lum-max (new name)
+		expect(css).toContain('var(--_lum-max)')
 
-		// The chroma calculation should reference C-PEAK and tent
-		expect(css).toContain('var(--_C-PEAK)')
+		// The chroma calculation should reference chr-peak and tent (new names)
+		expect(css).toContain('var(--_chr-peak)')
 		expect(css).toContain('var(--_tent)')
 
-		// The output should reference the computed values
-		expect(css).toContain('var(--_l)')
-		expect(css).toContain('var(--_c)')
+		// The output should reference the computed values (new names)
+		expect(css).toContain('var(--_lum-norm)')
+		expect(css).toContain('var(--_chr)')
 	})
 
 	it('produces contrast CSS with APCA calculation chain for force-light', () => {
@@ -206,15 +206,15 @@ describe('generateColorCss output structure', () => {
 			},
 		})
 
-		// Should have Y conversion
-		expect(css).toContain('--_y:')
+		// Should have Y conversion (new name)
+		expect(css).toContain('--_Y-bg:')
 
-		// Should only have reverse polarity (--_xr) for force-light (lighter text)
-		expect(css).not.toContain('--_xn:')
-		expect(css).toContain('--_xr:')
+		// Should only have reverse polarity (--_Y-light) for force-light (lighter text, new names)
+		expect(css).not.toContain('--_Y-dark:')
+		expect(css).toContain('--_Y-light:')
 
-		// Should have contrast lightness (simplified cube root)
-		expect(css).toContain('--_contrast-l:')
+		// Should have contrast lightness (simplified cube root, new name)
+		expect(css).toContain('--_con-lum:')
 	})
 
 	it('produces contrast CSS with APCA calculation chain for force-dark', () => {
@@ -226,9 +226,9 @@ describe('generateColorCss output structure', () => {
 			},
 		})
 
-		// Should only have normal polarity (--_xn) for force-dark (darker text)
-		expect(css).toContain('--_xn:')
-		expect(css).not.toContain('--_xr:')
+		// Should only have normal polarity (--_Y-dark) for force-dark (darker text, new names)
+		expect(css).toContain('--_Y-dark:')
+		expect(css).not.toContain('--_Y-light:')
 	})
 
 	it('produces contrast CSS with both polarities for prefer modes', () => {
@@ -240,9 +240,9 @@ describe('generateColorCss output structure', () => {
 			},
 		})
 
-		// Should have both polarities for prefer-light (needs fallback)
-		expect(cssPreferLight).toContain('--_xn:')
-		expect(cssPreferLight).toContain('--_xr:')
+		// Should have both polarities for prefer-light (needs fallback, new names)
+		expect(cssPreferLight).toContain('--_Y-dark:')
+		expect(cssPreferLight).toContain('--_Y-light:')
 
 		const cssPreferDark = generateColorCss({
 			hue: 60,
@@ -252,9 +252,9 @@ describe('generateColorCss output structure', () => {
 			},
 		})
 
-		// Should have both polarities for prefer-dark (needs fallback)
-		expect(cssPreferDark).toContain('--_xn:')
-		expect(cssPreferDark).toContain('--_xr:')
+		// Should have both polarities for prefer-dark (needs fallback, new names)
+		expect(cssPreferDark).toContain('--_Y-dark:')
+		expect(cssPreferDark).toContain('--_Y-light:')
 	})
 
 	it('includes heuristic correction boost in contrast CSS', () => {

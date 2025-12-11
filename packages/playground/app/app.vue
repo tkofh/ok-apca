@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { type ContrastMode, generateColorCss } from 'ok-apca'
-import type { ComputedRef, Ref } from 'vue'
 
-const hue: Ref<number> = ref(240)
-const chroma: Ref<number> = ref(50)
-const lightness: Ref<number> = ref(50)
-const contrast: Ref<number> = ref(60)
-const mode: Ref<ContrastMode> = ref<ContrastMode>('prefer-light')
+const hue = ref(240)
+const chroma = ref(50)
+const lightness = ref(50)
+const contrast = ref(60)
+const mode = ref<ContrastMode>('prefer-light')
 
 const contrastModes: ContrastMode[] = [
 	'force-light',
@@ -15,7 +14,7 @@ const contrastModes: ContrastMode[] = [
 	'force-dark',
 ]
 
-const generatedCss: ComputedRef<string> = computed(() => {
+const generatedCss = computed(() => {
 	return generateColorCss({
 		hue: hue.value,
 		selector: '.preview',
@@ -26,7 +25,7 @@ const generatedCss: ComputedRef<string> = computed(() => {
 	})
 })
 
-const tag: ReturnType<typeof useStyleTag> = useStyleTag('')
+const tag = useStyleTag('')
 
 watchEffect(() => {
 	if (generatedCss.value !== tag.css.value) {
@@ -34,7 +33,7 @@ watchEffect(() => {
 	}
 })
 
-const previewStyle: ComputedRef<Record<string, number>> = computed(() => ({
+const previewStyle = computed(() => ({
 	'--lightness': lightness.value,
 	'--chroma': chroma.value,
 	'--contrast': contrast.value,
