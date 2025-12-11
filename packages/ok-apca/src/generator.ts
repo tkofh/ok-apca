@@ -166,11 +166,16 @@ function generateHeuristicCss(coeffs: HeuristicCoefficients): string {
 
 	return outdent`
 		/* Heuristic correction to prevent under-delivery of contrast */
-		/* boost = darkBoost * max(0, 0.3 - L) + midBoost * max(0, 1 - |L - 0.5| * 2.5) + contrastBoost * max(0, target - 30) */
-		--_boost-dark: calc(${fmt(coeffs.darkBoost)} * max(0, 0.3 - var(--_l)));
-		--_boost-mid: calc(${fmt(coeffs.midBoost)} * max(0, 1 - abs(var(--_l) - 0.5) * 2.5));
-		--_boost-contrast: calc(${fmt(coeffs.contrastBoost)} * max(0, var(--contrast) - 30));
-		--_contrast-adjusted: calc(var(--contrast) + var(--_boost-dark) + var(--_boost-mid) + var(--_boost-contrast));
+		/* Uses multiplicative boost for smooth interpolation from 0 */
+		/* boostPct = (darkBoost * max(0, 0.3 - L) + midBoost * max(0, 1 - |L - 0.5| * 2.5)) / 100 */
+		/* adjusted = target * (1 + boostPct) + contrastBoost * max(0, target - 30) */
+		--_boost-pct: calc(
+			(${fmt(coeffs.darkBoost)} * max(0, 0.3 - var(--_l)) +
+			 ${fmt(coeffs.midBoost)} * max(0, 1 - abs(var(--_l) - 0.5) * 2.5)) / 100
+		);
+		--_boost-multiplicative: calc(var(--contrast) * var(--_boost-pct));
+		--_boost-absolute: calc(${fmt(coeffs.contrastBoost)} * max(0, var(--contrast) - 30));
+		--_contrast-adjusted: calc(var(--contrast) + var(--_boost-multiplicative) + var(--_boost-absolute));
 	`
 }
 

@@ -1,11 +1,5 @@
 <script setup lang="ts">
-import {
-	applyContrast,
-	type ContrastMode,
-	gamutMap,
-	generateColorCss,
-	measureContrast,
-} from 'ok-apca'
+import { type ContrastMode, generateColorCss } from 'ok-apca'
 import type { ComputedRef, Ref } from 'vue'
 
 const hue: Ref<number> = ref(240)
@@ -30,30 +24,6 @@ const generatedCss: ComputedRef<string> = computed(() => {
 			selector: '&',
 		},
 	})
-})
-
-// Compute APCA contrast achieved by CSS
-const errorStats = computed(() => {
-	const color = {
-		hue: hue.value,
-		chroma: chroma.value / 100, // Convert from 0-100 to 0-1
-		lightness: lightness.value / 100, // Convert from 0-100 to 0-1
-	}
-
-	// Get the gamut-mapped base color (what's actually displayed)
-	const baseColor = gamutMap(color)
-
-	const cssResult = applyContrast(color, contrast.value, mode.value)
-
-	// Use proper APCA measurement with sRGB-derived luminance
-	// This matches what Chrome DevTools reports
-	const cssLc = measureContrast(baseColor, cssResult)
-
-	return {
-		targetContrast: contrast.value,
-		cssLc,
-		errorLc: cssLc - contrast.value,
-	}
 })
 
 const tag: ReturnType<typeof useStyleTag> = useStyleTag('')
@@ -109,21 +79,7 @@ const previewStyle: ComputedRef<Record<string, number>> = computed(() => ({
 				</label>
 			</div>
 
-			<div class="stats">
-				<h3>APCA Contrast Stats</h3>
 
-				<div class="stat-group">
-					<h4>Target: {{ errorStats.targetContrast }} Lc</h4>
-				</div>
-
-				<div class="stat-group">
-					<h4>CSS Result:</h4>
-					<div class="stat-value">{{ errorStats.cssLc.toFixed(2) }} Lc</div>
-					<div class="stat-error" :class="{ negative: errorStats.errorLc < 0 }">
-						{{ errorStats.errorLc >= 0 ? '+' : '' }}{{ errorStats.errorLc.toFixed(2) }} Lc error
-					</div>
-				</div>
-			</div>
 		</div>
 
 		<div class="preview" :style="previewStyle">
@@ -185,62 +141,6 @@ body {
 
 .controls input[type="range"] {
 	margin-top: 0.25rem;
-}
-
-.stats {
-	background: #2a2a2a;
-	border: 1px solid #3a3a3a;
-	border-radius: 8px;
-	padding: 1.5rem;
-}
-
-.stats h3 {
-	margin: 0 0 1rem 0;
-	font-size: 1rem;
-	font-weight: 600;
-	color: #f0f0f0;
-}
-
-.stats h4 {
-	margin: 0 0 0.5rem 0;
-	font-size: 0.875rem;
-	font-weight: 500;
-	color: #a0a0a0;
-}
-
-.stat-group {
-	margin-bottom: 1.25rem;
-	padding-bottom: 1.25rem;
-	border-bottom: 1px solid #3a3a3a;
-}
-
-.stat-group:last-child {
-	margin-bottom: 0;
-	padding-bottom: 0;
-	border-bottom: none;
-}
-
-.stat-value {
-	font-size: 1.25rem;
-	font-weight: 600;
-	color: #60d0ff;
-	margin-bottom: 0.25rem;
-}
-
-.stat-error {
-	font-size: 0.875rem;
-	font-weight: 500;
-	color: #ff6060;
-	margin-bottom: 0.25rem;
-}
-
-.stat-error.negative {
-	color: #60ff60;
-}
-
-.stat-detail {
-	font-size: 0.75rem;
-	color: #808080;
 }
 
 .preview {

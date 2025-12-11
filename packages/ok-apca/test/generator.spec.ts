@@ -266,10 +266,10 @@ describe('generateColorCss output structure', () => {
 			},
 		})
 
-		// Should have heuristic boost calculations
-		expect(css).toContain('--_boost-dark:')
-		expect(css).toContain('--_boost-mid:')
-		expect(css).toContain('--_boost-contrast:')
+		// Should have heuristic boost calculations (new multiplicative approach)
+		expect(css).toContain('--_boost-pct:')
+		expect(css).toContain('--_boost-multiplicative:')
+		expect(css).toContain('--_boost-absolute:')
 		expect(css).toContain('--_contrast-adjusted:')
 	})
 

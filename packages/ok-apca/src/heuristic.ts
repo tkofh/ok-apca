@@ -5,15 +5,16 @@
  * contribution to luminance. This causes under-delivery of contrast, especially
  * for dark base colors, mid-lightness colors, and high contrast targets.
  *
- * The correction formula is:
- *   boost = darkBoost * max(0, 0.3 - L) +
- *           midBoost * max(0, 1 - |L - 0.5| * 2.5) +
- *           contrastBoost * max(0, target - 30)
+ * The correction formula uses multiplicative boost for smooth interpolation:
+ *   boostPct = (darkBoost * max(0, 0.3 - L) + midBoost * max(0, 1 - |L - 0.5| * 2.5)) / 100
+ *   adjusted = target * (1 + boostPct) + contrastBoost * max(0, target - 30)
  *
  * Where:
- *   - darkBoost scales the correction for dark bases (L < 0.3)
- *   - midBoost scales the correction for mid-lightness (peaks at L = 0.5)
- *   - contrastBoost adds a percentage boost for contrast targets above 30 Lc
+ *   - darkBoost: percentage boost for dark bases (L < 0.3)
+ *   - midBoost: percentage boost for mid-lightness (peaks at L = 0.5)
+ *   - contrastBoost: additional Lc boost for high contrast targets (> 30 Lc)
+ *
+ * The multiplicative approach ensures smooth interpolation from 0 Lc.
  */
 
 import { gamutMap } from './color.ts'
@@ -25,11 +26,11 @@ import type { ContrastMode } from './types.ts'
  * Heuristic correction coefficients.
  */
 export interface HeuristicCoefficients {
-	/** Boost multiplier for dark bases: boost = darkBoost * max(0, 0.3 - L) */
+	/** Percentage boost for dark bases (L < 0.3): contributes darkBoost * max(0, 0.3 - L) to boost percentage */
 	readonly darkBoost: number
-	/** Boost multiplier for mid-lightness: boost = midBoost * max(0, 1 - |L - 0.5| * 2.5) */
+	/** Percentage boost for mid-lightness (peaks at L=0.5): contributes midBoost * max(0, 1 - |L - 0.5| * 2.5) to boost percentage */
 	readonly midBoost: number
-	/** Boost multiplier for contrast: boost += contrastBoost * max(0, target - 30) */
+	/** Absolute Lc boost for high contrast (> 30 Lc): adds contrastBoost * max(0, target - 30) to final result */
 	readonly contrastBoost: number
 }
 
@@ -123,18 +124,21 @@ function sampleErrors(hue: number, mode: ContrastMode): SamplePoint[] {
 
 /**
  * Compute the correction boost for given parameters.
+ * Uses multiplicative correction to ensure smooth interpolation from 0.
  */
 function computeBoost(baseL: number, target: number, coeffs: HeuristicCoefficients): number {
-	// Dark base term: peaks at L=0, falls to 0 at L=0.3
+	// Compute percentage boost based on lightness
 	const darkTerm = coeffs.darkBoost * Math.max(0, 0.3 - baseL)
-
-	// Mid-lightness term: peaks at L=0.5, falls to 0 at L=0.1 and L=0.9
 	const midTerm = coeffs.midBoost * Math.max(0, 1 - Math.abs(baseL - 0.5) * 2.5)
+	const boostPercentage = (darkTerm + midTerm) / 100
 
-	// Contrast term: scales with contrast above 30 Lc
+	// Apply multiplicative boost to target (naturally becomes 0 when target is 0)
+	const multiplicativeBoost = target * boostPercentage
+
+	// Add absolute boost for high contrast
 	const contrastTerm = coeffs.contrastBoost * Math.max(0, target - 30)
 
-	return darkTerm + midTerm + contrastTerm
+	return multiplicativeBoost + contrastTerm
 }
 
 /**
