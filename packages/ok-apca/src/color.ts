@@ -1,9 +1,9 @@
 /**
- * OKLCH color representation and sRGB gamut mapping.
+ * OKLCH color representation and Display P3 gamut mapping.
  *
  * This module provides:
  * - The Color interface for OKLCH colors
- * - Gamut boundary computation for sRGB
+ * - Gamut boundary computation for Display P3
  * - Gamut mapping using a tent function approximation
  * - Y-conversion coefficient computation for CSS generation
  */
@@ -21,7 +21,7 @@ import type { GamutBoundary } from './types.ts'
 export interface Color {
 	/** Hue angle in degrees (0-360) */
 	readonly hue: number
-	/** Chroma (saturation), typically 0-0.4 for sRGB */
+	/** Chroma (saturation), typically 0-0.5 for Display P3 */
 	readonly chroma: number
 	/** Perceptual lightness (0-1) */
 	readonly lightness: number
@@ -52,7 +52,7 @@ export class ColorImpl implements Color {
 const gamutBoundaryCache = new Map<number, GamutBoundary>()
 
 /**
- * Binary search to find the maximum chroma that stays within sRGB gamut
+ * Binary search to find the maximum chroma that stays within Display P3 gamut
  * for a given lightness and hue.
  */
 function findMaxChromaAtLightness(hue: number, lightness: number): number {
@@ -64,7 +64,7 @@ function findMaxChromaAtLightness(hue: number, lightness: number): number {
 		const mid = (low + high) / 2
 		const color = new _Color('oklch', [lightness, mid, hue])
 
-		if (color.inGamut('srgb')) {
+		if (color.inGamut('p3')) {
 			low = mid
 		} else {
 			high = mid
@@ -75,7 +75,7 @@ function findMaxChromaAtLightness(hue: number, lightness: number): number {
 }
 
 /**
- * Find the sRGB gamut boundary for a given hue.
+ * Find the Display P3 gamut boundary for a given hue.
  *
  * Samples lightness values to find:
  * - lMax: the lightness where maximum chroma occurs
@@ -136,7 +136,7 @@ function computeTent(L: number, lMax: number): number {
 }
 
 /**
- * Clamp a color's chroma to fit within the sRGB gamut boundary.
+ * Clamp a color's chroma to fit within the Display P3 gamut boundary.
  *
  * Uses a "tent function" approximation: maximum chroma occurs at lMax
  * (the lightness where peak chroma exists for this hue), and decreases
@@ -145,7 +145,7 @@ function computeTent(L: number, lMax: number): number {
  * This function matches the CSS implementation exactly.
  *
  * @param color - The OKLCH color to gamut-map
- * @returns A new color with chroma clamped to the sRGB boundary
+ * @returns A new color with chroma clamped to the Display P3 boundary
  */
 export function gamutMap(color: Color): Color {
 	const { hue, chroma, lightness } = color

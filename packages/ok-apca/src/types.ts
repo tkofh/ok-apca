@@ -39,7 +39,7 @@ export interface ColorGeneratorOptions {
 }
 
 /**
- * sRGB gamut boundary parameters for a specific hue.
+ * Display P3 gamut boundary parameters for a specific hue.
  *
  * The gamut boundary is approximated using a tent function:
  * maximum chroma occurs at `lMax` and decreases linearly to 0

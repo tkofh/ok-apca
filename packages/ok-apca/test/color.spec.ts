@@ -42,7 +42,7 @@ describe('gamutMap', () => {
 				// Result should be close to in-gamut (tent function is an approximation)
 				const color = new Color('oklch', [result.lightness, result.chroma, result.hue])
 				// Allow slight overshoot - tent function is a linear approximation
-				expect(color.inGamut('srgb', { epsilon: 0.01 })).toBe(true)
+				expect(color.inGamut('p3', { epsilon: 0.01 })).toBe(true)
 			}
 		})
 	})
@@ -157,7 +157,7 @@ describe('gamutMap', () => {
 			}
 		})
 
-		it('output is always in sRGB gamut (with small tolerance)', () => {
+		it('output is always in Display P3 gamut (with small tolerance)', () => {
 			const testCases = [
 				{ hue: 0, chroma: 0.5, lightness: 0.5 },
 				{ hue: 30, chroma: 0.4, lightness: 0.6 },
@@ -171,7 +171,7 @@ describe('gamutMap', () => {
 				const color = new Color('oklch', [result.lightness, result.chroma, result.hue])
 
 				// Tent function is an approximation, so allow small epsilon
-				expect(color.inGamut('srgb', { epsilon: 0.01 })).toBe(true)
+				expect(color.inGamut('p3', { epsilon: 0.01 })).toBe(true)
 			}
 		})
 

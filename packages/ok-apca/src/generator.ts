@@ -414,6 +414,8 @@ function generateContrastCss(
 			--_lc-norm: clamp(0, ${contrastVar} / 100, 1.08);
 
 			/* Simplified L to luminance Y (ignoring chroma contribution) */
+			/* Note: Y = L³ is less accurate for P3 but avoids exponential CSS expansion */
+			/* The applyContrast() function uses improved approximation for accuracy */
 			--_Y-bg: pow(${V_LUM_NORM}, 3);
 
 			/* APCA threshold for Bezier smoothing */
@@ -428,7 +430,7 @@ function generateContrastCss(
 			/* Contrast lightness from cube root (inverse of Y = L³) */
 			--_con-lum: clamp(0, pow(${V_Y_FINAL}, 1 / 3), 1);
 
-			/* Gamut-map contrast color's chroma using simplified tent */
+			/* Gamut-map contrast color's chroma */
 			--_con-tent: ${cssTentFunction(V_CON_LUM, lMax)};
 			--_con-chr: min(
 				calc((${V_CHR} + ${V_CHR_REQ}) / 2),

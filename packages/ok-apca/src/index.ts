@@ -26,6 +26,8 @@ export type { Color } from './color.ts'
 export { gamutMap } from './color.ts'
 export { applyContrast } from './contrast.ts'
 export { generateColorCss } from './generator.ts'
+export type { HeuristicCoefficients, HeuristicFitResult } from './heuristic.ts'
+export { clearHeuristicCache, fitHeuristicCoefficients } from './heuristic.ts'
 export { measureContrast } from './measure.ts'
 export type {
 	ColorGeneratorOptions,

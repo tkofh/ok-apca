@@ -2,8 +2,10 @@
  * Heuristic corrections for APCA contrast accuracy.
  *
  * The CSS implementation uses simplified math (Y = L³) that ignores chroma's
- * contribution to luminance. This causes under-delivery of contrast, especially
- * for dark base colors, mid-lightness colors, and high contrast targets.
+ * contribution to luminance. While Y = yc2·C·L² + L³ is 31% more accurate, it
+ * causes exponential CSS expression growth. The simplified Y = L³ causes
+ * under-delivery of contrast, especially for dark base colors, mid-lightness
+ * colors, and high contrast targets.
  *
  * The correction formula uses multiplicative boost for smooth interpolation:
  *   boostPct = (darkBoost * max(0, 0.3 - L) + midBoost * max(0, 1 - |L - 0.5| * 2.5)) / 100
@@ -66,6 +68,16 @@ interface SamplePoint {
 const fittedCoefficientsCache = new Map<string, HeuristicFitResult>()
 
 /**
+ * Clear the heuristic coefficients cache.
+ *
+ * This should be called when switching gamuts (e.g., from sRGB to P3)
+ * to ensure coefficients are re-fitted for the new gamut boundaries.
+ */
+export function clearHeuristicCache(): void {
+	fittedCoefficientsCache.clear()
+}
+
+/**
  * Compute a single sample point for error analysis.
  */
 function computeSamplePoint(
@@ -109,7 +121,7 @@ function sampleErrors(hue: number, mode: ContrastMode): SamplePoint[] {
 		const lightness = lIdx / (lightnessSteps - 1)
 
 		for (let cIdx = 0; cIdx < chromaSteps; cIdx++) {
-			const chroma = (cIdx / (chromaSteps - 1)) * 0.4
+			const chroma = (cIdx / (chromaSteps - 1)) * 0.5
 
 			// Sample contrast from 30 to 105 (accessibility-relevant range)
 			for (let contIdx = 0; contIdx < contrastSteps; contIdx++) {
@@ -179,6 +191,80 @@ function evaluateCoefficients(
 }
 
 /**
+ * Score function for coefficient optimization.
+ * Prioritizes minimizing under-delivery rate, then MAE.
+ */
+function scoreCoefficients(result: ReturnType<typeof evaluateCoefficients>): number {
+	return result.underDeliveryRate * 1000 + result.mae
+}
+
+/**
+ * Coarse grid search for best coefficient starting point.
+ */
+function coarseGridSearch(samples: SamplePoint[]): {
+	coeffs: HeuristicCoefficients
+	score: number
+} {
+	let bestCoeffs: HeuristicCoefficients = { darkBoost: 40, midBoost: 25, contrastBoost: 0.2 }
+	let bestScore = Number.POSITIVE_INFINITY
+
+	for (let darkBoost = 20; darkBoost <= 80; darkBoost += 10) {
+		for (let midBoost = 10; midBoost <= 50; midBoost += 10) {
+			for (let contrastBoost = 0.1; contrastBoost <= 0.4; contrastBoost += 0.05) {
+				const coeffs = { darkBoost, midBoost, contrastBoost }
+				const result = evaluateCoefficients(samples, coeffs)
+				const score = scoreCoefficients(result)
+				if (score < bestScore) {
+					bestScore = score
+					bestCoeffs = coeffs
+				}
+			}
+		}
+	}
+
+	return { coeffs: bestCoeffs, score: bestScore }
+}
+
+/**
+ * Fine-tune grid search around a coarse result.
+ */
+function fineGridSearch(
+	samples: SamplePoint[],
+	coarseBest: HeuristicCoefficients,
+): HeuristicCoefficients {
+	let bestCoeffs = coarseBest
+	let bestScore = Number.POSITIVE_INFINITY
+
+	for (
+		let darkBoost = Math.max(20, coarseBest.darkBoost - 10);
+		darkBoost <= Math.min(80, coarseBest.darkBoost + 10);
+		darkBoost += 2
+	) {
+		for (
+			let midBoost = Math.max(10, coarseBest.midBoost - 10);
+			midBoost <= Math.min(50, coarseBest.midBoost + 10);
+			midBoost += 2
+		) {
+			for (
+				let contrastBoost = Math.max(0.1, coarseBest.contrastBoost - 0.05);
+				contrastBoost <= Math.min(0.4, coarseBest.contrastBoost + 0.05);
+				contrastBoost += 0.01
+			) {
+				const coeffs = { darkBoost, midBoost, contrastBoost }
+				const result = evaluateCoefficients(samples, coeffs)
+				const score = scoreCoefficients(result)
+				if (score < bestScore) {
+					bestScore = score
+					bestCoeffs = coeffs
+				}
+			}
+		}
+	}
+
+	return bestCoeffs
+}
+
+/**
  * Fit heuristic coefficients for a specific hue and contrast mode.
  *
  * Uses grid search to find coefficients that minimize under-delivery
@@ -198,26 +284,9 @@ export function fitHeuristicCoefficients(hue: number, mode: ContrastMode): Heuri
 
 	const samples = sampleErrors(hue, mode)
 
-	// Grid search for best coefficients
-	// Starting point for search
-	let bestCoeffs: HeuristicCoefficients = { darkBoost: 25, midBoost: 15, contrastBoost: 0.12 }
-	let bestScore = Number.POSITIVE_INFINITY
-
-	for (let darkBoost = 20; darkBoost <= 30; darkBoost += 5) {
-		for (let midBoost = 10; midBoost <= 20; midBoost += 5) {
-			for (let contrastBoost = 0.1; contrastBoost <= 0.14; contrastBoost += 0.02) {
-				const coeffs = { darkBoost, midBoost, contrastBoost }
-				const result = evaluateCoefficients(samples, coeffs)
-
-				// Score: prioritize low under-delivery, then low MAE
-				const score = result.underDeliveryRate * 1000 + result.mae
-				if (score < bestScore) {
-					bestScore = score
-					bestCoeffs = coeffs
-				}
-			}
-		}
-	}
+	// Two-stage grid search: coarse then fine
+	const coarseResult = coarseGridSearch(samples)
+	const bestCoeffs = fineGridSearch(samples, coarseResult.coeffs)
 
 	const validation = evaluateCoefficients(samples, bestCoeffs)
 

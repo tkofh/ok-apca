@@ -12,15 +12,14 @@ import type { ContrastMode } from './types.ts'
 /**
  * Compute a contrast color that achieves the target APCA contrast value.
  *
- * This function matches the CSS implementation exactly, using:
- * - Simplified Y = L³ (no chroma contribution)
- * - No soft-toe adjustment
- * - Simple cube root for L recovery
+ * This function uses the same simplified Y = L³ approximation as the CSS generator
+ * to accurately predict CSS behavior. While this is less accurate for high-chroma P3
+ * colors, it ensures applyContrast() matches the generated CSS exactly.
  *
  * @param color - The requested color (may be out of gamut)
  * @param contrast - Target APCA Lc value (0-108)
  * @param mode - How to select between lighter/darker contrast colors
- * @returns The contrast color, gamut-mapped to the sRGB boundary
+ * @returns The contrast color, gamut-mapped to the Display P3 boundary
  */
 export function applyContrast(color: Color, contrast: number, mode: ContrastMode) {
 	const { hue, chroma: requestedChroma } = color
@@ -33,16 +32,17 @@ export function applyContrast(color: Color, contrast: number, mode: ContrastMode
 	const L = baseColor.lightness
 	const C = baseColor.chroma
 
-	// Simplified Y = L³ (matches CSS, ignores chroma contribution)
+	// Simplified Y approximation to match CSS generator (Y = L³)
+	// Note: This ignores chroma contribution but avoids CSS expression explosion
 	const Y = L ** 3
 
 	// APCA threshold for Bézier smoothing
 	const apcaT = 0.022
 
-	// Solve for target Y based on contrast mode (no soft-toe)
+	// Solve for target Y based on contrast mode
 	const targetY = solveTargetY(Y, x, apcaT, mode)
 
-	// Simple cube root for L recovery (matches CSS)
+	// Recover L from target Y using cube root (inverse of Y = L³)
 	const contrastL = Math.max(0, Math.min(1, targetY ** (1 / 3)))
 
 	// Compute contrast chroma: average of gamut-mapped and requested
