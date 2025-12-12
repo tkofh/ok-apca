@@ -237,6 +237,8 @@ function generateBaseColorCss(selector: string, hue: number, boundary: GamutBoun
 
 			/* Output color */
 			--o-color: oklch(${V_LUM_NORM} ${V_CHR} ${hue});
+
+			${generatePulseCss()}
 		}
 	`
 }
@@ -383,6 +385,59 @@ function generatePolarityFixedCss(): string {
 	`
 }
 
+/**
+ * Generate @property declarations for pulse animation.
+ * These allow CSS animations to interpolate numeric custom properties.
+ */
+function generatePulsePropertyDeclarations(): string {
+	return outdent`
+		@property --_pulse-time {
+			syntax: "<number>";
+			inherits: true;
+			initial-value: 0;
+		}
+	`
+}
+
+/**
+ * Generate CSS for .pulse animation feature.
+ * Animates lightness and chroma with configurable frequency and offsets.
+ */
+function generatePulseCss(): string {
+	return outdent`
+		&.pulse {
+			/* Pulse animation variables */
+			--pulse-frequency: 1; /* Default: 1 second */
+			--pulse-lightness-offset: 0; /* Additive offset in lightness space (0-100) */
+			--pulse-chroma-offset: 0; /* Additive offset in chroma percent space (0-100) */
+
+			/* Animate pulse-time from 0 to 1 */
+			animation: pulse-animation calc(var(--pulse-frequency) * 1s) ease-in-out infinite;
+
+			/* Replace normalized inputs with pulsing versions */
+			--_lum-norm: clamp(
+				0,
+				(var(--lightness) + var(--_pulse-time) * var(--pulse-lightness-offset)) / 100,
+				1
+			);
+			--_chr-pct: clamp(
+				0,
+				(var(--chroma) + var(--_pulse-time) * var(--pulse-chroma-offset)) / 100,
+				1
+			);
+		}
+
+		@keyframes pulse-animation {
+			0%, 100% {
+				--_pulse-time: 0;
+			}
+			50% {
+				--_pulse-time: 1;
+			}
+		}
+	`
+}
+
 function generateHeuristicCss(coefficients: HeuristicCoefficients): string {
 	const fmt = (n: number) => formatNumber(n, 6)
 
@@ -483,7 +538,7 @@ export function generateColorCss(options: ColorGeneratorOptions) {
 	const hue = ((options.hue % 360) + 360) % 360
 	const boundary = findGamutBoundary(hue)
 
-	let css = generateBaseColorCss(options.selector, hue, boundary)
+	let css = `${generatePulsePropertyDeclarations()}\n\n${generateBaseColorCss(options.selector, hue, boundary)}`
 
 	if (options.contrast) {
 		const contrastSelector = options.contrast.selector ?? '&.contrast'

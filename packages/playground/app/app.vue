@@ -8,6 +8,10 @@ const contrast = ref(60)
 const allowPolarityInversion = ref(true)
 const polarityFixed = ref(false)
 const polarityFrom = ref(50)
+const pulseEnabled = ref(false)
+const pulseFrequency = ref(1)
+const pulseLightnessOffset = ref(10)
+const pulseChromaOffset = ref(5)
 
 const generatedCss = computed(() => {
 	return generateColorCss({
@@ -34,11 +38,15 @@ const previewStyle = computed(() => ({
 	'--contrast': contrast.value,
 	'--allow-polarity-inversion': allowPolarityInversion.value ? 1 : 0,
 	'--polarity-from': polarityFrom.value,
+	'--pulse-frequency': pulseFrequency.value,
+	'--pulse-lightness-offset': pulseLightnessOffset.value,
+	'--pulse-chroma-offset': pulseChromaOffset.value,
 }))
 
 const previewClass = computed(() => ({
 	preview: true,
 	'polarity-fixed': polarityFixed.value,
+	pulse: pulseEnabled.value,
 }))
 
 // Sync polarityFrom with lightness when not fixed
@@ -97,9 +105,36 @@ watch(lightness, (newLightness) => {
 					<input v-model.number="polarityFrom" type="range" min="0" max="100" step="0.1" />
 					<span class="hint">Lightness value used for polarity decision</span>
 				</label>
+
+				<div class="divider"></div>
+
+				<label>
+					<input v-model="pulseEnabled" type="checkbox" />
+					Enable Pulse Animation
+					<span class="hint">Animate lightness and chroma with configurable offsets</span>
+				</label>
+
+				<label v-if="pulseEnabled">
+					Pulse Frequency (seconds)
+					<input v-model.number="pulseFrequency" type="number" min="0.1" max="10" step="0.1" />
+					<input v-model.number="pulseFrequency" type="range" min="0.1" max="10" step="0.1" />
+					<span class="hint">Animation duration in seconds</span>
+				</label>
+
+				<label v-if="pulseEnabled">
+					Lightness Offset
+					<input v-model.number="pulseLightnessOffset" type="number" min="-50" max="50" step="0.1" />
+					<input v-model.number="pulseLightnessOffset" type="range" min="-50" max="50" step="0.1" />
+					<span class="hint">Pulse between base and base + offset</span>
+				</label>
+
+				<label v-if="pulseEnabled">
+					Chroma Offset
+					<input v-model.number="pulseChromaOffset" type="number" min="-50" max="50" step="0.1" />
+					<input v-model.number="pulseChromaOffset" type="range" min="-50" max="50" step="0.1" />
+					<span class="hint">Pulse between base and base + offset</span>
+				</label>
 			</div>
-
-
 		</div>
 
 		<div :class="previewClass" :style="previewStyle">
@@ -126,18 +161,47 @@ body {
 	gap: 2rem;
 	padding: 2rem;
 	min-height: 100vh;
+	align-items: start;
 }
 
 .sidebar {
 	display: flex;
 	flex-direction: column;
 	gap: 2rem;
+	max-height: calc(100vh - 4rem);
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding-right: 0.5rem;
+}
+
+.sidebar::-webkit-scrollbar {
+	width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+	background: #2a2a2a;
+	border-radius: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+	background: #4a4a4a;
+	border-radius: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+	background: #5a5a5a;
 }
 
 .controls {
 	display: flex;
 	flex-direction: column;
 	gap: 1.5rem;
+}
+
+.divider {
+	height: 1px;
+	background: #3a3a3a;
+	margin: 0.5rem 0;
 }
 
 .controls label {
@@ -192,6 +256,8 @@ body {
 	justify-content: center;
 	border-radius: 8px;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+	position: sticky;
+	top: 2rem;
 }
 
 .preview-text {

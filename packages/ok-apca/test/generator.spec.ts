@@ -351,3 +351,91 @@ describe('polarity-fixed feature', () => {
 		expect(css).not.toContain('--_polarity-lum-norm')
 	})
 })
+
+describe('pulse feature', () => {
+	it('should generate @property declaration for --_pulse-time', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+		})
+		expect(css).toContain('@property --_pulse-time')
+		expect(css).toContain('syntax: "<number>"')
+		expect(css).toContain('initial-value: 0')
+	})
+
+	it('should generate .pulse nested selector in base color', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+		})
+		expect(css).toContain('&.pulse')
+		expect(css).toContain('--pulse-frequency')
+		expect(css).toContain('--pulse-lightness-offset')
+		expect(css).toContain('--pulse-chroma-offset')
+	})
+
+	it('should include pulse animation and keyframes', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+		})
+		expect(css).toContain('animation: pulse-animation')
+		expect(css).toContain('@keyframes pulse-animation')
+		expect(css).toContain('--_pulse-time: 0')
+		expect(css).toContain('--_pulse-time: 1')
+	})
+
+	it('should override --_lum-norm and --_chr-pct inside .pulse', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+		})
+		const lines = css.split('\n')
+		const pulseBlockStart = lines.findIndex((l) => l.includes('&.pulse'))
+		const pulseBlockEnd = lines.findIndex((l, i) => i > pulseBlockStart && l.trim() === '}')
+		const pulseBlock = lines.slice(pulseBlockStart, pulseBlockEnd + 1).join('\n')
+
+		expect(pulseBlock).toContain('--_lum-norm:')
+		expect(pulseBlock).toContain('--_chr-pct:')
+		expect(pulseBlock).toContain('var(--_pulse-time)')
+	})
+
+	it('should not include .pulse in contrast selector', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrast: { allowPolarityInversion: true },
+		})
+		const lines = css.split('\n')
+		const contrastBlockStart = lines.findIndex((l) => l.includes('.orange.contrast {'))
+		const contrastBlockEnd = lines.findIndex((l, i) => i > contrastBlockStart && l === '}')
+		const contrastBlock = lines.slice(contrastBlockStart, contrastBlockEnd + 1).join('\n')
+
+		expect(contrastBlock).not.toContain('&.pulse')
+	})
+
+	it('should use default pulse values', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+		})
+		expect(css).toContain('--pulse-frequency: 1')
+		expect(css).toContain('--pulse-lightness-offset: 0')
+		expect(css).toContain('--pulse-chroma-offset: 0')
+	})
+
+	it('should always include pulse regardless of contrast option', () => {
+		const cssWithContrast = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrast: { allowPolarityInversion: true },
+		})
+		const cssWithoutContrast = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+		})
+
+		expect(cssWithContrast).toContain('&.pulse')
+		expect(cssWithoutContrast).toContain('&.pulse')
+	})
+})

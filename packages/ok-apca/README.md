@@ -79,6 +79,50 @@ Use the generated CSS:
 </div>
 ```
 
+### Pulse Animations
+
+The library includes built-in support for pulsing color animations using the `.pulse` class:
+
+```html
+<style>
+  .pulsing-card {
+    --lightness: 50;
+    --chroma: 80;
+    
+    /* Pulse configuration */
+    --pulse-frequency: 2; /* Pulse every 2 seconds */
+    --pulse-lightness-offset: 10; /* Pulse between 50 and 60 lightness */
+    --pulse-chroma-offset: 5; /* Pulse between 80% and 85% chroma */
+  }
+</style>
+
+<div class="orange pulse pulsing-card">
+  Pulsing background
+  <span class="contrast" style="--contrast: 60; --allow-polarity-inversion: 1">
+    Contrast color automatically pulses too!
+  </span>
+</div>
+```
+
+The `.pulse` class animates colors using CSS custom properties and `@keyframes`. The pulse is one-directional (base → base + offset) using an ease-in-out timing function.
+
+**Pulse Variables:**
+- `--pulse-frequency` (default: `1`): Animation duration in seconds
+- `--pulse-lightness-offset` (default: `0`): Additive lightness offset (0-100 scale)
+- `--pulse-chroma-offset` (default: `0`): Additive chroma offset (0-100 scale)
+
+**Behavior:**
+- The animation oscillates from the base value to base + offset
+- Applied to the base selector (`.orange.pulse`)
+- The contrast color automatically recalculates during the animation for smooth, reactive contrast
+- Offsets can be negative to pulse downward
+
+**Example use cases:**
+- Loading states or activity indicators
+- Hover effects with smooth pulsing
+- Drawing attention to interactive elements
+- Breathing animations for ambient UI
+
 ### Locking Polarity for Animations
 
 When animating `--lightness` or `--chroma`, the polarity may flip if the contrast color crosses the gamut boundary, creating a jarring visual effect. Use the `.polarity-fixed` class with `--polarity-from` to lock the polarity decision:
@@ -109,6 +153,15 @@ When animating `--lightness` or `--chroma`, the polarity may flip if the contras
 ```
 
 The `.polarity-fixed` class tells the contrast selector to determine text vs. background polarity based on `--polarity-from` instead of the current `--lightness`. This "locks" the polarity at a specific lightness value while allowing the actual color to vary.
+
+**Combining `.pulse` and `.polarity-fixed`:**
+```html
+<div class="orange pulse" style="--pulse-lightness-offset: 10">
+  <span class="contrast polarity-fixed" style="--polarity-from: 50; --contrast: 60">
+    Smooth pulsing with locked polarity
+  </span>
+</div>
+```
 
 **When to use:**
 - Animating `--lightness` or `--chroma` for hover effects or loading states
@@ -172,6 +225,9 @@ Generate CSS for a hue with optional contrast support.
   - Only used with `.polarity-fixed` class on the contrast selector
   - Falls back to `--lightness` if not set
   - Useful for locking polarity during animations
+- `--pulse-frequency` (default: 1): Animation duration in seconds when using `.pulse` class
+- `--pulse-lightness-offset` (default: 0): Lightness offset for pulse animation (0-100 scale)
+- `--pulse-chroma-offset` (default: 0): Chroma offset for pulse animation (0-100 scale)
 
 **CSS Variables (output):**
 - `--o-color`: The gamut-mapped OKLCH color (Display P3)
