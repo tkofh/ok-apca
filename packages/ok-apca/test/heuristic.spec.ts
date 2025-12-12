@@ -29,9 +29,10 @@ describe('fitHeuristicCoefficients', () => {
 					const result = fitHeuristicCoefficients(hue, allowInversion)
 					results.push({ hue, allowInversion, result })
 
-					// MAE should be reasonably low (< 31 Lc for P3's wider gamut)
+					// MAE should be reasonably low (< 37 Lc for P3's wider gamut)
 					// The simplified Y=L³ approximation has larger errors with P3's higher chroma
-					expect(result.mae).toBeLessThan(31)
+					// With chroma as % of max, colors use more saturation, increasing approximation error
+					expect(result.mae).toBeLessThan(37)
 					expect(result.mae).toBeGreaterThan(0)
 				}
 			}

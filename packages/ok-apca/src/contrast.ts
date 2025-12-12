@@ -6,7 +6,7 @@
  */
 
 import { solveTargetY } from './apca.ts'
-import { type Color, ColorImpl, gamutMap } from './color.ts'
+import { type Color, ColorImpl, findGamutBoundary, gamutMap } from './color.ts'
 
 /**
  * Compute a contrast color that achieves the target APCA contrast value.
@@ -16,8 +16,8 @@ import { type Color, ColorImpl, gamutMap } from './color.ts'
  *
  * @param color - The requested color (may be out of gamut)
  * @param signedContrast - Target APCA Lc value (-108 to 108)
- *   - Positive: Normal polarity (darker text)
- *   - Negative: Reverse polarity (lighter text)
+ *   - Positive: Reverse polarity (lighter text)
+ *   - Negative: Normal polarity (darker text)
  * @param allowPolarityInversion - Allow fallback to opposite polarity if out of gamut
  * @returns The contrast color, gamut-mapped to the Display P3 boundary
  */
@@ -28,13 +28,12 @@ export function applyContrast(
 ) {
 	const { hue, chroma: requestedChroma } = color
 
-	// Clamp contrast to valid APCA range
-	const clampedContrast = Math.max(-108, Math.min(108, signedContrast))
+	// Clamp contrast to valid APCA range and invert to match CSS convention
+	const clampedContrast = -1 * Math.max(-108, Math.min(108, signedContrast))
 
 	// Gamut-map the input to get the base color for APCA calculations
 	const baseColor = gamutMap(color)
 	const L = baseColor.lightness
-	const C = baseColor.chroma
 
 	// Simplified Y approximation to match CSS generator (Y = L³)
 	const Y = L ** 3
@@ -48,9 +47,20 @@ export function applyContrast(
 	// Recover L from target Y using cube root (inverse of Y = L³)
 	const contrastL = Math.max(0, Math.min(1, targetY ** (1 / 3)))
 
-	// Compute contrast chroma: average of gamut-mapped and requested
-	const contrastC = (C + requestedChroma) / 2
+	// Compute chroma percentage from requested chroma, apply at new lightness
+	// This matches CSS behavior where --chroma is a % of max at current lightness
+	const boundary = findGamutBoundary(hue)
+	const tent = (l: number) => {
+		if (l <= 0 || l >= 1 || boundary.lMax <= 0 || boundary.lMax >= 1) {
+			return 0
+		}
+		return Math.min(l / boundary.lMax, (1 - l) / (1 - boundary.lMax))
+	}
+	const maxChromaAtBase = boundary.cPeak * tent(L)
+	const chromaPct = maxChromaAtBase > 0 ? requestedChroma / maxChromaAtBase : 0
+	const maxChromaAtContrast = boundary.cPeak * tent(contrastL)
+	const contrastC = maxChromaAtContrast * chromaPct
 
-	// Gamut-map the result at the new lightness
-	return gamutMap(new ColorImpl(hue, contrastC, contrastL))
+	// Return color with computed chroma (already respects gamut boundary)
+	return new ColorImpl(hue, contrastC, contrastL)
 }

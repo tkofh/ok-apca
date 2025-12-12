@@ -26,7 +26,7 @@ import { outdent } from './util.ts'
 
 // Base color variables
 const V_LUM_NORM = 'var(--_lum-norm)'
-const V_CHR_REQ = 'var(--_chr-req)'
+const V_CHR_PCT = 'var(--_chr-pct)'
 const V_CHR = 'var(--_chr)'
 const V_LUM_MAX = 'var(--_lum-max)'
 const V_CHR_PEAK = 'var(--_chr-peak)'
@@ -218,9 +218,9 @@ function generateBaseColorCss(selector: string, hue: number, boundary: GamutBoun
 
 	return outdent`
 		${selector} {
-			/* Runtime inputs: --lightness (0-100), --chroma (0-100) */
+			/* Runtime inputs: --lightness (0-100), --chroma (0-100 as % of max) */
 			--_lum-norm: clamp(0, var(--lightness) / 100, 1);
-			--_chr-req: clamp(0, var(--chroma) / 100, 1);
+			--_chr-pct: clamp(0, var(--chroma) / 100, 1);
 
 			/* Build-time constants for hue ${hue} */
 			--_lum-max: ${lMax};
@@ -229,8 +229,8 @@ function generateBaseColorCss(selector: string, hue: number, boundary: GamutBoun
 			/* Tent function: min(L/L_max, (1-L)/(1-L_max)) */
 			--_tent: ${cssTentFunction(V_LUM_NORM, V_LUM_MAX)};
 
-			/* Gamut-mapped chroma */
-			--_chr: min(${V_CHR_REQ}, calc(${V_CHR_PEAK} * ${V_TENT}));
+			/* Chroma as percentage of maximum available at this lightness */
+			--_chr: calc(${V_CHR_PEAK} * ${V_TENT} * ${V_CHR_PCT});
 
 			/* Output color */
 			--o-color: oklch(${V_LUM_NORM} ${V_CHR} ${hue});
@@ -405,7 +405,7 @@ function generateContrastCss(
 			/* Runtime inputs: --contrast (-108 to 108), --allow-polarity-inversion (0 or 1) */
 			${heuristicCss}
 
-			--_contrast-signed: clamp(-108, var(--contrast), 108);
+			--_contrast-signed: clamp(-108, -1 * var(--contrast), 108);
 			--_lc-norm: calc(abs(${V_CONTRAST_SIGNED}) / 100);
 
 			/* Simplified L to luminance Y (ignoring chroma contribution) */
@@ -428,10 +428,7 @@ function generateContrastCss(
 
 			/* Gamut-map contrast color's chroma */
 			--_con-tent: ${cssTentFunction(V_CON_LUM, lMax)};
-			--_con-chr: min(
-				calc((${V_CHR} + ${V_CHR_REQ}) / 2),
-				calc(${cPeak} * ${V_CON_TENT})
-			);
+			--_con-chr: calc(${cPeak} * ${V_CON_TENT} * ${V_CHR_PCT});
 
 			/* Output contrast color */
 			--o-color-contrast: oklch(${V_CON_LUM} ${V_CON_CHR} ${hue});

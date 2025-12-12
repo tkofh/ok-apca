@@ -1,25 +1,18 @@
 <script setup lang="ts">
-import { type ContrastMode, generateColorCss } from 'ok-apca'
+import { generateColorCss } from 'ok-apca'
 
 const hue = ref(240)
 const chroma = ref(50)
 const lightness = ref(50)
 const contrast = ref(60)
-const mode = ref<ContrastMode>('prefer-light')
-
-const contrastModes: ContrastMode[] = [
-	'force-light',
-	'prefer-light',
-	'prefer-dark',
-	'force-dark',
-]
+const allowPolarityInversion = ref(true)
 
 const generatedCss = computed(() => {
 	return generateColorCss({
 		hue: hue.value,
 		selector: '.preview',
 		contrast: {
-			mode: mode.value,
+			allowPolarityInversion: allowPolarityInversion.value,
 			selector: '&',
 		},
 	})
@@ -37,6 +30,7 @@ const previewStyle = computed(() => ({
 	'--lightness': lightness.value,
 	'--chroma': chroma.value,
 	'--contrast': contrast.value,
+	'--allow-polarity-inversion': allowPolarityInversion.value ? 1 : 0,
 }))
 </script>
 
@@ -51,9 +45,10 @@ const previewStyle = computed(() => ({
 				</label>
 
 				<label>
-					Chroma
-					<input v-model.number="chroma" type="number" min="0" max="40" step="0.1" />
-					<input v-model.number="chroma" type="range" min="0" max="40" step="0.1" />
+					Chroma (% of max)
+					<input v-model.number="chroma" type="number" min="0" max="100" step="0.1" />
+					<input v-model.number="chroma" type="range" min="0" max="100" step="0.1" />
+					<span class="hint">Percentage of maximum chroma available at current lightness</span>
 				</label>
 
 				<label>
@@ -63,18 +58,16 @@ const previewStyle = computed(() => ({
 				</label>
 
 				<label>
-					Contrast
-					<input v-model.number="contrast" type="number" min="0" max="108" step="0.1" />
-					<input v-model.number="contrast" type="range" min="0" max="108" step="0.1" />
+					Contrast (signed)
+					<input v-model.number="contrast" type="number" min="-108" max="108" step="0.1" />
+					<input v-model.number="contrast" type="range" min="-108" max="108" step="0.1" />
+					<span class="hint">Positive = light text, Negative = dark text</span>
 				</label>
 
 				<label>
-					Mode
-					<select v-model="mode">
-						<option v-for="m in contrastModes" :key="m" :value="m">
-							{{ m }}
-						</option>
-					</select>
+					<input v-model="allowPolarityInversion" type="checkbox" />
+					Allow Polarity Inversion
+					<span class="hint">Fallback to opposite polarity if preferred is out of gamut</span>
 				</label>
 			</div>
 
@@ -128,6 +121,12 @@ body {
 	color: #a0a0a0;
 }
 
+.controls label:has(input[type="checkbox"]) {
+	flex-direction: row;
+	align-items: center;
+	gap: 0.5rem;
+}
+
 .controls input[type="number"],
 .controls select {
 	padding: 0.5rem;
@@ -140,6 +139,20 @@ body {
 
 .controls input[type="range"] {
 	margin-top: 0.25rem;
+}
+
+.controls input[type="checkbox"] {
+	width: 1.25rem;
+	height: 1.25rem;
+	cursor: pointer;
+	accent-color: #4a9eff;
+}
+
+.controls .hint {
+	font-size: 0.75rem;
+	color: #707070;
+	font-weight: 400;
+	margin-top: 0.125rem;
 }
 
 .preview {
