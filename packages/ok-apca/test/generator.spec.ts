@@ -29,7 +29,7 @@ describe('generateColorCss', () => {
 			hue: 30,
 			selector: '.color',
 			contrast: {
-				mode: 'force-light',
+				allowPolarityInversion: false,
 			},
 		})
 
@@ -48,7 +48,7 @@ describe('generateColorCss', () => {
 			hue: 30,
 			selector: '.color',
 			contrast: {
-				mode: 'force-light',
+				allowPolarityInversion: false,
 			},
 		})
 
@@ -60,7 +60,7 @@ describe('generateColorCss', () => {
 			hue: 30,
 			selector: '.color',
 			contrast: {
-				mode: 'force-light',
+				allowPolarityInversion: false,
 				selector: '&[data-contrast]',
 			},
 		})
@@ -73,7 +73,7 @@ describe('generateColorCss', () => {
 			hue: 30,
 			selector: '.color',
 			contrast: {
-				mode: 'force-light',
+				allowPolarityInversion: false,
 				selector: '.has-contrast',
 			},
 		})
@@ -86,7 +86,7 @@ describe('generateColorCss', () => {
 			hue: 30,
 			selector: 'div.color[data-theme="dark"]',
 			contrast: {
-				mode: 'force-light',
+				allowPolarityInversion: false,
 				selector: '&:hover',
 			},
 		})
@@ -132,7 +132,7 @@ describe('generateColorCss', () => {
 			hue: 200,
 			selector: '[data-color]',
 			contrast: {
-				mode: 'prefer-light',
+				allowPolarityInversion: true,
 			},
 		})
 
@@ -197,64 +197,43 @@ describe('generateColorCss output structure', () => {
 		expect(css).toContain('var(--_chr)')
 	})
 
-	it('produces contrast CSS with APCA calculation chain for force-light', () => {
+	it('produces contrast CSS with APCA calculation chain', () => {
 		const css = generateColorCss({
 			hue: 60,
 			selector: '.test',
 			contrast: {
-				mode: 'force-light',
+				allowPolarityInversion: false,
 			},
 		})
 
 		// Should have Y conversion (new name)
 		expect(css).toContain('--_Y-bg:')
 
-		// Should only have reverse polarity (--_Y-light) for force-light (lighter text, new names)
-		expect(css).not.toContain('--_Y-dark:')
+		// Should always have both polarities (unified approach)
+		expect(css).toContain('--_Y-dark:')
 		expect(css).toContain('--_Y-light:')
 
 		// Should have contrast lightness (simplified cube root, new name)
 		expect(css).toContain('--_con-lum:')
 	})
 
-	it('produces contrast CSS with APCA calculation chain for force-dark', () => {
+	it('produces contrast CSS with both polarities', () => {
 		const css = generateColorCss({
 			hue: 60,
 			selector: '.test',
 			contrast: {
-				mode: 'force-dark',
+				allowPolarityInversion: true,
 			},
 		})
 
-		// Should only have normal polarity (--_Y-dark) for force-dark (darker text, new names)
+		// Should always have both polarities for runtime selection
 		expect(css).toContain('--_Y-dark:')
-		expect(css).not.toContain('--_Y-light:')
-	})
+		expect(css).toContain('--_Y-light:')
 
-	it('produces contrast CSS with both polarities for prefer modes', () => {
-		const cssPreferLight = generateColorCss({
-			hue: 60,
-			selector: '.test',
-			contrast: {
-				mode: 'prefer-light',
-			},
-		})
-
-		// Should have both polarities for prefer-light (needs fallback, new names)
-		expect(cssPreferLight).toContain('--_Y-dark:')
-		expect(cssPreferLight).toContain('--_Y-light:')
-
-		const cssPreferDark = generateColorCss({
-			hue: 60,
-			selector: '.test',
-			contrast: {
-				mode: 'prefer-dark',
-			},
-		})
-
-		// Should have both polarities for prefer-dark (needs fallback, new names)
-		expect(cssPreferDark).toContain('--_Y-dark:')
-		expect(cssPreferDark).toContain('--_Y-light:')
+		// Should have polarity selection logic
+		expect(css).toContain('--_use-light:')
+		expect(css).toContain('--_prefer-light:')
+		expect(css).toContain('--_prefer-dark:')
 	})
 
 	it('includes heuristic correction boost in contrast CSS', () => {
@@ -262,7 +241,7 @@ describe('generateColorCss output structure', () => {
 			hue: 60,
 			selector: '.test',
 			contrast: {
-				mode: 'prefer-light',
+				allowPolarityInversion: true,
 			},
 		})
 
@@ -273,34 +252,21 @@ describe('generateColorCss output structure', () => {
 		expect(css).toContain('--_contrast-adjusted:')
 	})
 
-	it('produces different output for each contrast mode', () => {
-		const forceLight = generateColorCss({
+	it('produces different output for different inversion settings', () => {
+		const withInversion = generateColorCss({
 			hue: 60,
 			selector: '.test',
-			contrast: { mode: 'force-light' },
+			contrast: { allowPolarityInversion: true },
 		})
 
-		const forceDark = generateColorCss({
+		const withoutInversion = generateColorCss({
 			hue: 60,
 			selector: '.test',
-			contrast: { mode: 'force-dark' },
+			contrast: { allowPolarityInversion: false },
 		})
 
-		const preferLight = generateColorCss({
-			hue: 60,
-			selector: '.test',
-			contrast: { mode: 'prefer-light' },
-		})
-
-		const preferDark = generateColorCss({
-			hue: 60,
-			selector: '.test',
-			contrast: { mode: 'prefer-dark' },
-		})
-
-		// All should be unique
-		expect(forceLight).not.toBe(forceDark)
-		expect(forceLight).not.toBe(preferLight)
-		expect(forceDark).not.toBe(preferDark)
+		// Different inversion settings may produce different heuristic coefficients
+		// So the CSS should differ (though the structure is the same)
+		expect(withInversion).not.toBe(withoutInversion)
 	})
 })

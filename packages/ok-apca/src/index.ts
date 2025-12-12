@@ -12,12 +12,12 @@
  * const css = generateColorCss({
  *   hue: 30,
  *   selector: '.orange',
- *   contrast: { mode: 'prefer-dark' }
+ *   contrast: { allowPolarityInversion: true }
  * })
  *
  * // Programmatically compute contrast colors
  * const base = { hue: 30, chroma: 0.15, lightness: 0.6 }
- * const contrast = applyContrast(base, 60, 'prefer-dark')
+ * const contrast = applyContrast(base, 60, true)
  * const actualLc = measureContrast(gamutMap(base), contrast)
  * ```
  */
@@ -31,7 +31,6 @@ export { clearHeuristicCache, fitHeuristicCoefficients } from './heuristic.ts'
 export { measureContrast } from './measure.ts'
 export type {
 	ColorGeneratorOptions,
-	ContrastMode,
 	ContrastOptions,
 	GamutBoundary,
 } from './types.ts'

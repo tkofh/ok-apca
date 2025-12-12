@@ -5,8 +5,6 @@
  * given a base luminance and desired contrast level.
  */
 
-import type { ContrastMode } from './types.ts'
-
 /**
  * Compute x^(1/n) preserving sign (for odd roots of negative numbers).
  */
@@ -103,56 +101,41 @@ function estimateContrast(baseY: number, targetY: number): number {
 }
 
 /**
- * Solve for prefer-light mode: try reverse (lighter) first, fall back to normal.
- * When both are out of gamut, choose the option that achieves higher contrast.
+ * Solve for target Y based on signed contrast value.
+ *
+ * @param Y - Base luminance (0-1)
+ * @param signedContrast - Target APCA Lc value, signed (-108 to 108)
+ *   - Positive: Normal polarity (darker text)
+ *   - Negative: Reverse polarity (lighter text)
+ * @param apcaT - APCA threshold for Bézier smoothing
+ * @param allowPolarityInversion - Allow fallback to opposite polarity if preferred is out of gamut
+ * @returns Target luminance Y value
  */
-export function solvePreferLight(Y: number, x: number, apcaT: number) {
-	const { targetY: YR, inGamut: xrg } = solveApcaReverse(Y, x, apcaT)
-	if (xrg) {
-		return YR
-	}
-	const { targetY: YN, inGamut: xng } = solveApcaNormal(Y, x, apcaT)
-	if (xng) {
-		return YN
-	}
-	// Both out of gamut - choose whichever achieves higher contrast
-	const contrastR = estimateContrast(Y, YR)
-	const contrastN = estimateContrast(Y, YN)
-	return contrastR >= contrastN ? YR : YN
-}
+export function solveTargetY(
+	Y: number,
+	signedContrast: number,
+	apcaT: number,
+	allowPolarityInversion: boolean,
+): number {
+	const x = Math.abs(signedContrast) / 100
+	const preferLight = signedContrast < 0
 
-/**
- * Solve for prefer-dark mode: try normal (darker) first, fall back to reverse.
- * When both are out of gamut, choose the option that achieves higher contrast.
- */
-export function solvePreferDark(Y: number, x: number, apcaT: number) {
-	const { targetY: YN, inGamut: xng } = solveApcaNormal(Y, x, apcaT)
-	if (xng) {
-		return YN
-	}
-	const { targetY: YR, inGamut: xrg } = solveApcaReverse(Y, x, apcaT)
-	if (xrg) {
-		return YR
-	}
-	// Both out of gamut - choose whichever achieves higher contrast
-	const contrastN = estimateContrast(Y, YN)
-	const contrastR = estimateContrast(Y, YR)
-	return contrastN >= contrastR ? YN : YR
-}
+	// Solve for preferred polarity
+	const preferred = preferLight ? solveApcaReverse(Y, x, apcaT) : solveApcaNormal(Y, x, apcaT)
 
-/**
- * Solve for target Y based on contrast mode.
- */
-export function solveTargetY(Y: number, x: number, apcaT: number, mode: ContrastMode) {
-	if (mode === 'force-light') {
-		return solveApcaReverse(Y, x, apcaT).targetY
+	if (preferred.inGamut || !allowPolarityInversion) {
+		return preferred.targetY
 	}
-	if (mode === 'force-dark') {
-		return solveApcaNormal(Y, x, apcaT).targetY
+
+	// Fallback to opposite polarity
+	const fallback = preferLight ? solveApcaNormal(Y, x, apcaT) : solveApcaReverse(Y, x, apcaT)
+
+	if (fallback.inGamut) {
+		return fallback.targetY
 	}
-	if (mode === 'prefer-light') {
-		return solvePreferLight(Y, x, apcaT)
-	}
-	// prefer-dark
-	return solvePreferDark(Y, x, apcaT)
+
+	// Both out of gamut - choose whichever achieves higher contrast
+	const contrastPreferred = estimateContrast(Y, preferred.targetY)
+	const contrastFallback = estimateContrast(Y, fallback.targetY)
+	return contrastPreferred >= contrastFallback ? preferred.targetY : fallback.targetY
 }

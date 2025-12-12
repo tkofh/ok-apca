@@ -127,12 +127,12 @@ describe('measureContrast', () => {
 	})
 
 	describe('integration with applyContrast', () => {
-		it('verifies applyContrast achieves target within tolerance', () => {
+		it('verifies applyContrast achieves target within tolerance (positive contrast)', () => {
 			const base = { hue: 30, chroma: 0.1, lightness: 0.5 }
 			const targetContrast = 60
 
 			const baseColor = gamutMap(base)
-			const contrastColor = applyContrast(base, targetContrast, 'prefer-dark')
+			const contrastColor = applyContrast(base, targetContrast, true)
 			const actualContrast = Math.abs(measureContrast(baseColor, contrastColor))
 
 			// The CSS-matching applyContrast uses simplified math with heuristic corrections,
@@ -140,19 +140,37 @@ describe('measureContrast', () => {
 			expect(Math.abs(actualContrast - targetContrast)).toBeLessThan(15)
 		})
 
-		it('verifies all contrast modes produce measurable contrast', () => {
+		it('verifies applyContrast achieves target within tolerance (negative contrast)', () => {
+			const base = { hue: 30, chroma: 0.1, lightness: 0.5 }
+			const targetContrast = 60
+
+			const baseColor = gamutMap(base)
+			const contrastColor = applyContrast(base, -targetContrast, true)
+			const actualContrast = Math.abs(measureContrast(baseColor, contrastColor))
+
+			// The CSS-matching applyContrast uses simplified math with heuristic corrections,
+			// so allow reasonable deviation from target
+			expect(Math.abs(actualContrast - targetContrast)).toBeLessThan(15)
+		})
+
+		it('verifies all contrast configurations produce measurable contrast', () => {
 			const base = { hue: 30, chroma: 0.1, lightness: 0.5 }
 			const baseColor = gamutMap(base)
 			const targetContrast = 60
 
-			const modes = ['force-light', 'force-dark', 'prefer-light', 'prefer-dark'] as const
+			const configs = [
+				{ contrast: -targetContrast, allowInversion: false },
+				{ contrast: targetContrast, allowInversion: false },
+				{ contrast: -targetContrast, allowInversion: true },
+				{ contrast: targetContrast, allowInversion: true },
+			]
 
-			for (const mode of modes) {
-				const contrastColor = applyContrast(base, targetContrast, mode)
+			for (const config of configs) {
+				const contrastColor = applyContrast(base, config.contrast, config.allowInversion)
 				const actualContrast = Math.abs(measureContrast(baseColor, contrastColor))
 
 				// Should achieve at least some meaningful contrast
-				// Lower threshold to account for heuristic variations across modes
+				// Lower threshold to account for heuristic variations across configurations
 				expect(actualContrast).toBeGreaterThan(15)
 			}
 		})

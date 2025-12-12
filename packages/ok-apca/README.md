@@ -33,7 +33,7 @@ const css = generateColorCss({
   hue: 30,
   selector: '.orange',
   contrast: {
-    mode: 'prefer-dark',
+    allowPolarityInversion: true,
     selector: '&.contrast'
   }
 })
@@ -70,8 +70,11 @@ Use the generated CSS:
 ```html
 <div class="orange" style="--lightness: 60; --chroma: 80">
   Background
-  <span class="contrast" style="--contrast: 60">
-    Text with 60 Lc contrast
+  <span class="contrast" style="--contrast: 60; --allow-polarity-inversion: 1">
+    Text with 60 Lc contrast (darker text preferred)
+  </span>
+  <span class="contrast" style="--contrast: -60; --allow-polarity-inversion: 1">
+    Text with 60 Lc contrast (lighter text preferred)
   </span>
 </div>
 ```
@@ -87,11 +90,18 @@ import { gamutMap, applyContrast, measureContrast } from 'ok-apca'
 const color = gamutMap({ hue: 264, chroma: 0.3, lightness: 0.5 })
 // → { hue: 264, chroma: 0.237, lightness: 0.5 }
 
-// Compute a contrast color
+// Compute a contrast color (darker text preferred)
 const contrast = applyContrast(
   { hue: 30, chroma: 0.15, lightness: 0.6 },
-  60, // target Lc
-  'prefer-dark'
+  60, // positive = darker text (normal polarity)
+  true // allow polarity inversion if needed
+)
+
+// Compute lighter text instead
+const contrastLight = applyContrast(
+  { hue: 30, chroma: 0.15, lightness: 0.6 },
+  -60, // negative = lighter text (reverse polarity)
+  true
 )
 
 // Verify the actual contrast
@@ -109,13 +119,16 @@ Generate CSS for a hue with optional contrast support.
 - `hue` (number): Hue angle in degrees (0-360)
 - `selector` (string): CSS selector for the generated styles
 - `contrast` (optional): Contrast color configuration
-  - `mode`: `'force-light'` | `'prefer-light'` | `'prefer-dark'` | `'force-dark'`
+  - `allowPolarityInversion` (boolean): Allow fallback to opposite polarity if preferred is out of gamut
   - `selector`: CSS selector for contrast variant (default: `'&.contrast'`)
 
 **CSS Variables (input):**
 - `--lightness` (0-100): Perceptual lightness
 - `--chroma` (0-100): Color saturation (Display P3 supports higher chroma than sRGB)
-- `--contrast` (0-108): Target APCA Lc value
+- `--contrast` (-108 to 108): Target APCA Lc value, signed
+  - Positive: Normal polarity (darker text on lighter background)
+  - Negative: Reverse polarity (lighter text on darker background)
+- `--allow-polarity-inversion` (0 or 1): Runtime control of polarity inversion
 
 **CSS Variables (output):**
 - `--o-color`: The gamut-mapped OKLCH color (Display P3)
@@ -135,17 +148,23 @@ interface Color {
 }
 ```
 
-### `applyContrast(color, contrast, mode)`
+### `applyContrast(color, signedContrast, allowPolarityInversion)`
 
 Compute a contrast color achieving the target APCA Lc value.
 
 ```typescript
 function applyContrast(
   color: Color,
-  contrast: number, // 0-108
-  mode: ContrastMode
+  signedContrast: number, // -108 to 108
+  allowPolarityInversion: boolean
 ): Color
 ```
+
+**Parameters:**
+- `signedContrast`: Target APCA Lc value
+  - Positive: Normal polarity (darker text)
+  - Negative: Reverse polarity (lighter text)
+- `allowPolarityInversion`: If `true`, allows fallback to opposite polarity when preferred is out of gamut
 
 This uses the same simplified math as the CSS output, so results match.
 
@@ -161,14 +180,24 @@ Returns signed Lc value:
 - Positive: dark on light (normal polarity)
 - Negative: light on dark (reverse polarity)
 
-## Contrast Modes
+## Contrast Polarity
 
-| Mode | Behavior |
-|------|----------|
-| `force-light` | Always use lighter contrast color |
-| `prefer-light` | Use lighter if in gamut, else darker |
-| `prefer-dark` | Use darker if in gamut, else lighter |
-| `force-dark` | Always use darker contrast color |
+The library uses a **signed contrast** system:
+
+| Contrast Value | Polarity | Behavior |
+|---------------|----------|-----------|
+| Positive (e.g., `60`) | Normal | Darker text on lighter background |
+| Negative (e.g., `-60`) | Reverse | Lighter text on darker background |
+
+**Polarity Inversion:**
+- `allowPolarityInversion: false` — Forces the specified polarity (even if out of gamut)
+- `allowPolarityInversion: true` — Allows fallback to opposite polarity if preferred is out of gamut
+
+**Migration from old API:**
+- `force-light` → `contrast: -60, allowPolarityInversion: false`
+- `force-dark` → `contrast: 60, allowPolarityInversion: false`
+- `prefer-light` → `contrast: -60, allowPolarityInversion: true`
+- `prefer-dark` → `contrast: 60, allowPolarityInversion: true`
 
 ## How It Works
 

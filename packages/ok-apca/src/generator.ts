@@ -16,7 +16,7 @@
 
 import { findGamutBoundary } from './color.ts'
 import { fitHeuristicCoefficients, type HeuristicCoefficients } from './heuristic.ts'
-import type { ColorGeneratorOptions, ContrastMode, GamutBoundary } from './types.ts'
+import type { ColorGeneratorOptions, GamutBoundary } from './types.ts'
 import { outdent } from './util.ts'
 
 // ============================================================================
@@ -33,10 +33,14 @@ const V_CHR_PEAK = 'var(--_chr-peak)'
 const V_TENT = 'var(--_tent)'
 
 // Contrast calculation variables
+const V_CONTRAST_SIGNED = 'var(--_contrast-signed)'
 const V_LC_NORM = 'var(--_lc-norm)'
 const V_Y_BG = 'var(--_Y-bg)'
 const V_SMOOTH_T = 'var(--_smooth-t)'
 const V_EP = 'var(--_ep)'
+const V_USE_LIGHT = 'var(--_use-light)'
+const V_PREFER_LIGHT = 'var(--_prefer-light)'
+const V_PREFER_DARK = 'var(--_prefer-dark)'
 
 // Normal polarity (dark text) variables
 const V_Y_DARK = 'var(--_Y-dark)'
@@ -53,6 +57,10 @@ const V_LIGHT_OK = 'var(--_light-ok)'
 const V_LC_LIGHT = 'var(--_lc-light)'
 
 // Target selection variables
+const V_Y_PREFERRED = 'var(--_Y-preferred)'
+const V_PREFERRED_OK = 'var(--_preferred-ok)'
+const V_Y_FALLBACK = 'var(--_Y-fallback)'
+const V_FALLBACK_OK = 'var(--_fallback-ok)'
 const V_Y_FINAL = 'var(--_Y-final)'
 const V_Y_BEST = 'var(--_Y-best)'
 
@@ -307,53 +315,55 @@ function generateReversePolarityCss() {
 }
 
 /**
- * Generate CSS for target Y selection based on mode.
+ * Generate CSS for target Y selection based on signed contrast.
  */
-function generateTargetYCss(mode: ContrastMode) {
-	switch (mode) {
-		case 'force-light':
-			// Light contrast text = reverse polarity (higher Y)
-			return `--_Y-final: clamp(0, ${V_Y_LIGHT}, 1);`
-		case 'force-dark':
-			// Dark contrast text = normal polarity (lower Y)
-			return `--_Y-final: clamp(0, ${V_Y_DARK}, 1);`
-		case 'prefer-light':
-			// Prefer light: use reverse if in gamut, fall back to normal if in gamut,
-			// otherwise choose whichever achieves higher contrast
-			return outdent`
-				/* Estimate contrast for each polarity using APCA formulas */
-				/* Normal (darker): Lc = 1.14 * (Ybg^0.56 - Yfg^0.57) - 0.027 */
-				--_lc-dark: ${cssApcaNormalContrast(V_Y_BG, V_Y_DARK)};
-				/* Reverse (lighter): Lc = 1.14 * (Yfg^0.62 - Ybg^0.65) - 0.027 */
-				--_lc-light: ${cssApcaReverseContrast(V_Y_BG, V_Y_LIGHT)};
-				--_Y-best: ${cssBestContrastFallback(V_Y_DARK, V_Y_LIGHT, V_LC_DARK, V_LC_LIGHT)};
-				--_Y-final: clamp(
-					0,
-					${V_LIGHT_OK} * ${V_Y_LIGHT} +
-					(1 - ${V_LIGHT_OK}) * ${V_DARK_OK} * ${V_Y_DARK} +
-					(1 - ${V_LIGHT_OK}) * (1 - ${V_DARK_OK}) * ${V_Y_BEST},
-					1
-				);
-			`
-		case 'prefer-dark':
-			// Prefer dark: use normal if in gamut, fall back to reverse if in gamut,
-			// otherwise choose whichever achieves higher contrast
-			return outdent`
-				/* Estimate contrast for each polarity using APCA formulas */
-				/* Normal (darker): Lc = 1.14 * (Ybg^0.56 - Yfg^0.57) - 0.027 */
-				--_lc-dark: ${cssApcaNormalContrast(V_Y_BG, V_Y_DARK)};
-				/* Reverse (lighter): Lc = 1.14 * (Yfg^0.62 - Ybg^0.65) - 0.027 */
-				--_lc-light: ${cssApcaReverseContrast(V_Y_BG, V_Y_LIGHT)};
-				--_Y-best: ${cssBestContrastFallback(V_Y_DARK, V_Y_LIGHT, V_LC_DARK, V_LC_LIGHT)};
-				--_Y-final: clamp(
-					0,
-					${V_DARK_OK} * ${V_Y_DARK} +
-					(1 - ${V_DARK_OK}) * ${V_LIGHT_OK} * ${V_Y_LIGHT} +
-					(1 - ${V_DARK_OK}) * (1 - ${V_LIGHT_OK}) * ${V_Y_BEST},
-					1
-				);
-			`
-	}
+function generateTargetYCss() {
+	return outdent`
+		/* Select preferred polarity based on contrast sign */
+		/* use-light: -1 if negative (prefer light text), 1 if positive (prefer dark text) */
+		--_use-light: sign(${V_CONTRAST_SIGNED} - 0.0001);
+		--_prefer-light: ${cssBooleanFlag(`-1 * ${V_USE_LIGHT}`)};
+		--_prefer-dark: ${cssBooleanFlag(V_USE_LIGHT)};
+
+		--_Y-preferred: calc(
+			${V_PREFER_LIGHT} * ${V_Y_LIGHT} +
+			${V_PREFER_DARK} * ${V_Y_DARK}
+		);
+
+		--_preferred-ok: calc(
+			${V_PREFER_LIGHT} * ${V_LIGHT_OK} +
+			${V_PREFER_DARK} * ${V_DARK_OK}
+		);
+
+		/* Fallback polarity (opposite of preferred) */
+		--_Y-fallback: calc(
+			${V_PREFER_LIGHT} * ${V_Y_DARK} +
+			${V_PREFER_DARK} * ${V_Y_LIGHT}
+		);
+
+		--_fallback-ok: calc(
+			${V_PREFER_LIGHT} * ${V_DARK_OK} +
+			${V_PREFER_DARK} * ${V_LIGHT_OK}
+		);
+
+		/* Best contrast fallback when both are out of gamut */
+		/* Estimate contrast for each polarity using APCA formulas */
+		--_lc-dark: ${cssApcaNormalContrast(V_Y_BG, V_Y_DARK)};
+		--_lc-light: ${cssApcaReverseContrast(V_Y_BG, V_Y_LIGHT)};
+		--_Y-best: ${cssBestContrastFallback(V_Y_DARK, V_Y_LIGHT, V_LC_DARK, V_LC_LIGHT)};
+
+		/* Final Y selection */
+		--_Y-final: calc(
+			/* Use preferred if in gamut */
+			${V_PREFERRED_OK} * clamp(0, ${V_Y_PREFERRED}, 1) +
+			/* Use fallback if preferred out of gamut and inversion allowed */
+			(1 - ${V_PREFERRED_OK}) * var(--allow-polarity-inversion) * ${V_FALLBACK_OK} * clamp(0, ${V_Y_FALLBACK}, 1) +
+			/* Use best contrast if both out of gamut and inversion allowed */
+			(1 - ${V_PREFERRED_OK}) * var(--allow-polarity-inversion) * (1 - ${V_FALLBACK_OK}) * clamp(0, ${V_Y_BEST}, 1) +
+			/* Force preferred if inversion not allowed (even if out of gamut) */
+			(1 - ${V_PREFERRED_OK}) * (1 - var(--allow-polarity-inversion)) * clamp(0, ${V_Y_PREFERRED}, 1)
+		);
+	`
 }
 
 function generateHeuristicCss(coefficients: HeuristicCoefficients): string {
@@ -379,53 +389,39 @@ function generateContrastCss(
 	contrastSelector: string,
 	hue: number,
 	boundary: GamutBoundary,
-	mode: ContrastMode,
+	allowPolarityInversion: boolean,
 ) {
 	const lMax = formatNumber(boundary.lMax)
 	const cPeak = formatNumber(boundary.cPeak)
 
-	// Fit heuristic coefficients for this specific hue and mode
-	const { coefficients } = fitHeuristicCoefficients(hue, mode)
+	// Fit heuristic coefficients for this specific hue and polarity inversion flag
+	const { coefficients } = fitHeuristicCoefficients(hue, allowPolarityInversion)
 
-	// Determine which polarities we need based on mode
-	// force-dark needs normal (darker), force-light needs reverse (lighter)
-	// prefer modes need both for fallback
-	const needsNormal = mode === 'force-dark' || mode === 'prefer-light' || mode === 'prefer-dark'
-	const needsReverse = mode === 'force-light' || mode === 'prefer-light' || mode === 'prefer-dark'
-
-	// Build polarity-specific CSS (only include what's needed)
-	const polarityCss = [
-		needsNormal ? generateNormalPolarityCss() : '',
-		needsReverse ? generateReversePolarityCss() : '',
-	]
-		.filter(Boolean)
-		.join('\n\n\t\t')
-
-	// Heuristic correction CSS (always enabled)
-	const heuristicCss = `\n\n${generateHeuristicCss(coefficients)}\n`
-
-	// Use adjusted contrast
-	const contrastVar = 'var(--_contrast-adjusted)'
+	// Heuristic correction CSS
+	const heuristicCss = generateHeuristicCss(coefficients)
 
 	return outdent`
 		${selector}${contrastSelector} {
-			/* Runtime input: --contrast (0-108 APCA Lc) */${heuristicCss}
+			/* Runtime inputs: --contrast (-108 to 108), --allow-polarity-inversion (0 or 1) */
+			${heuristicCss}
 
-			--_lc-norm: clamp(0, ${contrastVar} / 100, 1.08);
+			--_contrast-signed: clamp(-108, var(--contrast), 108);
+			--_lc-norm: calc(abs(${V_CONTRAST_SIGNED}) / 100);
 
 			/* Simplified L to luminance Y (ignoring chroma contribution) */
-			/* Note: Y = L³ is less accurate for P3 but avoids exponential CSS expansion */
-			/* The applyContrast() function uses improved approximation for accuracy */
 			--_Y-bg: pow(${V_LUM_NORM}, 3);
 
 			/* APCA threshold for Bezier smoothing */
 			--_smooth-t: 0.022;
 			--_ep: 0.0001;
 
-			${polarityCss}
+			/* Always compute both polarities */
+			${generateNormalPolarityCss()}
 
-			/* Target Y selection (mode: ${mode}) */
-			${generateTargetYCss(mode)}
+			${generateReversePolarityCss()}
+
+			/* Target Y selection */
+			${generateTargetYCss()}
 
 			/* Contrast lightness from cube root (inverse of Y = L³) */
 			--_con-lum: clamp(0, pow(${V_Y_FINAL}, 1 / 3), 1);
@@ -448,7 +444,8 @@ function generateContrastCss(
  *
  * The generated CSS uses CSS custom properties for runtime configuration:
  * - Set `--lightness` (0-100) and `--chroma` (0-100) to control the color
- * - Set `--contrast` (0-108) to control the contrast level (if contrast enabled)
+ * - Set `--contrast` (-108 to 108) to control the contrast level (if contrast enabled)
+ * - Set `--allow-polarity-inversion` (0 or 1) to allow fallback to opposite polarity
  *
  * Output variables:
  * - `--o-color`: The gamut-mapped OKLCH color
@@ -459,7 +456,7 @@ function generateContrastCss(
  * const css = generateColorCss({
  *   hue: 30,
  *   selector: '.orange',
- *   contrast: { mode: 'prefer-dark' }
+ *   contrast: { allowPolarityInversion: true }
  * })
  * ```
  *
@@ -480,7 +477,7 @@ export function generateColorCss(options: ColorGeneratorOptions) {
 			contrastSelector.startsWith('&') ? contrastSelector.slice(1) : ` ${contrastSelector}`,
 			hue,
 			boundary,
-			options.contrast.mode,
+			options.contrast.allowPolarityInversion,
 		)}`
 	}
 

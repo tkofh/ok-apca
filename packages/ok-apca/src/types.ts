@@ -3,21 +3,11 @@
  */
 
 /**
- * Contrast polarity mode for selecting lighter or darker contrast colors.
- *
- * - `'force-light'`: Always use a lighter contrast color (reverse polarity)
- * - `'prefer-light'`: Use lighter if in gamut, otherwise darker
- * - `'prefer-dark'`: Use darker if in gamut, otherwise lighter
- * - `'force-dark'`: Always use a darker contrast color (normal polarity)
- */
-export type ContrastMode = 'force-light' | 'prefer-light' | 'prefer-dark' | 'force-dark'
-
-/**
  * Options for contrast color generation in CSS output.
  */
 export interface ContrastOptions {
-	/** How to select between lighter/darker contrast colors */
-	readonly mode: ContrastMode
+	/** Allow polarity inversion if preferred polarity is out of gamut */
+	readonly allowPolarityInversion: boolean
 	/**
 	 * CSS selector for the contrast variant.
 	 * Use `&` prefix for nesting (e.g., `'&.contrast'`).

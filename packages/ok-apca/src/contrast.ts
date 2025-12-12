@@ -7,25 +7,29 @@
 
 import { solveTargetY } from './apca.ts'
 import { type Color, ColorImpl, gamutMap } from './color.ts'
-import type { ContrastMode } from './types.ts'
 
 /**
  * Compute a contrast color that achieves the target APCA contrast value.
  *
  * This function uses the same simplified Y = L³ approximation as the CSS generator
- * to accurately predict CSS behavior. While this is less accurate for high-chroma P3
- * colors, it ensures applyContrast() matches the generated CSS exactly.
+ * to accurately predict CSS behavior.
  *
  * @param color - The requested color (may be out of gamut)
- * @param contrast - Target APCA Lc value (0-108)
- * @param mode - How to select between lighter/darker contrast colors
+ * @param signedContrast - Target APCA Lc value (-108 to 108)
+ *   - Positive: Normal polarity (darker text)
+ *   - Negative: Reverse polarity (lighter text)
+ * @param allowPolarityInversion - Allow fallback to opposite polarity if out of gamut
  * @returns The contrast color, gamut-mapped to the Display P3 boundary
  */
-export function applyContrast(color: Color, contrast: number, mode: ContrastMode) {
+export function applyContrast(
+	color: Color,
+	signedContrast: number,
+	allowPolarityInversion: boolean,
+) {
 	const { hue, chroma: requestedChroma } = color
 
 	// Clamp contrast to valid APCA range
-	const x = Math.max(0, Math.min(108, contrast)) / 100 // Normalize to 0-1.08
+	const clampedContrast = Math.max(-108, Math.min(108, signedContrast))
 
 	// Gamut-map the input to get the base color for APCA calculations
 	const baseColor = gamutMap(color)
@@ -33,14 +37,13 @@ export function applyContrast(color: Color, contrast: number, mode: ContrastMode
 	const C = baseColor.chroma
 
 	// Simplified Y approximation to match CSS generator (Y = L³)
-	// Note: This ignores chroma contribution but avoids CSS expression explosion
 	const Y = L ** 3
 
 	// APCA threshold for Bézier smoothing
 	const apcaT = 0.022
 
-	// Solve for target Y based on contrast mode
-	const targetY = solveTargetY(Y, x, apcaT, mode)
+	// Solve for target Y
+	const targetY = solveTargetY(Y, clampedContrast, apcaT, allowPolarityInversion)
 
 	// Recover L from target Y using cube root (inverse of Y = L³)
 	const contrastL = Math.max(0, Math.min(1, targetY ** (1 / 3)))

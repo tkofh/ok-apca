@@ -22,7 +22,6 @@
 import { gamutMap } from './color.ts'
 import { applyContrast } from './contrast.ts'
 import { measureContrast } from './measure.ts'
-import type { ContrastMode } from './types.ts'
 
 /**
  * Heuristic correction coefficients.
@@ -63,7 +62,7 @@ interface SamplePoint {
 }
 
 /**
- * Cache for fitted heuristic coefficients by hue and mode.
+ * Cache for fitted heuristic coefficients by hue and allowPolarityInversion flag.
  */
 const fittedCoefficientsCache = new Map<string, HeuristicFitResult>()
 
@@ -85,10 +84,14 @@ function computeSamplePoint(
 	chroma: number,
 	lightness: number,
 	targetContrast: number,
-	mode: ContrastMode,
+	allowPolarityInversion: boolean,
 ): SamplePoint {
 	const baseColor = gamutMap({ hue, chroma, lightness })
-	const contrastColor = applyContrast({ hue, chroma, lightness }, targetContrast, mode)
+	const contrastColor = applyContrast(
+		{ hue, chroma, lightness },
+		targetContrast,
+		allowPolarityInversion,
+	)
 	const actual = Math.abs(measureContrast(baseColor, contrastColor))
 	const error = actual - targetContrast
 
@@ -108,9 +111,9 @@ function computeSamplePoint(
 }
 
 /**
- * Sample error data for a given hue and contrast mode.
+ * Sample error data for a given hue and allowPolarityInversion flag.
  */
-function sampleErrors(hue: number, mode: ContrastMode): SamplePoint[] {
+function sampleErrors(hue: number, allowPolarityInversion: boolean): SamplePoint[] {
 	const lightnessSteps = 21
 	const chromaSteps = 5
 	const contrastSteps = 16
@@ -126,7 +129,9 @@ function sampleErrors(hue: number, mode: ContrastMode): SamplePoint[] {
 			// Sample contrast from 30 to 105 (accessibility-relevant range)
 			for (let contIdx = 0; contIdx < contrastSteps; contIdx++) {
 				const targetContrast = 30 + (contIdx / (contrastSteps - 1)) * 75
-				samples.push(computeSamplePoint(hue, chroma, lightness, targetContrast, mode))
+				samples.push(
+					computeSamplePoint(hue, chroma, lightness, targetContrast, allowPolarityInversion),
+				)
 			}
 		}
 	}
@@ -265,24 +270,27 @@ function fineGridSearch(
 }
 
 /**
- * Fit heuristic coefficients for a specific hue and contrast mode.
+ * Fit heuristic coefficients for a specific hue and polarity inversion flag.
  *
  * Uses grid search to find coefficients that minimize under-delivery
  * while keeping average error reasonable. Results are cached internally
  * to avoid redundant computation.
  *
  * @param hue - The hue to fit (0-360)
- * @param mode - The contrast mode to fit
+ * @param allowPolarityInversion - Whether polarity inversion is allowed
  * @returns Fitted coefficients and validation metrics
  */
-export function fitHeuristicCoefficients(hue: number, mode: ContrastMode): HeuristicFitResult {
-	const cacheKey = `${hue}:${mode}`
+export function fitHeuristicCoefficients(
+	hue: number,
+	allowPolarityInversion: boolean,
+): HeuristicFitResult {
+	const cacheKey = `${hue}:${allowPolarityInversion}`
 	const cached = fittedCoefficientsCache.get(cacheKey)
 	if (cached) {
 		return cached
 	}
 
-	const samples = sampleErrors(hue, mode)
+	const samples = sampleErrors(hue, allowPolarityInversion)
 
 	// Two-stage grid search: coarse then fine
 	const coarseResult = coarseGridSearch(samples)
