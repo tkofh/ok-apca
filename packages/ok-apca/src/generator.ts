@@ -69,6 +69,9 @@ const V_CON_LUM = 'var(--_con-lum)'
 const V_CON_TENT = 'var(--_con-tent)'
 const V_CON_CHR = 'var(--_con-chr)'
 
+// Polarity-fixed variables
+const V_POLARITY_LUM_NORM = 'var(--_polarity-lum-norm)'
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -366,6 +369,20 @@ function generateTargetYCss() {
 	`
 }
 
+/**
+ * Generate CSS for .polarity-fixed override.
+ * Allows polarity decision to be based on --polarity-from instead of --lightness.
+ */
+function generatePolarityFixedCss(): string {
+	return outdent`
+		&.polarity-fixed {
+			/* Override polarity decision to use --polarity-from (fallback to --lightness) */
+			--_polarity-lum-norm: clamp(0, var(--polarity-from, var(--lightness)) / 100, 1);
+			--_Y-bg: pow(${V_POLARITY_LUM_NORM}, 3);
+		}
+	`
+}
+
 function generateHeuristicCss(coefficients: HeuristicCoefficients): string {
 	const fmt = (n: number) => formatNumber(n, 6)
 
@@ -432,6 +449,8 @@ function generateContrastCss(
 
 			/* Output contrast color */
 			--o-color-contrast: oklch(${V_CON_LUM} ${V_CON_CHR} ${hue});
+
+			${generatePolarityFixedCss()}
 		}
 	`
 }

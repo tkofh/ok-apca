@@ -6,6 +6,8 @@ const chroma = ref(50)
 const lightness = ref(50)
 const contrast = ref(60)
 const allowPolarityInversion = ref(true)
+const polarityFixed = ref(false)
+const polarityFrom = ref(50)
 
 const generatedCss = computed(() => {
 	return generateColorCss({
@@ -31,7 +33,20 @@ const previewStyle = computed(() => ({
 	'--chroma': chroma.value,
 	'--contrast': contrast.value,
 	'--allow-polarity-inversion': allowPolarityInversion.value ? 1 : 0,
+	'--polarity-from': polarityFrom.value,
 }))
+
+const previewClass = computed(() => ({
+	preview: true,
+	'polarity-fixed': polarityFixed.value,
+}))
+
+// Sync polarityFrom with lightness when not fixed
+watch(lightness, (newLightness) => {
+	if (!polarityFixed.value) {
+		polarityFrom.value = newLightness
+	}
+})
 </script>
 
 <template>
@@ -69,12 +84,25 @@ const previewStyle = computed(() => ({
 					Allow Polarity Inversion
 					<span class="hint">Fallback to opposite polarity if preferred is out of gamut</span>
 				</label>
+
+				<label>
+					<input v-model="polarityFixed" type="checkbox" />
+					Fix Polarity
+					<span class="hint">Lock polarity decision to --polarity-from (for animations)</span>
+				</label>
+
+				<label v-if="polarityFixed">
+					Polarity From
+					<input v-model.number="polarityFrom" type="number" min="0" max="100" step="0.1" />
+					<input v-model.number="polarityFrom" type="range" min="0" max="100" step="0.1" />
+					<span class="hint">Lightness value used for polarity decision</span>
+				</label>
 			</div>
 
 
 		</div>
 
-		<div class="preview" :style="previewStyle">
+		<div :class="previewClass" :style="previewStyle">
 			<span class="preview-text">Contrast Text</span>
 		</div>
 	</div>

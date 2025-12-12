@@ -79,6 +79,45 @@ Use the generated CSS:
 </div>
 ```
 
+### Locking Polarity for Animations
+
+When animating `--lightness` or `--chroma`, the polarity may flip if the contrast color crosses the gamut boundary, creating a jarring visual effect. Use the `.polarity-fixed` class with `--polarity-from` to lock the polarity decision:
+
+```html
+<style>
+  .pulsing-button {
+    --lightness: 50;
+    --chroma: 80;
+    --contrast: 60;
+    --polarity-from: 50; /* Lock polarity as if lightness were 50 */
+    
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { --lightness: 50; }
+    50% { --lightness: 55; } /* Polarity won't flip during animation */
+  }
+</style>
+
+<div class="orange pulsing-button">
+  Background
+  <span class="contrast polarity-fixed" style="--contrast: 60; --allow-polarity-inversion: 1">
+    Text maintains consistent polarity during pulse
+  </span>
+</div>
+```
+
+The `.polarity-fixed` class tells the contrast selector to determine text vs. background polarity based on `--polarity-from` instead of the current `--lightness`. This "locks" the polarity at a specific lightness value while allowing the actual color to vary.
+
+**When to use:**
+- Animating `--lightness` or `--chroma` for hover effects or loading states
+- Transitions that might cross the polarity inversion threshold
+- Any time you want stable contrast behavior while varying color properties
+
+**Fallback behavior:**
+If `--polarity-from` is not set, it falls back to using `--lightness` (making `.polarity-fixed` a no-op).
+
 ### Programmatic API
 
 For JavaScript-based color manipulation:
@@ -129,6 +168,10 @@ Generate CSS for a hue with optional contrast support.
   - Positive: Normal polarity (darker text on lighter background)
   - Negative: Reverse polarity (lighter text on darker background)
 - `--allow-polarity-inversion` (0 or 1): Runtime control of polarity inversion
+- `--polarity-from` (0-100, optional): Lightness value for polarity decision when using `.polarity-fixed` class
+  - Only used with `.polarity-fixed` class on the contrast selector
+  - Falls back to `--lightness` if not set
+  - Useful for locking polarity during animations
 
 **CSS Variables (output):**
 - `--o-color`: The gamut-mapped OKLCH color (Display P3)

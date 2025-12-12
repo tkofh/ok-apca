@@ -275,3 +275,79 @@ describe('generateColorCss output structure', () => {
 		expect(withoutInversion.length).toBeGreaterThan(0)
 	})
 })
+
+describe('polarity-fixed feature', () => {
+	it('should generate .polarity-fixed nested selector', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrast: { allowPolarityInversion: true },
+		})
+		expect(css).toContain('&.polarity-fixed')
+		expect(css).toContain('--_polarity-lum-norm')
+	})
+
+	it('should use --polarity-from with fallback to --lightness', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrast: { allowPolarityInversion: true },
+		})
+		expect(css).toContain('var(--polarity-from, var(--lightness))')
+	})
+
+	it('should override --_Y-bg inside .polarity-fixed', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrast: { allowPolarityInversion: true },
+		})
+		const lines = css.split('\n')
+		const fixedBlockStart = lines.findIndex((l) => l.includes('&.polarity-fixed'))
+		const fixedBlockEnd = lines.findIndex((l, i) => i > fixedBlockStart && l.trim() === '}')
+		const fixedBlock = lines.slice(fixedBlockStart, fixedBlockEnd + 1).join('\n')
+
+		expect(fixedBlock).toContain('--_Y-bg')
+		expect(fixedBlock).toContain('--_polarity-lum-norm')
+	})
+
+	it('should normalize --polarity-from with clamp to 0-1 range', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrast: { allowPolarityInversion: true },
+		})
+		const lines = css.split('\n')
+		const fixedBlockStart = lines.findIndex((l) => l.includes('&.polarity-fixed'))
+		const fixedBlockEnd = lines.findIndex((l, i) => i > fixedBlockStart && l.trim() === '}')
+		const fixedBlock = lines.slice(fixedBlockStart, fixedBlockEnd + 1).join('\n')
+
+		expect(fixedBlock).toContain('clamp(0, var(--polarity-from, var(--lightness)) / 100, 1)')
+	})
+
+	it('should include polarity-fixed in contrast CSS regardless of allowPolarityInversion setting', () => {
+		const cssWithInversion = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrast: { allowPolarityInversion: true },
+		})
+		const cssWithoutInversion = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrast: { allowPolarityInversion: false },
+		})
+
+		expect(cssWithInversion).toContain('&.polarity-fixed')
+		expect(cssWithoutInversion).toContain('&.polarity-fixed')
+	})
+
+	it('should not include polarity-fixed when contrast is not enabled', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+		})
+
+		expect(css).not.toContain('&.polarity-fixed')
+		expect(css).not.toContain('--_polarity-lum-norm')
+	})
+})
