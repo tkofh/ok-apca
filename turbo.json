@@ -22,6 +22,19 @@
 			"dependsOn": ["^build"],
 			"cache": false,
 			"persistent": true
+		},
+		"//#check": {
+			"inputs": ["$TURBO_DEFAULT$", "biome.json"]
+		},
+		"//#check:force": {
+			"inputs": ["$TURBO_DEFAULT$", "biome.json"]
+		},
+		"//#check:report": {
+			"inputs": ["$TURBO_DEFAULT$", "biome.json"],
+			"cache": false
+		},
+		"//#format": {
+			"inputs": ["$TURBO_DEFAULT$", "biome.json"]
 		}
 	}
 }

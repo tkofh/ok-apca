@@ -2,59 +2,39 @@
  * Shared type definitions for ok-apca.
  */
 
-/**
- * Options for contrast color generation in CSS output.
- */
-export interface ContrastOptions {
-	/** Allow polarity inversion if preferred polarity is out of gamut */
-	readonly allowPolarityInversion: boolean
-	/**
-	 * CSS selector for the contrast variant.
-	 * Use `&` prefix for nesting (e.g., `'&.contrast'`).
-	 * @default '&.contrast'
-	 */
-	readonly selector?: string
+interface ContrastColorDefinition {
+	readonly label: string
 }
 
-/**
- * Options for generating CSS color definitions.
- */
 export interface ColorGeneratorOptions {
-	/** Hue angle in degrees (0-360) */
 	readonly hue: number
-	/** CSS selector for the generated styles */
 	readonly selector: string
-	/** Optional contrast color configuration */
-	readonly contrast?: ContrastOptions
+	readonly contrastColors?: readonly ContrastColorDefinition[]
+	readonly prefix?: string
 }
 
-/**
- * Display P3 gamut boundary parameters for a specific hue.
- *
- * The gamut boundary is approximated using a tent function:
- * maximum chroma occurs at `lMax` and decreases linearly to 0
- * at both L=0 and L=1.
- */
 export interface GamutBoundary {
-	/** Lightness (0-1) where peak chroma occurs */
 	readonly lMax: number
-	/** Maximum chroma value at lMax */
 	readonly cPeak: number
 }
 
-/**
- * Hue-dependent coefficients for OKLCH L → CIE Y conversion.
- *
- * These coefficients are used in the polynomial:
- *   Y = yc0Coef·C³ + yc1Coef·C²·L + yc2Coef·C·L² + L³
- *
- * where C is chroma and L is lightness.
- */
-export interface YConversionCoefficients {
-	/** Coefficient for C³ term */
-	readonly yc0Coef: number
-	/** Coefficient for C²·L term */
-	readonly yc1Coef: number
-	/** Coefficient for C·L² term */
-	readonly yc2Coef: number
+export function validateLabel(label: string): void {
+	const labelRegex = /^[a-z][a-z0-9_-]*$/i
+	if (!labelRegex.test(label)) {
+		throw new Error(
+			`Invalid contrast color label '${label}'. Labels must start with a letter and contain only letters, numbers, hyphens, and underscores.`,
+		)
+	}
+}
+
+export function validateUniqueLabels(labels: readonly string[]): void {
+	const seen = new Set<string>()
+	for (const label of labels) {
+		if (seen.has(label)) {
+			throw new Error(
+				`Duplicate contrast color label '${label}'. Each contrast color must have a unique label.`,
+			)
+		}
+		seen.add(label)
+	}
 }

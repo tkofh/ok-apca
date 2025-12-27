@@ -1,84 +1,46 @@
 /**
- * Heuristic corrections for APCA contrast accuracy.
+ * Heuristic corrections to compensate for Y = L³ approximation.
  *
- * The CSS implementation uses simplified math (Y = L³) that ignores chroma's
- * contribution to luminance. While Y = yc2·C·L² + L³ is 31% more accurate, it
- * causes exponential CSS expression growth. The simplified Y = L³ causes
- * under-delivery of contrast, especially for dark base colors, mid-lightness
- * colors, and high contrast targets.
+ * CSS uses Y = L³ instead of full Y = yc0·C³ + yc1·C²·L + yc2·C·L² + L³ to avoid
+ * exponential expression growth. This causes contrast under-delivery, especially
+ * for dark/mid-lightness bases and high contrast targets.
  *
- * The correction formula uses multiplicative boost for smooth interpolation:
+ * Correction formula:
  *   boostPct = (darkBoost * max(0, 0.3 - L) + midBoost * max(0, 1 - |L - 0.5| * 2.5)) / 100
  *   adjusted = target * (1 + boostPct) + contrastBoost * max(0, target - 30)
- *
- * Where:
- *   - darkBoost: percentage boost for dark bases (L < 0.3)
- *   - midBoost: percentage boost for mid-lightness (peaks at L = 0.5)
- *   - contrastBoost: additional Lc boost for high contrast targets (> 30 Lc)
- *
- * The multiplicative approach ensures smooth interpolation from 0 Lc.
  */
 
 import { gamutMap } from './color.ts'
 import { applyContrast } from './contrast.ts'
 import { measureContrast } from './measure.ts'
 
-/**
- * Heuristic correction coefficients.
- */
 export interface HeuristicCoefficients {
-	/** Percentage boost for dark bases (L < 0.3): contributes darkBoost * max(0, 0.3 - L) to boost percentage */
 	readonly darkBoost: number
-	/** Percentage boost for mid-lightness (peaks at L=0.5): contributes midBoost * max(0, 1 - |L - 0.5| * 2.5) to boost percentage */
 	readonly midBoost: number
-	/** Absolute Lc boost for high contrast (> 30 Lc): adds contrastBoost * max(0, target - 30) to final result */
 	readonly contrastBoost: number
 }
 
-/**
- * Result of fitting heuristic coefficients for a hue.
- */
 export interface HeuristicFitResult {
-	/** The fitted coefficients */
 	readonly coefficients: HeuristicCoefficients
-	/** Mean absolute error after correction */
 	readonly mae: number
-	/** Worst-case under-delivery (negative = under-delivered) */
 	readonly worstUnderDelivery: number
-	/** Percentage of samples that under-deliver after correction */
 	readonly underDeliveryRate: number
-	/** Number of valid (non-gamut-limited) samples */
 	readonly sampleCount: number
 }
 
-/**
- * A sample point with error data.
- */
 interface SamplePoint {
 	readonly baseL: number
 	readonly target: number
-	readonly error: number // actual - target (negative = under-delivered)
-	readonly maxPossible: number // maximum achievable contrast
+	readonly error: number
+	readonly maxPossible: number
 }
 
-/**
- * Cache for fitted heuristic coefficients by hue and allowPolarityInversion flag.
- */
 const fittedCoefficientsCache = new Map<string, HeuristicFitResult>()
 
-/**
- * Clear the heuristic coefficients cache.
- *
- * This should be called when switching gamuts (e.g., from sRGB to P3)
- * to ensure coefficients are re-fitted for the new gamut boundaries.
- */
 export function clearHeuristicCache(): void {
 	fittedCoefficientsCache.clear()
 }
 
-/**
- * Compute a single sample point for error analysis.
- */
 function computeSamplePoint(
 	hue: number,
 	chroma: number,
@@ -95,7 +57,6 @@ function computeSamplePoint(
 	const actual = Math.abs(measureContrast(baseColor, contrastColor))
 	const error = actual - targetContrast
 
-	// Compute maximum possible contrast (to black or white)
 	const black = gamutMap({ hue, chroma: 0, lightness: 0 })
 	const white = gamutMap({ hue, chroma: 0, lightness: 1 })
 	const toBlack = Math.abs(measureContrast(baseColor, black))
@@ -110,9 +71,6 @@ function computeSamplePoint(
 	}
 }
 
-/**
- * Sample error data for a given hue and allowPolarityInversion flag.
- */
 function sampleErrors(hue: number, allowPolarityInversion: boolean): SamplePoint[] {
 	const lightnessSteps = 21
 	const chromaSteps = 5
@@ -126,7 +84,6 @@ function sampleErrors(hue: number, allowPolarityInversion: boolean): SamplePoint
 		for (let cIdx = 0; cIdx < chromaSteps; cIdx++) {
 			const chroma = (cIdx / (chromaSteps - 1)) * 0.5
 
-			// Sample contrast from 30 to 105 (accessibility-relevant range)
 			for (let contIdx = 0; contIdx < contrastSteps; contIdx++) {
 				const targetContrast = 30 + (contIdx / (contrastSteps - 1)) * 75
 				samples.push(
@@ -139,28 +96,17 @@ function sampleErrors(hue: number, allowPolarityInversion: boolean): SamplePoint
 	return samples
 }
 
-/**
- * Compute the correction boost for given parameters.
- * Uses multiplicative correction to ensure smooth interpolation from 0.
- */
 function computeBoost(baseL: number, target: number, coeffs: HeuristicCoefficients): number {
-	// Compute percentage boost based on lightness
 	const darkTerm = coeffs.darkBoost * Math.max(0, 0.3 - baseL)
 	const midTerm = coeffs.midBoost * Math.max(0, 1 - Math.abs(baseL - 0.5) * 2.5)
 	const boostPercentage = (darkTerm + midTerm) / 100
 
-	// Apply multiplicative boost to target (naturally becomes 0 when target is 0)
 	const multiplicativeBoost = target * boostPercentage
-
-	// Add absolute boost for high contrast
 	const contrastTerm = coeffs.contrastBoost * Math.max(0, target - 30)
 
 	return multiplicativeBoost + contrastTerm
 }
 
-/**
- * Evaluate coefficients on sample data.
- */
 function evaluateCoefficients(
 	samples: SamplePoint[],
 	coeffs: HeuristicCoefficients,
@@ -171,7 +117,6 @@ function evaluateCoefficients(
 	let validCount = 0
 
 	for (const s of samples) {
-		// Skip gamut-limited cases (impossible to achieve target)
 		if (s.maxPossible < s.target - 0.5) {
 			continue
 		}
@@ -195,17 +140,10 @@ function evaluateCoefficients(
 	}
 }
 
-/**
- * Score function for coefficient optimization.
- * Prioritizes minimizing under-delivery rate, then MAE.
- */
 function scoreCoefficients(result: ReturnType<typeof evaluateCoefficients>): number {
 	return result.underDeliveryRate * 1000 + result.mae
 }
 
-/**
- * Coarse grid search for best coefficient starting point.
- */
 function coarseGridSearch(samples: SamplePoint[]): {
 	coeffs: HeuristicCoefficients
 	score: number
@@ -230,9 +168,6 @@ function coarseGridSearch(samples: SamplePoint[]): {
 	return { coeffs: bestCoeffs, score: bestScore }
 }
 
-/**
- * Fine-tune grid search around a coarse result.
- */
 function fineGridSearch(
 	samples: SamplePoint[],
 	coarseBest: HeuristicCoefficients,
@@ -270,15 +205,9 @@ function fineGridSearch(
 }
 
 /**
- * Fit heuristic coefficients for a specific hue and polarity inversion flag.
- *
- * Uses grid search to find coefficients that minimize under-delivery
- * while keeping average error reasonable. Results are cached internally
- * to avoid redundant computation.
- *
- * @param hue - The hue to fit (0-360)
- * @param allowPolarityInversion - Whether polarity inversion is allowed
- * @returns Fitted coefficients and validation metrics
+ * Fit heuristic coefficients via grid search.
+ * Minimizes under-delivery while keeping average error reasonable.
+ * Results are cached.
  */
 export function fitHeuristicCoefficients(
 	hue: number,
@@ -292,7 +221,6 @@ export function fitHeuristicCoefficients(
 
 	const samples = sampleErrors(hue, allowPolarityInversion)
 
-	// Two-stage grid search: coarse then fine
 	const coarseResult = coarseGridSearch(samples)
 	const bestCoeffs = fineGridSearch(samples, coarseResult.coeffs)
 
@@ -310,15 +238,7 @@ export function fitHeuristicCoefficients(
 	return result
 }
 
-/**
- * Apply heuristic correction to target contrast value.
- *
- * @param targetContrast - Requested contrast value (0-108)
- * @param baseL - Base color lightness (0-1)
- * @param coeffs - Heuristic coefficients
- * @returns Adjusted contrast value
- */
-export function applyHeuristicCorrection(
+function _applyHeuristicCorrection(
 	targetContrast: number,
 	baseL: number,
 	coeffs: HeuristicCoefficients,

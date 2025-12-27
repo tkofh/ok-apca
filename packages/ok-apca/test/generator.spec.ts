@@ -15,83 +15,62 @@ describe('generateColorCss', () => {
 		expect(css).toContain('var(--lightness)')
 		expect(css).toContain('var(--chroma)')
 
-		// Should contain build-time constants (new names)
+		// Should contain build-time constants
 		expect(css).toContain('--_lum-max:')
 		expect(css).toContain('--_chr-peak:')
 
-		// Should output the color
+		// Should output the color with default prefix
 		expect(css).toContain('--o-color: oklch(')
 		expect(css).toContain('30')
 	})
 
-	it('generates contrast CSS when contrast options provided', () => {
+	it('generates contrast CSS when contrastColors provided', () => {
 		const css = generateColorCss({
 			hue: 30,
 			selector: '.color',
-			contrast: {
-				allowPolarityInversion: false,
-			},
+			contrastColors: [{ label: 'text' }],
 		})
 
-		// Should contain contrast selector
-		expect(css).toContain('.color.contrast {')
-
-		// Should contain simplified Y calculation (new name)
+		// Should contain shared Y-bg
 		expect(css).toContain('--_Y-bg:')
 
 		// Should output contrast color
-		expect(css).toContain('--o-color-contrast: oklch(')
+		expect(css).toContain('--o-color-text: oklch(')
+
+		// Should contain labeled variables
+		expect(css).toContain('--contrast-text')
+		expect(css).toContain('--allow-polarity-inversion-text')
 	})
 
-	it('uses default contrast selector (&.contrast) when not provided', () => {
+	it('generates multiple contrast colors', () => {
 		const css = generateColorCss({
 			hue: 30,
 			selector: '.color',
-			contrast: {
-				allowPolarityInversion: false,
-			},
+			contrastColors: [{ label: 'text' }, { label: 'fill' }, { label: 'stroke' }],
 		})
 
-		expect(css).toContain('.color.contrast {')
+		// Should output all contrast colors
+		expect(css).toContain('--o-color-text: oklch(')
+		expect(css).toContain('--o-color-fill: oklch(')
+		expect(css).toContain('--o-color-stroke: oklch(')
+
+		// Should contain labeled variables for each
+		expect(css).toContain('--contrast-text')
+		expect(css).toContain('--contrast-fill')
+		expect(css).toContain('--contrast-stroke')
 	})
 
-	it('uses custom contrast selector when provided', () => {
+	it('uses custom prefix when provided', () => {
 		const css = generateColorCss({
 			hue: 30,
 			selector: '.color',
-			contrast: {
-				allowPolarityInversion: false,
-				selector: '&[data-contrast]',
-			},
+			prefix: 'theme',
+			contrastColors: [{ label: 'text' }],
 		})
 
-		expect(css).toContain('.color[data-contrast] {')
-	})
-
-	it('handles non-nesting contrast selector', () => {
-		const css = generateColorCss({
-			hue: 30,
-			selector: '.color',
-			contrast: {
-				allowPolarityInversion: false,
-				selector: '.has-contrast',
-			},
-		})
-
-		expect(css).toContain('.color .has-contrast {')
-	})
-
-	it('handles complex selectors with combinators', () => {
-		const css = generateColorCss({
-			hue: 30,
-			selector: 'div.color[data-theme="dark"]',
-			contrast: {
-				allowPolarityInversion: false,
-				selector: '&:hover',
-			},
-		})
-
-		expect(css).toContain('div.color[data-theme="dark"]:hover {')
+		expect(css).toContain('--theme-color: oklch(')
+		expect(css).toContain('--theme-color-text: oklch(')
+		expect(css).not.toContain('--o-color')
 	})
 
 	it('normalizes hue values outside 0-360 range', () => {
@@ -123,7 +102,6 @@ describe('generateColorCss', () => {
 		expect(css).toContain('/* Runtime inputs')
 		expect(css).toContain('/* Build-time constants')
 		expect(css).toContain('/* Tent function')
-		expect(css).toContain('/* Chroma as percentage')
 		expect(css).toContain('/* Output color')
 	})
 
@@ -131,9 +109,7 @@ describe('generateColorCss', () => {
 		const css = generateColorCss({
 			hue: 200,
 			selector: '[data-color]',
-			contrast: {
-				allowPolarityInversion: true,
-			},
+			contrastColors: [{ label: 'text' }],
 		})
 
 		// Check that numbers are properly formatted (no trailing zeros like "0.5000000000")
@@ -164,17 +140,66 @@ describe('generateColorCss', () => {
 		expect(css180).toContain('180')
 	})
 
-	it('generates CSS without contrast when contrast option omitted', () => {
+	it('generates CSS without contrast when contrastColors omitted', () => {
 		const css = generateColorCss({
 			hue: 30,
 			selector: '.color',
 		})
 
-		// Should not contain contrast-specific variables (new names)
-		expect(css).not.toContain('--o-color-contrast')
+		// Should not contain contrast-specific variables
+		expect(css).not.toContain('--o-color-')
 		expect(css).not.toContain('--_Y-bg:')
 		expect(css).not.toContain('--_Y-dark')
 		expect(css).not.toContain('--_Y-light')
+		expect(css).not.toContain('--contrast-')
+	})
+
+	it('validates contrast color labels', () => {
+		// Invalid: starts with number
+		expect(() =>
+			generateColorCss({
+				hue: 30,
+				selector: '.color',
+				contrastColors: [{ label: '1text' }],
+			}),
+		).toThrow(/Invalid contrast color label/)
+
+		// Invalid: contains space
+		expect(() =>
+			generateColorCss({
+				hue: 30,
+				selector: '.color',
+				contrastColors: [{ label: 'text color' }],
+			}),
+		).toThrow(/Invalid contrast color label/)
+
+		// Invalid: contains special character
+		expect(() =>
+			generateColorCss({
+				hue: 30,
+				selector: '.color',
+				contrastColors: [{ label: 'text!' }],
+			}),
+		).toThrow(/Invalid contrast color label/)
+
+		// Valid labels should not throw
+		expect(() =>
+			generateColorCss({
+				hue: 30,
+				selector: '.color',
+				contrastColors: [{ label: 'text' }, { label: 'fill-color' }, { label: 'stroke_2' }],
+			}),
+		).not.toThrow()
+	})
+
+	it('validates unique labels', () => {
+		expect(() =>
+			generateColorCss({
+				hue: 30,
+				selector: '.color',
+				contrastColors: [{ label: 'text' }, { label: 'text' }],
+			}),
+		).toThrow(/Duplicate contrast color label/)
 	})
 })
 
@@ -185,14 +210,14 @@ describe('generateColorCss output structure', () => {
 			selector: '.test',
 		})
 
-		// The tent function should reference lum-max (new name)
+		// The tent function should reference lum-max
 		expect(css).toContain('var(--_lum-max)')
 
-		// The chroma calculation should reference chr-peak and tent (new names)
+		// The chroma calculation should reference chr-peak and tent
 		expect(css).toContain('var(--_chr-peak)')
 		expect(css).toContain('var(--_tent)')
 
-		// The output should reference the computed values (new names)
+		// The output should reference the computed values
 		expect(css).toContain('var(--_lum-norm)')
 		expect(css).toContain('var(--_chr)')
 	})
@@ -201,87 +226,96 @@ describe('generateColorCss output structure', () => {
 		const css = generateColorCss({
 			hue: 60,
 			selector: '.test',
-			contrast: {
-				allowPolarityInversion: false,
-			},
+			contrastColors: [{ label: 'text' }],
 		})
 
-		// Should have Y conversion (new name)
+		// Should have shared Y-bg
 		expect(css).toContain('--_Y-bg:')
 
-		// Should always have both polarities (unified approach)
-		expect(css).toContain('--_Y-dark:')
-		expect(css).toContain('--_Y-light:')
+		// Should have per-label Y-bg
+		expect(css).toContain('--_Y-bg-text:')
 
-		// Should have contrast lightness (simplified cube root, new name)
-		expect(css).toContain('--_con-lum:')
+		// Should always have both polarities
+		expect(css).toContain('--_Y-dark-text:')
+		expect(css).toContain('--_Y-light-text:')
+
+		// Should have contrast lightness
+		expect(css).toContain('--_con-lum-text:')
 	})
 
-	it('produces contrast CSS with both polarities', () => {
+	it('produces contrast CSS with both polarities always', () => {
 		const css = generateColorCss({
 			hue: 60,
 			selector: '.test',
-			contrast: {
-				allowPolarityInversion: true,
-			},
+			contrastColors: [{ label: 'text' }],
 		})
 
 		// Should always have both polarities for runtime selection
-		expect(css).toContain('--_Y-dark:')
-		expect(css).toContain('--_Y-light:')
+		expect(css).toContain('--_Y-dark-text:')
+		expect(css).toContain('--_Y-light-text:')
 
 		// Should have polarity selection logic
-		expect(css).toContain('--_use-light:')
-		expect(css).toContain('--_prefer-light:')
-		expect(css).toContain('--_prefer-dark:')
+		expect(css).toContain('--_use-light-text:')
+		expect(css).toContain('--_prefer-light-text:')
+		expect(css).toContain('--_prefer-dark-text:')
 	})
 
 	it('includes heuristic correction boost in contrast CSS', () => {
 		const css = generateColorCss({
 			hue: 60,
 			selector: '.test',
-			contrast: {
-				allowPolarityInversion: true,
-			},
+			contrastColors: [{ label: 'text' }],
 		})
 
-		// Should have heuristic boost calculations (new multiplicative approach)
-		expect(css).toContain('--_boost-pct:')
-		expect(css).toContain('--_boost-multiplicative:')
-		expect(css).toContain('--_boost-absolute:')
-		expect(css).toContain('--_contrast-adjusted:')
+		// Should have heuristic boost calculations
+		expect(css).toContain('--_boost-pct-text:')
+		expect(css).toContain('--_boost-multiplicative-text:')
+		expect(css).toContain('--_boost-absolute-text:')
+		expect(css).toContain('--_contrast-adjusted-text:')
 	})
 
-	it('produces output with or without inversion settings', () => {
-		const withInversion = generateColorCss({
+	it('uses fallback value of 0 for --contrast-{label}', () => {
+		const css = generateColorCss({
 			hue: 60,
 			selector: '.test',
-			contrast: { allowPolarityInversion: true },
+			contrastColors: [{ label: 'text' }],
 		})
 
-		const withoutInversion = generateColorCss({
+		// Should use default value of 0 for contrast inputs
+		expect(css).toContain('var(--contrast-text, 0)')
+	})
+
+	it('uses fallback value of 0 for --allow-polarity-inversion-{label}', () => {
+		const css = generateColorCss({
 			hue: 60,
 			selector: '.test',
-			contrast: { allowPolarityInversion: false },
+			contrastColors: [{ label: 'text' }],
 		})
 
-		// Both should generate valid CSS with contrast
-		expect(withInversion).toContain('--o-color-contrast:')
-		expect(withoutInversion).toContain('--o-color-contrast:')
+		// Should use default value of 0 for allow-polarity-inversion
+		expect(css).toContain('var(--allow-polarity-inversion-text, 0)')
+	})
 
-		// Different inversion settings may produce identical or different heuristic coefficients
-		// depending on the hue, so we just verify both work
-		expect(withInversion.length).toBeGreaterThan(0)
-		expect(withoutInversion.length).toBeGreaterThan(0)
+	it('shares chroma percentage across all contrast colors', () => {
+		const css = generateColorCss({
+			hue: 60,
+			selector: '.test',
+			contrastColors: [{ label: 'text' }, { label: 'fill' }],
+		})
+
+		// Each contrast color should reference var(--_chr-pct)
+		expect(css).toContain('--_con-chr-text: calc(')
+		expect(css).toContain('var(--_chr-pct)')
+		expect(css).toContain('--_con-chr-fill: calc(')
 	})
 })
 
 describe('polarity-fixed feature', () => {
-	it('should generate .polarity-fixed nested selector', () => {
+	it('should generate .polarity-fixed nested selector (global)', () => {
 		const css = generateColorCss({
 			hue: 30,
 			selector: '.orange',
-			contrast: { allowPolarityInversion: true },
+			contrastColors: [{ label: 'text' }],
 		})
 		expect(css).toContain('&.polarity-fixed')
 		expect(css).toContain('--_polarity-lum-norm')
@@ -291,16 +325,16 @@ describe('polarity-fixed feature', () => {
 		const css = generateColorCss({
 			hue: 30,
 			selector: '.orange',
-			contrast: { allowPolarityInversion: true },
+			contrastColors: [{ label: 'text' }],
 		})
 		expect(css).toContain('var(--polarity-from, var(--lightness))')
 	})
 
-	it('should override --_Y-bg inside .polarity-fixed', () => {
+	it('should override shared --_Y-bg inside .polarity-fixed', () => {
 		const css = generateColorCss({
 			hue: 30,
 			selector: '.orange',
-			contrast: { allowPolarityInversion: true },
+			contrastColors: [{ label: 'text' }],
 		})
 		const lines = css.split('\n')
 		const fixedBlockStart = lines.findIndex((l) => l.includes('&.polarity-fixed'))
@@ -315,7 +349,7 @@ describe('polarity-fixed feature', () => {
 		const css = generateColorCss({
 			hue: 30,
 			selector: '.orange',
-			contrast: { allowPolarityInversion: true },
+			contrastColors: [{ label: 'text' }],
 		})
 		const lines = css.split('\n')
 		const fixedBlockStart = lines.findIndex((l) => l.includes('&.polarity-fixed'))
@@ -325,23 +359,17 @@ describe('polarity-fixed feature', () => {
 		expect(fixedBlock).toContain('clamp(0, var(--polarity-from, var(--lightness)) / 100, 1)')
 	})
 
-	it('should include polarity-fixed in contrast CSS regardless of allowPolarityInversion setting', () => {
-		const cssWithInversion = generateColorCss({
+	it('should include polarity-fixed when contrast colors are present', () => {
+		const css = generateColorCss({
 			hue: 30,
 			selector: '.orange',
-			contrast: { allowPolarityInversion: true },
-		})
-		const cssWithoutInversion = generateColorCss({
-			hue: 30,
-			selector: '.orange',
-			contrast: { allowPolarityInversion: false },
+			contrastColors: [{ label: 'text' }],
 		})
 
-		expect(cssWithInversion).toContain('&.polarity-fixed')
-		expect(cssWithoutInversion).toContain('&.polarity-fixed')
+		expect(css).toContain('&.polarity-fixed')
 	})
 
-	it('should not include polarity-fixed when contrast is not enabled', () => {
+	it('should not include polarity-fixed when no contrast colors', () => {
 		const css = generateColorCss({
 			hue: 30,
 			selector: '.orange',
@@ -349,6 +377,34 @@ describe('polarity-fixed feature', () => {
 
 		expect(css).not.toContain('&.polarity-fixed')
 		expect(css).not.toContain('--_polarity-lum-norm')
+	})
+
+	it('should be global (not per-label)', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrastColors: [{ label: 'text' }, { label: 'fill' }],
+		})
+
+		// Should have only one .polarity-fixed block (global)
+		const matches = css.match(/&\.polarity-fixed/g)
+		expect(matches).toHaveLength(1)
+
+		// Should not have label-specific polarity-fixed
+		expect(css).not.toContain('.polarity-fixed-text')
+		expect(css).not.toContain('.polarity-fixed-fill')
+	})
+
+	it('should affect all contrast colors when applied', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrastColors: [{ label: 'text' }, { label: 'fill' }],
+		})
+
+		// Per-label Y-bg should reference shared Y-bg
+		expect(css).toContain('--_Y-bg-text: var(--_Y-bg)')
+		expect(css).toContain('--_Y-bg-fill: var(--_Y-bg)')
 	})
 })
 
@@ -392,26 +448,12 @@ describe('pulse feature', () => {
 		})
 		const lines = css.split('\n')
 		const pulseBlockStart = lines.findIndex((l) => l.includes('&.pulse'))
-		const pulseBlockEnd = lines.findIndex((l, i) => i > pulseBlockStart && l.trim() === '}')
-		const pulseBlock = lines.slice(pulseBlockStart, pulseBlockEnd + 1).join('\n')
+		const keyframesStart = lines.findIndex((l) => l.includes('@keyframes'))
+		const pulseBlock = lines.slice(pulseBlockStart, keyframesStart).join('\n')
 
 		expect(pulseBlock).toContain('--_lum-norm:')
 		expect(pulseBlock).toContain('--_chr-pct:')
 		expect(pulseBlock).toContain('var(--_pulse-time)')
-	})
-
-	it('should not include .pulse in contrast selector', () => {
-		const css = generateColorCss({
-			hue: 30,
-			selector: '.orange',
-			contrast: { allowPolarityInversion: true },
-		})
-		const lines = css.split('\n')
-		const contrastBlockStart = lines.findIndex((l) => l.includes('.orange.contrast {'))
-		const contrastBlockEnd = lines.findIndex((l, i) => i > contrastBlockStart && l === '}')
-		const contrastBlock = lines.slice(contrastBlockStart, contrastBlockEnd + 1).join('\n')
-
-		expect(contrastBlock).not.toContain('&.pulse')
 	})
 
 	it('should use default pulse values', () => {
@@ -428,7 +470,7 @@ describe('pulse feature', () => {
 		const cssWithContrast = generateColorCss({
 			hue: 30,
 			selector: '.orange',
-			contrast: { allowPolarityInversion: true },
+			contrastColors: [{ label: 'text' }],
 		})
 		const cssWithoutContrast = generateColorCss({
 			hue: 30,
@@ -437,5 +479,33 @@ describe('pulse feature', () => {
 
 		expect(cssWithContrast).toContain('&.pulse')
 		expect(cssWithoutContrast).toContain('&.pulse')
+	})
+
+	it('should be global (not per-label)', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrastColors: [{ label: 'text' }, { label: 'fill' }],
+		})
+
+		// Should have only one .pulse block (global)
+		const matches = css.match(/&\.pulse/g)
+		expect(matches).toHaveLength(1)
+
+		// Should not have label-specific pulse
+		expect(css).not.toContain('.pulse-text')
+		expect(css).not.toContain('.pulse-fill')
+	})
+
+	it('should cause contrast colors to recalculate (via shared Y-bg)', () => {
+		const css = generateColorCss({
+			hue: 30,
+			selector: '.orange',
+			contrastColors: [{ label: 'text' }],
+		})
+
+		// Pulse modifies --_lum-norm, which affects --_Y-bg, which affects contrast colors
+		expect(css).toContain('--_Y-bg: pow(var(--_lum-norm), 3)')
+		expect(css).toContain('--_Y-bg-text: var(--_Y-bg)')
 	})
 })
