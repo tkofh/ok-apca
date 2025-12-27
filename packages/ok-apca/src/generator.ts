@@ -81,47 +81,6 @@ function cssBestContrastFallback(
 	`
 }
 
-const PULSE_PROPERTY_DECLARATIONS = outdent`
-	@property --_pulse-time {
-		syntax: "<number>";
-		inherits: true;
-		initial-value: 0;
-	}
-`
-
-const PULSE_CSS = outdent`
-	&.pulse {
-		/* Pulse animation variables */
-		--pulse-frequency: 1; /* Default: 1 second */
-		--pulse-lightness-offset: 0; /* Additive offset in lightness space (0-100) */
-		--pulse-chroma-offset: 0; /* Additive offset in chroma percent space (0-100) */
-
-		/* Animate pulse-time from 0 to 1 */
-		animation: pulse-animation calc(var(--pulse-frequency) * 1s) ease-in-out infinite;
-
-		/* Replace normalized inputs with pulsing versions */
-		--_lum-norm: clamp(
-			0,
-			(var(--lightness) + var(--_pulse-time) * var(--pulse-lightness-offset)) / 100,
-			1
-		);
-		--_chr-pct: clamp(
-			0,
-			(var(--chroma) + var(--_pulse-time) * var(--pulse-chroma-offset)) / 100,
-			1
-		);
-	}
-
-	@keyframes pulse-animation {
-		0%, 100% {
-			--_pulse-time: 0;
-		}
-		50% {
-			--_pulse-time: 1;
-		}
-	}
-`
-
 function generateBaseColorCss(hue: number, boundary: GamutBoundary, prefix: string) {
 	const lMax = formatNumber(boundary.lMax)
 	const cPeak = formatNumber(boundary.cPeak)
@@ -381,9 +340,7 @@ export function generateColorCss(options: ColorGeneratorOptions) {
 	}
 	validateUniqueLabels(labels)
 
-	let css = PULSE_PROPERTY_DECLARATIONS
-
-	css += `\n\n${options.selector} {`
+	let css = `${options.selector} {`
 
 	css += `\n${generateBaseColorCss(hue, boundary, prefix)}`
 
@@ -395,8 +352,6 @@ export function generateColorCss(options: ColorGeneratorOptions) {
 	for (const { label } of contrastColors) {
 		css += `\n\n${generateContrastColorCss(label, hue, boundary, prefix)}`
 	}
-
-	css += `\n\n${PULSE_CSS}`
 
 	if (contrastColors.length > 0) {
 		css += `\n\n${POLARITY_FIXED_CSS}`

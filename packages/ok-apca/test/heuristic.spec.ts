@@ -37,14 +37,14 @@ describe('fitHeuristicCoefficients', () => {
 				}
 			}
 
-			// Report summary statistics
+			// Summary statistics are computed but not logged during tests
 			const maes = results.map((r) => r.result.mae)
 			const avgMAE = maes.reduce((a, b) => a + b, 0) / maes.length
 			const maxMAE = Math.max(...maes)
 
-			console.log('\n📊 P3 Heuristic Fitting Results:')
-			console.log(`   Average MAE: ${avgMAE.toFixed(3)} Lc`)
-			console.log(`   Max MAE: ${maxMAE.toFixed(3)} Lc`)
+			// Verify summary statistics are reasonable
+			expect(avgMAE).toBeLessThan(30)
+			expect(maxMAE).toBeLessThan(37)
 		})
 
 		it('should minimize under-delivery rates', () => {
@@ -69,8 +69,9 @@ describe('fitHeuristicCoefficients', () => {
 			const avgRate = rates.reduce((a, b) => a + b, 0) / rates.length
 			const maxRate = Math.max(...rates)
 
-			console.log(`   Average under-delivery rate: ${(avgRate * 100).toFixed(1)}%`)
-			console.log(`   Max under-delivery rate: ${(maxRate * 100).toFixed(1)}%`)
+			// Verify summary statistics are reasonable
+			expect(avgRate).toBeLessThan(0.5)
+			expect(maxRate).toBeLessThan(0.8)
 		})
 
 		it('should avoid severe under-delivery', () => {
@@ -94,8 +95,9 @@ describe('fitHeuristicCoefficients', () => {
 			const avgWorst = worstValues.reduce((a, b) => a + b, 0) / worstValues.length
 			const absoluteWorst = Math.min(...worstValues)
 
-			console.log(`   Average worst under-delivery: ${avgWorst.toFixed(3)} Lc`)
-			console.log(`   Absolute worst under-delivery: ${absoluteWorst.toFixed(3)} Lc`)
+			// Verify summary statistics are reasonable
+			expect(avgWorst).toBeGreaterThan(-60)
+			expect(absoluteWorst).toBeGreaterThan(-80)
 		})
 
 		it('should have sufficient valid samples', () => {
@@ -140,21 +142,19 @@ describe('fitHeuristicCoefficients', () => {
 	})
 
 	describe('P3 vs sRGB comparison', () => {
-		it('should report P3 gamut advantages and tradeoffs', () => {
-			console.log('\n🎨 Display P3 Gamut Benefits:')
-			console.log('   • ~25% more colors than sRGB')
-			console.log('   • Higher maximum chroma values (up to ~0.5 vs ~0.4)')
-			console.log('   • Richer, more saturated colors on P3 displays')
-			console.log('   • Automatic gamut mapping on sRGB displays')
-			console.log('\n⚠️  P3 Tradeoffs:')
-			console.log('   • Simplified Y=L³ approximation less accurate with higher chroma')
-			console.log('   • (Improved Y=yc2·C·L²+L³ causes exponential CSS expression growth)')
-			console.log('   • Heuristic corrections compensate but with higher average error')
-			console.log('   • MAE typically 15-20 Lc (vs 3-5 Lc for sRGB)')
-			console.log('   • Still produces accessible contrasts, just less precise')
+		it('should handle P3 gamut differences', () => {
+			// P3 has ~25% more colors than sRGB and higher maximum chroma values
+			// The simplified Y=L³ approximation has larger errors with P3's higher chroma
+			// Heuristic corrections compensate but with higher average error (15-20 Lc vs 3-5 Lc for sRGB)
+			// This is acceptable as contrasts remain accessible, just less precise
 
-			// This is informational, not an assertion
-			expect(true).toBe(true)
+			const hue = 264
+			const result = fitHeuristicCoefficients(hue, true)
+
+			// Verify P3 fitting produces acceptable results
+			expect(result.mae).toBeLessThan(37)
+			expect(result.coefficients.darkBoost).toBeGreaterThan(0)
+			expect(result.coefficients.midBoost).toBeGreaterThan(0)
 		})
 	})
 
@@ -196,33 +196,26 @@ describe('fitHeuristicCoefficients', () => {
 		})
 	})
 
-	describe('detailed reporting for key hues', () => {
-		it('should report detailed metrics for important hues', () => {
-			const keyHues = [
-				{ hue: 0, name: 'Red' },
-				{ hue: 120, name: 'Green' },
-				{ hue: 240, name: 'Blue' },
-				{ hue: 264, name: 'Purple' },
-			]
+	describe('key hue validation', () => {
+		it('should produce acceptable metrics for key hues', () => {
+			const keyHues = [0, 120, 240, 264]
 
-			console.log('\n📈 Detailed P3 Fitting Metrics by Hue:')
-
-			for (const { hue, name } of keyHues) {
+			for (const hue of keyHues) {
 				const result = fitHeuristicCoefficients(hue, true)
-
-				console.log(`\n   ${name} (${hue}°) with inversion:`)
-				console.log(`     MAE: ${result.mae.toFixed(3)} Lc`)
-				console.log(`     Under-delivery rate: ${(result.underDeliveryRate * 100).toFixed(1)}%`)
-				console.log(`     Worst under-delivery: ${result.worstUnderDelivery.toFixed(3)} Lc`)
-				console.log(`     Valid samples: ${result.sampleCount}`)
-				console.log(
-					`     Coefficients: dark=${result.coefficients.darkBoost}, mid=${result.coefficients.midBoost}, contrast=${result.coefficients.contrastBoost}`,
-				)
 
 				// All metrics should be acceptable for P3
 				expect(result.mae).toBeLessThan(31)
 				expect(result.underDeliveryRate).toBeLessThan(0.8)
 				expect(result.worstUnderDelivery).toBeGreaterThan(-80)
+				expect(result.sampleCount).toBeGreaterThan(1000)
+
+				// Coefficients should be reasonable
+				expect(result.coefficients.darkBoost).toBeGreaterThan(0)
+				expect(result.coefficients.darkBoost).toBeLessThan(100)
+				expect(result.coefficients.midBoost).toBeGreaterThan(0)
+				expect(result.coefficients.midBoost).toBeLessThan(100)
+				expect(result.coefficients.contrastBoost).toBeGreaterThan(0)
+				expect(result.coefficients.contrastBoost).toBeLessThan(0.5)
 			}
 		})
 	})
