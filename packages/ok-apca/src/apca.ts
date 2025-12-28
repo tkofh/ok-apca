@@ -6,10 +6,6 @@ function signedPow(x: number, exp: number) {
 	return Math.sign(x) * Math.abs(x) ** exp
 }
 
-function _signedCbrt(x: number) {
-	return Math.sign(x) * Math.cbrt(Math.abs(x))
-}
-
 interface ApcaSolution {
 	readonly targetY: number
 	readonly inGamut: boolean

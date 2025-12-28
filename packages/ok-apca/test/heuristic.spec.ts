@@ -29,10 +29,10 @@ describe('fitHeuristicCoefficients', () => {
 					const result = fitHeuristicCoefficients(hue, allowInversion)
 					results.push({ hue, allowInversion, result })
 
-					// MAE should be reasonably low (< 37 Lc for P3's wider gamut)
+					// MAE is higher because we prioritize avoiding under-delivery over minimizing MAE
 					// The simplified Y=L³ approximation has larger errors with P3's higher chroma
-					// With chroma as % of max, colors use more saturation, increasing approximation error
-					expect(result.mae).toBeLessThan(37)
+					// Over-delivery is safer for accessibility than under-delivery
+					expect(result.mae).toBeLessThan(45)
 					expect(result.mae).toBeGreaterThan(0)
 				}
 			}
@@ -43,8 +43,8 @@ describe('fitHeuristicCoefficients', () => {
 			const maxMAE = Math.max(...maes)
 
 			// Verify summary statistics are reasonable
-			expect(avgMAE).toBeLessThan(30)
-			expect(maxMAE).toBeLessThan(37)
+			expect(avgMAE).toBeLessThan(40)
+			expect(maxMAE).toBeLessThan(45)
 		})
 
 		it('should minimize under-delivery rates', () => {
@@ -86,8 +86,8 @@ describe('fitHeuristicCoefficients', () => {
 					const result = fitHeuristicCoefficients(hue, allowInversion)
 					results.push({ hue, allowInversion, result })
 
-					// Worst under-delivery should not be too severe (> -80 Lc for P3)
-					expect(result.worstUnderDelivery).toBeGreaterThan(-80)
+					// Worst under-delivery should not be too severe (> -50 Lc with improved scoring)
+					expect(result.worstUnderDelivery).toBeGreaterThan(-50)
 				}
 			}
 
@@ -96,8 +96,8 @@ describe('fitHeuristicCoefficients', () => {
 			const absoluteWorst = Math.min(...worstValues)
 
 			// Verify summary statistics are reasonable
-			expect(avgWorst).toBeGreaterThan(-60)
-			expect(absoluteWorst).toBeGreaterThan(-80)
+			expect(avgWorst).toBeGreaterThan(-50)
+			expect(absoluteWorst).toBeGreaterThan(-50)
 		})
 
 		it('should have sufficient valid samples', () => {
@@ -120,13 +120,13 @@ describe('fitHeuristicCoefficients', () => {
 
 			// Coefficients should be in reasonable ranges (P3 requires more aggressive corrections)
 			expect(result.coefficients.darkBoost).toBeGreaterThan(0)
-			expect(result.coefficients.darkBoost).toBeLessThan(100)
+			expect(result.coefficients.darkBoost).toBeLessThan(160)
 
 			expect(result.coefficients.midBoost).toBeGreaterThan(0)
 			expect(result.coefficients.midBoost).toBeLessThan(100)
 
 			expect(result.coefficients.contrastBoost).toBeGreaterThan(0)
-			expect(result.coefficients.contrastBoost).toBeLessThan(0.5)
+			expect(result.coefficients.contrastBoost).toBeLessThan(1.0)
 		})
 
 		it('should cache results', () => {
@@ -145,16 +145,16 @@ describe('fitHeuristicCoefficients', () => {
 		it('should handle P3 gamut differences', () => {
 			// P3 has ~25% more colors than sRGB and higher maximum chroma values
 			// The simplified Y=L³ approximation has larger errors with P3's higher chroma
-			// Heuristic corrections compensate but with higher average error (15-20 Lc vs 3-5 Lc for sRGB)
-			// This is acceptable as contrasts remain accessible, just less precise
+			// Heuristic corrections compensate but with higher average error
+			// Over-delivery is preferred over under-delivery for accessibility
 
 			const hue = 264
 			const result = fitHeuristicCoefficients(hue, true)
 
 			// Verify P3 fitting produces acceptable results
-			expect(result.mae).toBeLessThan(37)
+			expect(result.mae).toBeLessThan(45)
 			expect(result.coefficients.darkBoost).toBeGreaterThan(0)
-			expect(result.coefficients.midBoost).toBeGreaterThan(0)
+			expect(result.coefficients.midBoost).toBeGreaterThanOrEqual(0)
 		})
 	})
 
@@ -204,18 +204,18 @@ describe('fitHeuristicCoefficients', () => {
 				const result = fitHeuristicCoefficients(hue, true)
 
 				// All metrics should be acceptable for P3
-				expect(result.mae).toBeLessThan(31)
+				expect(result.mae).toBeLessThan(45)
 				expect(result.underDeliveryRate).toBeLessThan(0.8)
-				expect(result.worstUnderDelivery).toBeGreaterThan(-80)
+				expect(result.worstUnderDelivery).toBeGreaterThan(-50)
 				expect(result.sampleCount).toBeGreaterThan(1000)
 
 				// Coefficients should be reasonable
 				expect(result.coefficients.darkBoost).toBeGreaterThan(0)
-				expect(result.coefficients.darkBoost).toBeLessThan(100)
+				expect(result.coefficients.darkBoost).toBeLessThan(160)
 				expect(result.coefficients.midBoost).toBeGreaterThan(0)
 				expect(result.coefficients.midBoost).toBeLessThan(100)
 				expect(result.coefficients.contrastBoost).toBeGreaterThan(0)
-				expect(result.coefficients.contrastBoost).toBeLessThan(0.5)
+				expect(result.coefficients.contrastBoost).toBeLessThan(1.0)
 			}
 		})
 	})

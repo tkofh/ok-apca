@@ -11,7 +11,7 @@ export interface Color {
 	readonly lightness: number
 }
 
-export class ColorImpl implements Color {
+class ColorImpl implements Color {
 	readonly hue: number
 	readonly chroma: number
 	readonly lightness: number
@@ -21,6 +21,13 @@ export class ColorImpl implements Color {
 		this.chroma = chroma
 		this.lightness = lightness
 	}
+}
+
+/**
+ * Create a new Color instance.
+ */
+export function createColor(hue: number, chroma: number, lightness: number): Color {
+	return new ColorImpl(hue, chroma, lightness)
 }
 
 const gamutBoundaryCache = new Map<number, GamutBoundary>()
@@ -105,25 +112,9 @@ export function gamutMap(color: Color): Color {
 }
 
 /**
- * Compute Y-conversion coefficients for CSS generation.
- * Returns coefficients for: Y = yc0Coef·C³ + yc1Coef·C²·L + yc2Coef·C·L² + L³
+ * Get the relative luminance (Y in XYZ-D65) of an OKLCH color.
  */
-function _computeYConversionCoefficients(hue: number) {
-	const hRad = (hue * Math.PI) / 180
-	const cosH = Math.cos(hRad)
-	const sinH = Math.sin(hRad)
-
-	const aCoef = 0.3963377773761749 * cosH + 0.2158037573099136 * sinH
-	const bCoef = -0.1055613458156586 * cosH + -0.0638541728258133 * sinH
-	const cCoef = -0.0894841775298119 * cosH + -1.2914855480194092 * sinH
-
-	const yFromL = -0.04077452336091804
-	const yFromM = 1.1124921587493157
-	const yFromS = -0.07171763538839791
-
-	const yc0Coef = yFromL * aCoef ** 3 + yFromM * bCoef ** 3 + yFromS * cCoef ** 3
-	const yc1Coef = yFromL * aCoef ** 2 + yFromM * bCoef ** 2 + yFromS * cCoef ** 2
-	const yc2Coef = yFromL * aCoef + yFromM * bCoef + yFromS * cCoef
-
-	return { yc0Coef, yc1Coef, yc2Coef }
+export function getLuminance(color: Color): number {
+	const c = new _Color('oklch', [color.lightness, color.chroma, color.hue])
+	return c.luminance
 }

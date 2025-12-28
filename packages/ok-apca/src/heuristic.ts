@@ -141,7 +141,10 @@ function evaluateCoefficients(
 }
 
 function scoreCoefficients(result: ReturnType<typeof evaluateCoefficients>): number {
-	return result.underDeliveryRate * 1000 + result.mae
+	// Balance under-delivery rate, worst under-delivery severity, and MAE
+	// Penalize severe under-delivery more heavily
+	const worstPenalty = Math.max(0, -result.worstUnderDelivery - 30) * 2
+	return result.underDeliveryRate * 500 + worstPenalty + result.mae
 }
 
 function coarseGridSearch(samples: SamplePoint[]): {
@@ -151,9 +154,9 @@ function coarseGridSearch(samples: SamplePoint[]): {
 	let bestCoeffs: HeuristicCoefficients = { darkBoost: 40, midBoost: 25, contrastBoost: 0.2 }
 	let bestScore = Number.POSITIVE_INFINITY
 
-	for (let darkBoost = 20; darkBoost <= 80; darkBoost += 10) {
-		for (let midBoost = 10; midBoost <= 50; midBoost += 10) {
-			for (let contrastBoost = 0.1; contrastBoost <= 0.4; contrastBoost += 0.05) {
+	for (let darkBoost = 20; darkBoost <= 150; darkBoost += 10) {
+		for (let midBoost = 10; midBoost <= 80; midBoost += 10) {
+			for (let contrastBoost = 0.1; contrastBoost <= 0.8; contrastBoost += 0.05) {
 				const coeffs = { darkBoost, midBoost, contrastBoost }
 				const result = evaluateCoefficients(samples, coeffs)
 				const score = scoreCoefficients(result)
@@ -177,17 +180,17 @@ function fineGridSearch(
 
 	for (
 		let darkBoost = Math.max(20, coarseBest.darkBoost - 10);
-		darkBoost <= Math.min(80, coarseBest.darkBoost + 10);
+		darkBoost <= Math.min(150, coarseBest.darkBoost + 10);
 		darkBoost += 2
 	) {
 		for (
 			let midBoost = Math.max(10, coarseBest.midBoost - 10);
-			midBoost <= Math.min(50, coarseBest.midBoost + 10);
+			midBoost <= Math.min(80, coarseBest.midBoost + 10);
 			midBoost += 2
 		) {
 			for (
 				let contrastBoost = Math.max(0.1, coarseBest.contrastBoost - 0.05);
-				contrastBoost <= Math.min(0.4, coarseBest.contrastBoost + 0.05);
+				contrastBoost <= Math.min(0.8, coarseBest.contrastBoost + 0.05);
 				contrastBoost += 0.01
 			) {
 				const coeffs = { darkBoost, midBoost, contrastBoost }

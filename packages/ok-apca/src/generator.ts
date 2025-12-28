@@ -13,8 +13,28 @@
 import { findGamutBoundary } from './color.ts'
 import { fitHeuristicCoefficients, type HeuristicCoefficients } from './heuristic.ts'
 import type { ColorGeneratorOptions, GamutBoundary } from './types.ts'
-import { validateLabel, validateUniqueLabels } from './types.ts'
 import { outdent } from './util.ts'
+
+function validateLabel(label: string): void {
+	const labelRegex = /^[a-z][a-z0-9_-]*$/i
+	if (!labelRegex.test(label)) {
+		throw new Error(
+			`Invalid contrast color label '${label}'. Labels must start with a letter and contain only letters, numbers, hyphens, and underscores.`,
+		)
+	}
+}
+
+function validateUniqueLabels(labels: readonly string[]): void {
+	const seen = new Set<string>()
+	for (const label of labels) {
+		if (seen.has(label)) {
+			throw new Error(
+				`Duplicate contrast color label '${label}'. Each contrast color must have a unique label.`,
+			)
+		}
+		seen.add(label)
+	}
+}
 
 function cssVar(name: string, label?: string): string {
 	return label ? `var(--_${name}-${label})` : `var(--_${name})`

@@ -4,7 +4,7 @@
  */
 
 import { solveTargetY } from './apca.ts'
-import { type Color, ColorImpl, findGamutBoundary, gamutMap } from './color.ts'
+import { type Color, createColor, findGamutBoundary, gamutMap } from './color.ts'
 
 /**
  * Compute contrast color achieving target APCA Lc value.
@@ -41,5 +41,5 @@ export function applyContrast(
 	const maxChromaAtContrast = boundary.cPeak * tent(contrastL)
 	const contrastC = maxChromaAtContrast * chromaPct
 
-	return new ColorImpl(hue, contrastC, contrastL)
+	return createColor(hue, contrastC, contrastL)
 }
