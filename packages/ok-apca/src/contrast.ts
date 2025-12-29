@@ -4,8 +4,8 @@
  */
 
 import { solveTargetY } from './apca.ts'
-import { type Color, createColor, findGamutSlice, gamutMap } from './color.ts'
-import type { GamutSlice } from './types.ts'
+import { createColor, findGamutSlice, gamutMap } from './color.ts'
+import type { Color, GamutSlice } from './types.ts'
 import { clamp } from './util.ts'
 
 function computeMaxChroma(L: number, slice: GamutSlice): number {

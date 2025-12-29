@@ -2,6 +2,12 @@
  * Shared type definitions for ok-apca.
  */
 
+export interface Color {
+	readonly hue: number
+	readonly chroma: number
+	readonly lightness: number
+}
+
 interface ContrastColorDefinition {
 	readonly label: string
 }
@@ -28,4 +34,18 @@ export interface GamutSlice {
 	 * Always negative (actual boundary is inside linear approximation).
 	 */
 	readonly curvature: number
+}
+
+export interface HeuristicCoefficients {
+	readonly darkBoost: number
+	readonly midBoost: number
+	readonly contrastBoost: number
+}
+
+export interface HeuristicFitResult {
+	readonly coefficients: HeuristicCoefficients
+	readonly mae: number
+	readonly worstUnderDelivery: number
+	readonly underDeliveryRate: number
+	readonly sampleCount: number
 }

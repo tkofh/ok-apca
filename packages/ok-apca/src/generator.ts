@@ -11,8 +11,8 @@
  */
 
 import { findGamutSlice } from './color.ts'
-import { fitHeuristicCoefficients, type HeuristicCoefficients } from './heuristic.ts'
-import type { ColorGeneratorOptions, GamutSlice } from './types.ts'
+import { fitHeuristicCoefficients } from './heuristic.ts'
+import type { ColorGeneratorOptions, GamutSlice, HeuristicCoefficients } from './types.ts'
 import { outdent } from './util.ts'
 
 function validateLabel(label: string): void {

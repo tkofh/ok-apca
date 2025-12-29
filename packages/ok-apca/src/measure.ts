@@ -2,7 +2,9 @@
  * APCA contrast measurement.
  * Matches Chrome DevTools implementation.
  */
-import { type Color, getLuminance } from './color.ts'
+
+import { getLuminance } from './color.ts'
+import type { Color } from './types.ts'
 
 /**
  * APCA 0.0.98G constants (W3 version)

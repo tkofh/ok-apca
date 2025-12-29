@@ -3,14 +3,8 @@
  */
 
 import _Color from 'colorjs.io'
-import type { GamutApex, GamutSlice } from './types.ts'
+import type { Color, GamutApex, GamutSlice } from './types.ts'
 import { clamp } from './util.ts'
-
-export interface Color {
-	readonly hue: number
-	readonly chroma: number
-	readonly lightness: number
-}
 
 class ColorImpl implements Color {
 	readonly hue: number

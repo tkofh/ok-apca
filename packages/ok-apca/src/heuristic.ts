@@ -13,20 +13,7 @@
 import { gamutMap } from './color.ts'
 import { applyContrast } from './contrast.ts'
 import { measureContrast } from './measure.ts'
-
-export interface HeuristicCoefficients {
-	readonly darkBoost: number
-	readonly midBoost: number
-	readonly contrastBoost: number
-}
-
-export interface HeuristicFitResult {
-	readonly coefficients: HeuristicCoefficients
-	readonly mae: number
-	readonly worstUnderDelivery: number
-	readonly underDeliveryRate: number
-	readonly sampleCount: number
-}
+import type { HeuristicCoefficients, HeuristicFitResult } from './types.ts'
 
 interface SamplePoint {
 	readonly baseL: number
@@ -239,13 +226,4 @@ export function fitHeuristicCoefficients(
 
 	fittedCoefficientsCache.set(cacheKey, result)
 	return result
-}
-
-function _applyHeuristicCorrection(
-	targetContrast: number,
-	baseL: number,
-	coeffs: HeuristicCoefficients,
-): number {
-	const boost = computeBoost(baseL, targetContrast, coeffs)
-	return targetContrast + boost
 }
