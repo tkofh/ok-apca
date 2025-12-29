@@ -47,13 +47,13 @@ This generates CSS like:
   --_l: clamp(0, var(--lightness) / 100, 1);
   --_c-req: clamp(0, var(--chroma) / 100, 1);
 
-  /* Build-time constants for hue 30 */
-  --_L-MAX: 0.705;
-  --_C-PEAK: 0.1686;
+  /* Build-time constants for hue 30 (gamut apex) */
+  --_apex-lum: 0.705;
+  --_apex-chr: 0.1686;
 
   /* Gamut mapping via tent function */
-  --_tent: min(var(--_l) / var(--_L-MAX), (1 - var(--_l)) / (1 - var(--_L-MAX)));
-  --_c: min(var(--_c-req), calc(var(--_C-PEAK) * var(--_tent)));
+  --_tent: min(var(--_l) / var(--_apex-lum), (1 - var(--_l)) / (1 - var(--_apex-lum)));
+  --_c: min(var(--_c-req), calc(var(--_apex-chr) * var(--_tent)));
 
   /* Output color */
   --o-color: oklch(var(--_l) var(--_c) 30);
@@ -305,10 +305,10 @@ The library uses a **signed contrast** system:
 The Display P3 gamut boundary for each hue is approximated by a tent function:
 
 ```
-maxChroma = cPeak × min(L / lMax, (1 - L) / (1 - lMax))
+maxChroma = apexChroma × min(L / apexLightness, (1 - L) / (1 - apexLightness))
 ```
 
-Where `lMax` is the lightness where peak chroma occurs, and `cPeak` is the maximum chroma at that lightness. These values are computed at build time for each hue.
+Where `apexLightness` is the lightness where peak chroma occurs (the gamut apex), and `apexChroma` is the maximum chroma at that lightness. These values are computed at build time for each hue.
 
 ### APCA Contrast
 

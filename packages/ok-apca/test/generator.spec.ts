@@ -15,9 +15,9 @@ describe('generateColorCss', () => {
 		expect(css).toContain('var(--lightness)')
 		expect(css).toContain('var(--chroma)')
 
-		// Should contain build-time constants
-		expect(css).toContain('--_lum-max:')
-		expect(css).toContain('--_chr-peak:')
+		// Should contain build-time constants (gamut apex)
+		expect(css).toContain('--_apex-lum:')
+		expect(css).toContain('--_apex-chr:')
 
 		// Should output the color with default prefix
 		expect(css).toContain('--o-color: oklch(')
@@ -101,7 +101,7 @@ describe('generateColorCss', () => {
 		// Should have helpful comments
 		expect(css).toContain('/* Runtime inputs')
 		expect(css).toContain('/* Build-time constants')
-		expect(css).toContain('/* Tent function')
+		expect(css).toContain('/* Max chroma at this lightness')
 		expect(css).toContain('/* Output color')
 	})
 
@@ -113,11 +113,11 @@ describe('generateColorCss', () => {
 		})
 
 		// Check that numbers are properly formatted (no trailing zeros like "0.5000000000")
-		const lMaxMatch = css.match(/--_lum-max:\s*([\d.]+)/)
-		expect(lMaxMatch).not.toBeNull()
-		if (lMaxMatch) {
-			const lMax = lMaxMatch[1]
-			expect(lMax).not.toMatch(/0{4,}$/)
+		const apexLumMatch = css.match(/--_apex-lum:\s*([\d.]+)/)
+		expect(apexLumMatch).not.toBeNull()
+		if (apexLumMatch) {
+			const apexLum = apexLumMatch[1]
+			expect(apexLum).not.toMatch(/0{4,}$/)
 		}
 	})
 
@@ -210,12 +210,13 @@ describe('generateColorCss output structure', () => {
 			selector: '.test',
 		})
 
-		// The tent function should reference lum-max
-		expect(css).toContain('var(--_lum-max)')
+		// The max chroma calculation should reference apex values and curve scale
+		expect(css).toContain('var(--_apex-lum)')
+		expect(css).toContain('var(--_apex-chr)')
+		expect(css).toContain('var(--_curve-scale)')
 
-		// The chroma calculation should reference chr-peak and tent
-		expect(css).toContain('var(--_chr-peak)')
-		expect(css).toContain('var(--_tent)')
+		// Should have max chroma variable
+		expect(css).toContain('--_max-chr:')
 
 		// The output should reference the computed values
 		expect(css).toContain('var(--_lum-norm)')

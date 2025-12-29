@@ -10,9 +10,9 @@
  * - `--{prefix}-color-{label}`: Contrast colors
  */
 
-import { findGamutBoundary } from './color.ts'
+import { findGamutSlice } from './color.ts'
 import { fitHeuristicCoefficients, type HeuristicCoefficients } from './heuristic.ts'
-import type { ColorGeneratorOptions, GamutBoundary } from './types.ts'
+import type { ColorGeneratorOptions, GamutSlice } from './types.ts'
 import { outdent } from './util.ts'
 
 function validateLabel(label: string): void {
@@ -57,12 +57,38 @@ function cssGreaterThan(a: string, b: string): string {
 	return `sign(${a} - ${b} + 0.0001)`
 }
 
-function cssTentFunction(lightnessVar: string, lMaxValue: string): string {
+/**
+ * Generate CSS for the max chroma calculation with curvature correction.
+ * Left half: linear from origin to apex
+ * Right half: linear with quadratic curvature correction
+ *
+ * @param curveScale - Pre-multiplied curvature * apexChroma for efficiency
+ */
+function cssMaxChroma(
+	lightness: string,
+	apexLightness: string,
+	apexChroma: string,
+	curveScale: string,
+): string {
+	// t = (L - lMax) / (1 - lMax), clamped to right half only
+	const tExpr = `max(0, (${lightness} - ${apexLightness}) / (1 - ${apexLightness}))`
+
+	// Left half: L / lMax * cMax
+	const leftHalf = `${lightness} / ${apexLightness} * ${apexChroma}`
+
+	// Right half: (1 - L) / (1 - lMax) * cMax + (k * cMax) * t * (1 - t)
+	const linearRight = `(1 - ${lightness}) / (1 - ${apexLightness}) * ${apexChroma}`
+	const correction = `${curveScale} * (${tExpr}) * (1 - (${tExpr}))`
+	const rightHalf = `${linearRight} + ${correction}`
+
+	// Use sign to select left or right half
+	// When L <= lMax: sign(lMax - L) >= 0, use left
+	// When L > lMax: sign(lMax - L) < 0, use right
+	const isRightHalf = `max(0, sign(${lightness} - ${apexLightness}))`
+
 	return outdent`
-		min(
-			${lightnessVar} / ${lMaxValue},
-			(1 - ${lightnessVar}) / (1 - ${lMaxValue})
-		)
+		(1 - ${isRightHalf}) * (${leftHalf}) +
+		${isRightHalf} * (${rightHalf})
 	`
 }
 
@@ -101,24 +127,28 @@ function cssBestContrastFallback(
 	`
 }
 
-function generateBaseColorCss(hue: number, boundary: GamutBoundary, prefix: string) {
-	const lMax = formatNumber(boundary.lMax)
-	const cPeak = formatNumber(boundary.cPeak)
+function generateBaseColorCss(hue: number, slice: GamutSlice, prefix: string) {
+	const apexLightness = formatNumber(slice.apex.lightness)
+	const apexChroma = formatNumber(slice.apex.chroma)
+	const curveScale = formatNumber(slice.curvature * slice.apex.chroma)
 
 	return outdent`
 		/* Runtime inputs: --lightness (0-100), --chroma (0-100 as % of max) */
 		--_lum-norm: clamp(0, var(--lightness) / 100, 1);
 		--_chr-pct: clamp(0, var(--chroma) / 100, 1);
 
-		/* Build-time constants for hue ${hue} */
-		--_lum-max: ${lMax};
-		--_chr-peak: ${cPeak};
+		/* Build-time constants for hue ${hue} (gamut slice) */
+		--_apex-lum: ${apexLightness};
+		--_apex-chr: ${apexChroma};
+		--_curve-scale: ${curveScale};
 
-		/* Tent function: min(L/L_max, (1-L)/(1-L_max)) */
-		--_tent: ${cssTentFunction('var(--_lum-norm)', 'var(--_lum-max)')};
+		/* Max chroma at this lightness (tent with curvature correction) */
+		--_max-chr: calc(
+			${cssMaxChroma('var(--_lum-norm)', 'var(--_apex-lum)', 'var(--_apex-chr)', 'var(--_curve-scale)')}
+		);
 
 		/* Chroma as percentage of maximum available at this lightness */
-		--_chr: calc(var(--_chr-peak) * var(--_tent) * var(--_chr-pct));
+		--_chr: calc(var(--_max-chr) * var(--_chr-pct));
 
 		/* Output color */
 		--${prefix}-color: oklch(var(--_lum-norm) var(--_chr) ${hue});
@@ -288,17 +318,18 @@ function generateTargetYCss(label: string) {
 function generateContrastColorCss(
 	label: string,
 	hue: number,
-	boundary: GamutBoundary,
+	slice: GamutSlice,
 	prefix: string,
 ): string {
-	const lMax = formatNumber(boundary.lMax)
-	const cPeak = formatNumber(boundary.cPeak)
+	const apexLightness = formatNumber(slice.apex.lightness)
+	const apexChroma = formatNumber(slice.apex.chroma)
+	const curveScale = formatNumber(slice.curvature * slice.apex.chroma)
 
 	const { coefficients } = fitHeuristicCoefficients(hue, true)
 
 	const V_Y_FINAL = cssVar('Y-final', label)
 	const V_CON_LUM = cssVar('con-lum', label)
-	const V_CON_TENT = cssVar('con-tent', label)
+	const V_CON_MAX_CHR = cssVar('con-max-chr', label)
 	const V_CON_CHR = cssVar('con-chr', label)
 
 	return outdent`
@@ -321,8 +352,10 @@ function generateContrastColorCss(
 
 		--_con-lum-${label}: clamp(0, pow(${V_Y_FINAL}, 1 / 3), 1);
 
-		--_con-tent-${label}: ${cssTentFunction(V_CON_LUM, lMax)};
-		--_con-chr-${label}: calc(${cPeak} * ${V_CON_TENT} * var(--_chr-pct));
+		--_con-max-chr-${label}: calc(
+			${cssMaxChroma(V_CON_LUM, apexLightness, apexChroma, curveScale)}
+		);
+		--_con-chr-${label}: calc(${V_CON_MAX_CHR} * var(--_chr-pct));
 
 		--${prefix}-color-${label}: oklch(${V_CON_LUM} ${V_CON_CHR} ${hue});
 	`
@@ -350,7 +383,7 @@ const POLARITY_FIXED_CSS = outdent`
  */
 export function generateColorCss(options: ColorGeneratorOptions) {
 	const hue = ((options.hue % 360) + 360) % 360
-	const boundary = findGamutBoundary(hue)
+	const slice = findGamutSlice(hue)
 	const prefix = options.prefix ?? 'o'
 	const contrastColors = options.contrastColors ?? []
 
@@ -360,24 +393,31 @@ export function generateColorCss(options: ColorGeneratorOptions) {
 	}
 	validateUniqueLabels(labels)
 
-	let css = `${options.selector} {`
+	const baseColorCss = generateBaseColorCss(hue, slice, prefix)
 
-	css += `\n${generateBaseColorCss(hue, boundary, prefix)}`
+	const sharedYBackground =
+		contrastColors.length > 0
+			? outdent`
+					/* Shared Y background for all contrast calculations */
+					--_Y-bg: pow(var(--_lum-norm), 3);
+				`
+			: ''
 
-	if (contrastColors.length > 0) {
-		css += '\n\n\t/* Shared Y background for all contrast calculations */'
-		css += '\n\t--_Y-bg: pow(var(--_lum-norm), 3);'
-	}
+	const contrastColorsCss = contrastColors
+		.map(({ label }) => generateContrastColorCss(label, hue, slice, prefix))
+		.join('\n\n')
 
-	for (const { label } of contrastColors) {
-		css += `\n\n${generateContrastColorCss(label, hue, boundary, prefix)}`
-	}
+	const polarityFixedCss = contrastColors.length > 0 ? POLARITY_FIXED_CSS : ''
 
-	if (contrastColors.length > 0) {
-		css += `\n\n${POLARITY_FIXED_CSS}`
-	}
+	return outdent`
+		${options.selector} {
+			${baseColorCss}
 
-	css += '\n}'
+			${sharedYBackground}
 
-	return css
+			${contrastColorsCss}
+
+			${polarityFixedCss}
+		}
+	`
 }

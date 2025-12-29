@@ -3,7 +3,8 @@
  */
 
 import _Color from 'colorjs.io'
-import type { GamutBoundary } from './types.ts'
+import type { GamutApex, GamutSlice } from './types.ts'
+import { clamp } from './util.ts'
 
 export interface Color {
 	readonly hue: number
@@ -30,7 +31,7 @@ export function createColor(hue: number, chroma: number, lightness: number): Col
 	return new ColorImpl(hue, chroma, lightness)
 }
 
-const gamutBoundaryCache = new Map<number, GamutBoundary>()
+const gamutSliceCache = new Map<number, GamutSlice>()
 
 function findMaxChromaAtLightness(hue: number, lightness: number): number {
 	let low = 0
@@ -52,12 +53,37 @@ function findMaxChromaAtLightness(hue: number, lightness: number): number {
 }
 
 /**
- * Find Display P3 gamut boundary for a hue.
- * Returns lMax (lightness at peak chroma) and cPeak (maximum chroma value).
+ * Fit quadratic curvature correction for the right half of the tent.
+ * The correction models how the actual gamut boundary curves inward
+ * from the linear tent approximation.
+ */
+function fitCurvature(hue: number, apex: GamutApex): number {
+	const samples = 50
+	let sumProduct = 0
+	let sumBasisSquared = 0
+
+	for (let i = 0; i <= samples; i++) {
+		const t = i / samples
+		const L = apex.lightness + (1 - apex.lightness) * t
+		const actualChroma = findMaxChromaAtLightness(hue, L)
+		const linearChroma = (apex.chroma * (1 - L)) / (1 - apex.lightness)
+		const error = actualChroma - linearChroma
+
+		const basis = t * (1 - t) * apex.chroma
+		sumProduct += error * basis
+		sumBasisSquared += basis * basis
+	}
+
+	return sumProduct / sumBasisSquared
+}
+
+/**
+ * Find the gamut slice for a hue in Display P3.
+ * Returns the apex (lightness and chroma at maximum) and curvature correction.
  * Results are cached.
  */
-export function findGamutBoundary(hue: number): GamutBoundary {
-	const cached = gamutBoundaryCache.get(hue)
+export function findGamutSlice(hue: number): GamutSlice {
+	const cached = gamutSliceCache.get(hue)
 	if (cached !== undefined) {
 		return cached
 	}
@@ -76,37 +102,57 @@ export function findGamutBoundary(hue: number): GamutBoundary {
 		}
 	}
 
-	const boundary: GamutBoundary = {
-		lMax: lightnessAtMaxChroma,
-		cPeak: maxChroma,
+	const apex: GamutApex = {
+		lightness: lightnessAtMaxChroma,
+		chroma: maxChroma,
 	}
 
-	gamutBoundaryCache.set(hue, boundary)
-	return boundary
-}
+	const curvature = fitCurvature(hue, apex)
 
-function computeTent(L: number, lMax: number): number {
-	if (L <= 0 || L >= 1) {
-		return 0
-	}
-	if (lMax <= 0 || lMax >= 1) {
-		return 0
-	}
-	return Math.min(L / lMax, (1 - L) / (1 - lMax))
+	const slice: GamutSlice = { apex, curvature }
+
+	gamutSliceCache.set(hue, slice)
+	return slice
 }
 
 /**
- * Clamp chroma to Display P3 gamut boundary using tent function approximation.
- * Matches CSS implementation exactly.
+ * Compute the maximum chroma at a given lightness using the tent function
+ * with quadratic curvature correction on the right half.
+ */
+function computeMaxChroma(L: number, slice: GamutSlice): number {
+	const { apex, curvature } = slice
+
+	if (L <= 0 || L >= 1) {
+		return 0
+	}
+	if (apex.lightness <= 0 || apex.lightness >= 1) {
+		return 0
+	}
+
+	if (L <= apex.lightness) {
+		// Left half: linear from origin to apex
+		return (apex.chroma * L) / apex.lightness
+	}
+
+	// Right half: linear with quadratic curvature correction
+	const linearChroma = (apex.chroma * (1 - L)) / (1 - apex.lightness)
+	const t = (L - apex.lightness) / (1 - apex.lightness)
+	const correction = curvature * t * (1 - t) * apex.chroma
+
+	return linearChroma + correction
+}
+
+/**
+ * Clamp chroma to Display P3 gamut boundary using tent function
+ * with curvature correction.
  */
 export function gamutMap(color: Color): Color {
 	const { hue, chroma, lightness } = color
-	const { lMax, cPeak } = findGamutBoundary(hue)
+	const slice = findGamutSlice(hue)
 
-	const L = Math.max(0, Math.min(1, lightness))
-	const tent = computeTent(L, lMax)
-	const maxChroma = cPeak * tent
-	const clampedChroma = Math.min(Math.max(0, chroma), maxChroma)
+	const L = clamp(0, lightness, 1)
+	const maxChroma = computeMaxChroma(L, slice)
+	const clampedChroma = clamp(0, chroma, maxChroma)
 
 	return new ColorImpl(hue, clampedChroma, L)
 }

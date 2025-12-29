@@ -1,3 +1,26 @@
+/**
+ * Math utilities
+ */
+
+/**
+ * Apply Math.pow preserving the sign of the input.
+ */
+export function signedPow(x: number, exp: number): number {
+	return Math.sign(x) * Math.abs(x) ** exp
+}
+
+/**
+ * Clamp a value between min and max.
+ * Signature matches CSS clamp(): clamp(min, value, max)
+ */
+export function clamp(min: number, value: number, max: number): number {
+	return Math.max(min, Math.min(max, value))
+}
+
+/**
+ * String utilities
+ */
+
 const hasFirstLineContentRe = /^[ \t]*\S/
 const leadingIndentRe = /^[ \t]+/
 const newlineWithIndentRe = /(?:\r\n|\r|\n)([ \t]*)(?:\S|$)/
