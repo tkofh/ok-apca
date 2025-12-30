@@ -4,6 +4,7 @@
 	"scripts": {
 		"build": "turbo run build",
 		"dev": "turbo run dev",
+		"preview": "turbo watch preview",
 		"test": "turbo run test",
 		"check": "biome check --write .",
 		"check:force": "biome check --write --unsafe .",

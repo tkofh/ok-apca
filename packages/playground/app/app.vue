@@ -25,7 +25,6 @@ if (typeof route.query.allowPolarityInversion === 'string') {
 	state.allowPolarityInversion = route.query.allowPolarityInversion === 'true' || route.query.allowPolarityInversion === '1'
 }
 
-// Clear query string after reading initial values
 onMounted(() => {
 	if (Object.keys(route.query).length > 0) {
 		router.replace({ query: {} })
@@ -96,7 +95,7 @@ const previewStyle = computed(() => ({
 		</div>
 
 		<div class="preview" :style="previewStyle">
-			<span class="preview-text">Contrast Text</span>
+			<span class="preview-text">Sample Contrast Text</span>
 		</div>
 	</div>
 </template>

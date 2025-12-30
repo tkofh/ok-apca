@@ -12,6 +12,12 @@
 			"inputs": ["$TURBO_DEFAULT$", ".env*"],
 			"outputs": [".output/**"]
 		},
+		"preview": {
+			"dependsOn": ["generate"],
+			"cache": false,
+			"persistent": true,
+			"interruptible": true
+		},
 		"lint": {
 			"dependsOn": ["^lint"]
 		},

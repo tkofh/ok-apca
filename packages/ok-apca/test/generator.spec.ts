@@ -15,9 +15,8 @@ describe('generateColorCss', () => {
 		expect(css).toContain('var(--lightness)')
 		expect(css).toContain('var(--chroma)')
 
-		// Should contain build-time constants (gamut apex)
-		expect(css).toContain('--_apex-lum:')
-		expect(css).toContain('--_apex-chr:')
+		// Should contain build-time constants comment (apex values are inlined)
+		expect(css).toContain('/* Build-time constants for hue 30:')
 
 		// Should output the color with default prefix
 		expect(css).toContain('--o-color: oklch(')
@@ -113,10 +112,11 @@ describe('generateColorCss', () => {
 		})
 
 		// Check that numbers are properly formatted (no trailing zeros like "0.5000000000")
-		const apexLumMatch = css.match(/--_apex-lum:\s*([\d.]+)/)
-		expect(apexLumMatch).not.toBeNull()
-		if (apexLumMatch) {
-			const apexLum = apexLumMatch[1]
+		// Apex values are now inlined in the comment, e.g., "apex L=0.654, C=0.293..."
+		const apexMatch = css.match(/apex L=([\d.]+), C=([\d.]+)/)
+		expect(apexMatch).not.toBeNull()
+		if (apexMatch) {
+			const apexLum = apexMatch[1]
 			expect(apexLum).not.toMatch(/0{4,}$/)
 		}
 	})
@@ -210,10 +210,9 @@ describe('generateColorCss output structure', () => {
 			selector: '.test',
 		})
 
-		// The max chroma calculation should reference apex values and curve scale
-		expect(css).toContain('var(--_apex-lum)')
-		expect(css).toContain('var(--_apex-chr)')
-		expect(css).toContain('var(--_curve-scale)')
+		// Apex values are now inlined directly in calc() expressions (not as var() references)
+		// The comment should document the build-time constants
+		expect(css).toContain('/* Build-time constants for hue 60:')
 
 		// Should have max chroma variable
 		expect(css).toContain('--_max-chr:')

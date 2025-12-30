@@ -15,6 +15,177 @@ import { fitHeuristicCoefficients } from './heuristic.ts'
 import type { ColorGeneratorOptions, GamutSlice, HeuristicCoefficients } from './types.ts'
 import { outdent } from './util.ts'
 
+/**
+ * Represents a CSS custom property registration for @property rule.
+ */
+interface PropertyRegistration {
+	readonly name: string
+	readonly syntax: string
+	readonly inherits: boolean
+	readonly initialValue: string
+}
+
+/**
+ * Generate a single @property rule.
+ */
+function generatePropertyRule(reg: PropertyRegistration): string {
+	return outdent`
+		@property ${reg.name} {
+			syntax: "${reg.syntax}";
+			inherits: ${reg.inherits};
+			initial-value: ${reg.initialValue};
+		}
+	`
+}
+
+/**
+ * Collect all @property registrations for the base color.
+ *
+ * Inheritance strategy:
+ * - Input properties (`--lightness`, `--chroma`): `inherits: true` so users can
+ *   set them on a parent and have them cascade to children with the class.
+ * - Internal properties (`--_*`): `inherits: false` since they're only used
+ *   during computation on the element itself. Children inherit the final
+ *   computed `--{prefix}-color` value, not the intermediate calculations.
+ * - Output properties (`--{prefix}-color`): `inherits: true` so children can
+ *   access the computed color via `var(--{prefix}-color)`.
+ */
+function collectBaseColorProperties(prefix: string): PropertyRegistration[] {
+	return [
+		// Runtime inputs (inherit so they cascade to elements with the class)
+		{ name: '--lightness', syntax: '<number>', inherits: true, initialValue: '50' },
+		{ name: '--chroma', syntax: '<number>', inherits: true, initialValue: '100' },
+
+		// Internal computed properties (no inheritance needed - only used locally)
+		// Note: apex lightness, chroma, and curve scale are build-time constants
+		// that are inlined directly into the generated calc() expressions.
+		{ name: '--_lum-norm', syntax: '<number>', inherits: false, initialValue: '0.5' },
+		{ name: '--_chr-pct', syntax: '<number>', inherits: false, initialValue: '1' },
+		{ name: '--_max-chr', syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: '--_chr', syntax: '<number>', inherits: false, initialValue: '0' },
+
+		// Output color (inherit so children can use var(--{prefix}-color))
+		{
+			name: `--${prefix}-color`,
+			syntax: '<color>',
+			inherits: true,
+			initialValue: 'oklch(0.5 0 0)',
+		},
+	]
+}
+
+/**
+ * Collect all @property registrations for a contrast color label.
+ *
+ * See collectBaseColorProperties for inheritance strategy rationale.
+ */
+function collectContrastColorProperties(label: string, prefix: string): PropertyRegistration[] {
+	return [
+		// Runtime inputs (inherit so they cascade)
+		{ name: `--contrast-${label}`, syntax: '<number>', inherits: true, initialValue: '0' },
+		{
+			name: `--allow-polarity-inversion-${label}`,
+			syntax: '<integer>',
+			inherits: true,
+			initialValue: '0',
+		},
+
+		// Heuristic boost properties (internal)
+		{ name: `--_boost-pct-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{
+			name: `--_boost-multiplicative-${label}`,
+			syntax: '<number>',
+			inherits: false,
+			initialValue: '0',
+		},
+		{ name: `--_boost-absolute-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{
+			name: `--_contrast-adjusted-${label}`,
+			syntax: '<number>',
+			inherits: false,
+			initialValue: '0',
+		},
+		{ name: `--_contrast-signed-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_lc-norm-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+
+		// Y background (internal, shared reference)
+		{ name: `--_Y-bg-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+
+		// Smoothing and epsilon (internal)
+		{ name: `--_smooth-t-${label}`, syntax: '<number>', inherits: false, initialValue: '0.022' },
+		{ name: `--_ep-${label}`, syntax: '<number>', inherits: false, initialValue: '0.0001' },
+
+		// Normal polarity (internal)
+		{ name: `--_Y-dark-min-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_Y-dark-v-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_Y-dark-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_dark-ok-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+
+		// Reverse polarity (internal)
+		{ name: `--_Y-light-min-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_Y-light-v-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_Y-light-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_light-ok-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+
+		// Polarity selection (internal)
+		{ name: `--_use-light-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_prefer-light-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_prefer-dark-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_Y-preferred-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_preferred-ok-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_Y-fallback-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_fallback-ok-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+
+		// Best contrast fallback (internal)
+		{ name: `--_lc-dark-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_lc-light-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_Y-best-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+
+		// Final Y and intermediate output (internal)
+		{ name: `--_Y-final-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_con-lum-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_con-max-chr-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_con-chr-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+
+		// Output contrast color (inherit so children can use it)
+		{
+			name: `--${prefix}-color-${label}`,
+			syntax: '<color>',
+			inherits: true,
+			initialValue: 'oklch(0 0 0)',
+		},
+	]
+}
+
+/**
+ * Collect shared Y background property when contrast colors are used.
+ */
+function collectSharedYBackgroundProperty(): PropertyRegistration[] {
+	return [{ name: '--_Y-bg', syntax: '<number>', inherits: false, initialValue: '0' }]
+}
+
+/**
+ * Generate all @property rules for the color system.
+ */
+function generatePropertyRules(prefix: string, labels: readonly string[]): string {
+	const properties: PropertyRegistration[] = []
+
+	// Base color properties
+	properties.push(...collectBaseColorProperties(prefix))
+
+	// Shared Y background if we have contrast colors
+	if (labels.length > 0) {
+		properties.push(...collectSharedYBackgroundProperty())
+	}
+
+	// Contrast color properties for each label
+	for (const label of labels) {
+		properties.push(...collectContrastColorProperties(label, prefix))
+	}
+
+	return properties.map(generatePropertyRule).join('\n\n')
+}
+
 function validateLabel(label: string): void {
 	const labelRegex = /^[a-z][a-z0-9_-]*$/i
 	if (!labelRegex.test(label)) {
@@ -137,14 +308,10 @@ function generateBaseColorCss(hue: number, slice: GamutSlice, prefix: string) {
 		--_lum-norm: clamp(0, var(--lightness) / 100, 1);
 		--_chr-pct: clamp(0, var(--chroma) / 100, 1);
 
-		/* Build-time constants for hue ${hue} (gamut slice) */
-		--_apex-lum: ${apexLightness};
-		--_apex-chr: ${apexChroma};
-		--_curve-scale: ${curveScale};
-
 		/* Max chroma at this lightness (tent with curvature correction) */
+		/* Build-time constants for hue ${hue}: apex L=${apexLightness}, C=${apexChroma}, curve=${curveScale} */
 		--_max-chr: calc(
-			${cssMaxChroma('var(--_lum-norm)', 'var(--_apex-lum)', 'var(--_apex-chr)', 'var(--_curve-scale)')}
+			${cssMaxChroma('var(--_lum-norm)', apexLightness, apexChroma, curveScale)}
 		);
 
 		/* Chroma as percentage of maximum available at this lightness */
@@ -372,6 +539,9 @@ function generateContrastColorCss(
  * Outputs:
  * - `--{prefix}-color`
  * - `--{prefix}-color-{label}`
+ *
+ * The generated CSS includes `@property` declarations for all custom properties,
+ * enabling proper type checking, animation support, and initial values.
  */
 export function generateColorCss(options: ColorGeneratorOptions) {
 	const hue = ((options.hue % 360) + 360) % 360
@@ -384,6 +554,8 @@ export function generateColorCss(options: ColorGeneratorOptions) {
 		validateLabel(label)
 	}
 	validateUniqueLabels(labels)
+
+	const propertyRules = generatePropertyRules(prefix, labels)
 
 	const baseColorCss = generateBaseColorCss(hue, slice, prefix)
 
@@ -400,6 +572,8 @@ export function generateColorCss(options: ColorGeneratorOptions) {
 		.join('\n\n')
 
 	return outdent`
+		${propertyRules}
+
 		${options.selector} {
 			${baseColorCss}
 
