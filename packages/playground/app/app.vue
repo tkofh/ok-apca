@@ -9,7 +9,6 @@ const state = reactive({
 	chroma: 50,
 	lightness: 50,
 	contrast: 60,
-	allowPolarityInversion: true,
 })
 
 // Apply query string values
@@ -20,9 +19,6 @@ for (const key of ['hue', 'chroma', 'lightness', 'contrast'] as const) {
 			state[key] = num
 		}
 	}
-}
-if (typeof route.query.allowPolarityInversion === 'string') {
-	state.allowPolarityInversion = route.query.allowPolarityInversion === 'true' || route.query.allowPolarityInversion === '1'
 }
 
 onMounted(() => {
@@ -52,7 +48,6 @@ const previewStyle = computed(() => ({
 	'--lightness': state.lightness,
 	'--chroma': state.chroma,
 	'--contrast-text': state.contrast,
-	'--allow-polarity-inversion-text': state.allowPolarityInversion ? 1 : 0,
 }))
 </script>
 
@@ -84,12 +79,6 @@ const previewStyle = computed(() => ({
 					<input v-model.number="state.contrast" type="number" min="-108" max="108" step="0.1" />
 					<input v-model.number="state.contrast" type="range" min="-108" max="108" step="0.1" />
 					<span class="hint">Positive = light text, Negative = dark text</span>
-				</label>
-
-				<label>
-					<input v-model="state.allowPolarityInversion" type="checkbox" />
-					Allow Polarity Inversion
-					<span class="hint">Fallback to opposite polarity if preferred is out of gamut</span>
 				</label>
 			</div>
 		</div>
@@ -212,6 +201,7 @@ body {
 }
 
 .preview-text {
+   	background: var(--o-color);
 	color: var(--o-color-text);
 	font-size: 2rem;
 	font-weight: 600;

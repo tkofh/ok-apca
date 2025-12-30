@@ -111,29 +111,13 @@ describe('CSS Color Generation Integration', () => {
 		})
 	})
 
-	describe('Contrast color computation with polarity inversion enabled', () => {
-		it('produces dark text on light background with positive contrast', () => {
-			// Light background
-			testElement.style.setProperty('--lightness', '80')
-			testElement.style.setProperty('--chroma', '50')
-			// Positive contrast = dark text (normal polarity)
-			testElement.style.setProperty('--contrast-text', '60')
-			testElement.style.setProperty('--allow-polarity-inversion-text', '1')
-
-			const bgLightness = getColor().get('oklch.l')
-			const textLightness = getTextColor().get('oklch.l')
-
-			// Text should be darker than background
-			expect(textLightness).toBeLessThan(bgLightness)
-		})
-
-		it('produces light text on dark background with negative contrast', () => {
+	describe('Contrast color computation', () => {
+		it('produces light text on dark background with positive contrast', () => {
 			// Dark background
 			testElement.style.setProperty('--lightness', '20')
 			testElement.style.setProperty('--chroma', '50')
-			// Negative contrast = light text (reverse polarity)
-			testElement.style.setProperty('--contrast-text', '-60')
-			testElement.style.setProperty('--allow-polarity-inversion-text', '1')
+			// Positive contrast = light text
+			testElement.style.setProperty('--contrast-text', '60')
 
 			const bgLightness = getColor().get('oklch.l')
 			const textLightness = getTextColor().get('oklch.l')
@@ -142,10 +126,23 @@ describe('CSS Color Generation Integration', () => {
 			expect(textLightness).toBeGreaterThan(bgLightness)
 		})
 
-		it('increases contrast difference as contrast value increases', () => {
-			testElement.style.setProperty('--lightness', '70')
+		it('produces dark text on light background with negative contrast', () => {
+			// Light background
+			testElement.style.setProperty('--lightness', '80')
 			testElement.style.setProperty('--chroma', '50')
-			testElement.style.setProperty('--allow-polarity-inversion-text', '1')
+			// Negative contrast = dark text
+			testElement.style.setProperty('--contrast-text', '-60')
+
+			const bgLightness = getColor().get('oklch.l')
+			const textLightness = getTextColor().get('oklch.l')
+
+			// Text should be darker than background
+			expect(textLightness).toBeLessThan(bgLightness)
+		})
+
+		it('increases contrast difference as contrast value increases', () => {
+			testElement.style.setProperty('--lightness', '30')
+			testElement.style.setProperty('--chroma', '50')
 
 			const differences: number[] = []
 
@@ -171,9 +168,10 @@ describe('CSS Color Generation Integration', () => {
 		})
 
 		it('preserves chroma percentage in contrast color', () => {
-			testElement.style.setProperty('--lightness', '50')
+			// Use positive contrast (lighter text) from a dark base so the
+			// contrast color lands at a lightness with available chroma
+			testElement.style.setProperty('--lightness', '30')
 			testElement.style.setProperty('--contrast-text', '60')
-			testElement.style.setProperty('--allow-polarity-inversion-text', '1')
 
 			// Low chroma
 			testElement.style.setProperty('--chroma', '20')
@@ -186,133 +184,27 @@ describe('CSS Color Generation Integration', () => {
 			// Higher chroma input should produce higher chroma contrast color
 			expect(highChromaText).toBeGreaterThan(lowChromaText)
 		})
-	})
-
-	describe('Contrast color computation WITHOUT polarity inversion', () => {
-		it('produces dark text on light background with positive contrast', () => {
-			// Light background
-			testElement.style.setProperty('--lightness', '80')
-			testElement.style.setProperty('--chroma', '50')
-			// Positive contrast = dark text (normal polarity)
-			testElement.style.setProperty('--contrast-text', '60')
-			testElement.style.setProperty('--allow-polarity-inversion-text', '0')
-
-			const bgLightness = getColor().get('oklch.l')
-			const textLightness = getTextColor().get('oklch.l')
-
-			// Text should be darker than background
-			expect(textLightness).toBeLessThan(bgLightness)
-		})
-
-		it('produces light text on dark background with negative contrast', () => {
-			// Dark background
-			testElement.style.setProperty('--lightness', '20')
-			testElement.style.setProperty('--chroma', '50')
-			// Negative contrast = light text (reverse polarity)
-			testElement.style.setProperty('--contrast-text', '-60')
-			testElement.style.setProperty('--allow-polarity-inversion-text', '0')
-
-			const bgLightness = getColor().get('oklch.l')
-			const textLightness = getTextColor().get('oklch.l')
-
-			// Text should be lighter than background
-			expect(textLightness).toBeGreaterThan(bgLightness)
-		})
-
-		it('increases contrast difference as contrast value increases', () => {
-			testElement.style.setProperty('--lightness', '70')
-			testElement.style.setProperty('--chroma', '50')
-			testElement.style.setProperty('--allow-polarity-inversion-text', '0')
-
-			const differences: number[] = []
-
-			for (const contrast of [30, 60, 90]) {
-				testElement.style.setProperty('--contrast-text', String(contrast))
-
-				const bgLightness = getColor().get('oklch.l')
-				const textLightness = getTextColor().get('oklch.l')
-
-				differences.push(Math.abs(bgLightness - textLightness))
-			}
-
-			expect.assert(differences[0] !== undefined)
-			expect.assert(differences[1] !== undefined)
-			expect.assert(differences[2] !== undefined)
-
-			// Higher contrast values should produce larger or equal lightness differences
-			// (equal when hitting the L=0 or L=1 boundary)
-			expect(differences[1]).toBeGreaterThanOrEqual(differences[0])
-			expect(differences[2]).toBeGreaterThanOrEqual(differences[1])
-			// But at least some increase should happen between 30 and 90
-			expect(differences[2]).toBeGreaterThan(differences[0])
-		})
 
 		it('handles maximum contrast values', () => {
 			testElement.style.setProperty('--lightness', '50')
 			testElement.style.setProperty('--chroma', '50')
 			testElement.style.setProperty('--contrast-text', '108')
-			testElement.style.setProperty('--allow-polarity-inversion-text', '0')
 
 			const textLightness = getTextColor().get('oklch.l')
 
-			// Max positive contrast should produce very dark text
-			expect(textLightness).toBeLessThan(0.2)
+			// Max positive contrast should produce very light text
+			expect(textLightness).toBeGreaterThan(0.8)
 		})
 
 		it('handles minimum contrast values', () => {
 			testElement.style.setProperty('--lightness', '50')
 			testElement.style.setProperty('--chroma', '50')
 			testElement.style.setProperty('--contrast-text', '-108')
-			testElement.style.setProperty('--allow-polarity-inversion-text', '0')
 
 			const textLightness = getTextColor().get('oklch.l')
 
-			// Max negative contrast should produce very light text
-			expect(textLightness).toBeGreaterThan(0.8)
-		})
-
-		it('does not invert polarity even when preferred is out of gamut', () => {
-			// Very dark background
-			testElement.style.setProperty('--lightness', '5')
-			testElement.style.setProperty('--chroma', '50')
-			testElement.style.setProperty('--contrast-text', '60') // Positive = prefer dark
-			testElement.style.setProperty('--allow-polarity-inversion-text', '0')
-
-			const bgLightness = getColor().get('oklch.l')
-			const textLightness = getTextColor().get('oklch.l')
-
-			// Without inversion, should still try to get dark text (will be clamped to 0)
-			expect(textLightness).toBeLessThanOrEqual(bgLightness + 0.01)
-		})
-	})
-
-	describe('Polarity inversion behavior', () => {
-		it('inverts polarity when preferred is out of gamut and inversion allowed', () => {
-			// Very dark background where positive contrast (darker text) would be out of gamut
-			testElement.style.setProperty('--lightness', '5')
-			testElement.style.setProperty('--chroma', '50')
-			testElement.style.setProperty('--contrast-text', '60') // Positive = prefer dark
-			testElement.style.setProperty('--allow-polarity-inversion-text', '1')
-
-			const bgLightness = getColor().get('oklch.l')
-			const textLightness = getTextColor().get('oklch.l')
-
-			// With inversion allowed, should get light text even though positive contrast was requested
-			expect(textLightness).toBeGreaterThan(bgLightness)
-		})
-
-		it('handles high lightness with negative contrast correctly', () => {
-			// Very light background where negative contrast (lighter text) would be out of gamut
-			testElement.style.setProperty('--lightness', '95')
-			testElement.style.setProperty('--chroma', '50')
-			testElement.style.setProperty('--contrast-text', '-60') // Negative = prefer light
-			testElement.style.setProperty('--allow-polarity-inversion-text', '1')
-
-			const bgLightness = getColor().get('oklch.l')
-			const textLightness = getTextColor().get('oklch.l')
-
-			// With inversion allowed, should get dark text since light is out of gamut
-			expect(textLightness).toBeLessThan(bgLightness)
+			// Max negative contrast should produce very dark text
+			expect(textLightness).toBeLessThan(0.2)
 		})
 	})
 
@@ -353,6 +245,30 @@ describe('CSS Color Generation Integration', () => {
 
 			const lightBgLightness = getColor().get('oklch.l')
 			expect(lightBgLightness).toBeCloseTo(1, 2)
+		})
+
+		it('clamps result when positive contrast on very light background', () => {
+			// Very light background where positive contrast (lighter text) would be out of gamut
+			testElement.style.setProperty('--lightness', '95')
+			testElement.style.setProperty('--chroma', '50')
+			testElement.style.setProperty('--contrast-text', '60') // Positive = lighter
+
+			const textLightness = getTextColor().get('oklch.l')
+
+			// Should clamp to near 1 (can't go lighter)
+			expect(textLightness).toBeGreaterThanOrEqual(0.9)
+		})
+
+		it('clamps result when negative contrast on very dark background', () => {
+			// Very dark background where negative contrast (darker text) would be out of gamut
+			testElement.style.setProperty('--lightness', '5')
+			testElement.style.setProperty('--chroma', '50')
+			testElement.style.setProperty('--contrast-text', '-60') // Negative = darker
+
+			const textLightness = getTextColor().get('oklch.l')
+
+			// Should clamp to near 0 (can't go darker)
+			expect(textLightness).toBeLessThanOrEqual(0.1)
 		})
 	})
 })

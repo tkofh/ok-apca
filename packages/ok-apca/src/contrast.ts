@@ -35,11 +35,7 @@ function computeMaxChroma(L: number, slice: GamutSlice): number {
  * Compute contrast color achieving target APCA Lc value.
  * Positive contrast = darker text, negative = lighter text.
  */
-export function applyContrast(
-	color: Color,
-	signedContrast: number,
-	allowPolarityInversion: boolean,
-) {
+export function applyContrast(color: Color, signedContrast: number) {
 	const { hue } = color
 
 	const clampedContrast = clamp(-108, signedContrast, 108)
@@ -49,7 +45,7 @@ export function applyContrast(
 
 	const Y = L ** 3
 
-	const targetY = solveTargetY(Y, clampedContrast, allowPolarityInversion)
+	const targetY = solveTargetY(Y, clampedContrast)
 	const contrastL = clamp(0, targetY ** (1 / 3), 1)
 
 	// Preserve chroma percentage from base lightness to contrast lightness

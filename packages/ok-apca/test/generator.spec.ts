@@ -38,7 +38,6 @@ describe('generateColorCss', () => {
 
 		// Should contain labeled variables
 		expect(css).toContain('--contrast-text')
-		expect(css).toContain('--allow-polarity-inversion-text')
 	})
 
 	it('generates multiple contrast colors', () => {
@@ -243,7 +242,7 @@ describe('generateColorCss output structure', () => {
 		expect(css).toContain('--_con-lum-text:')
 	})
 
-	it('produces contrast CSS with both polarities always', () => {
+	it('produces contrast CSS with both polarities for runtime selection', () => {
 		const css = generateColorCss({
 			hue: 60,
 			selector: '.test',
@@ -255,7 +254,6 @@ describe('generateColorCss output structure', () => {
 		expect(css).toContain('--_Y-light-text:')
 
 		// Should have polarity selection logic
-		expect(css).toContain('--_use-light-text:')
 		expect(css).toContain('--_prefer-light-text:')
 		expect(css).toContain('--_prefer-dark-text:')
 	})
@@ -283,17 +281,6 @@ describe('generateColorCss output structure', () => {
 
 		// Should use default value of 0 for contrast inputs
 		expect(css).toContain('var(--contrast-text, 0)')
-	})
-
-	it('uses fallback value of 0 for --allow-polarity-inversion-{label}', () => {
-		const css = generateColorCss({
-			hue: 60,
-			selector: '.test',
-			contrastColors: [{ label: 'text' }],
-		})
-
-		// Should use default value of 0 for allow-polarity-inversion
-		expect(css).toContain('var(--allow-polarity-inversion-text, 0)')
 	})
 
 	it('shares chroma percentage across all contrast colors', () => {

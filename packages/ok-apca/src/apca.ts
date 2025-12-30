@@ -64,40 +64,16 @@ function solveApcaReverse(Y: number, x: number): ApcaSolution {
 	return { targetY: clamp(0, targetY, 1), inGamut }
 }
 
-function estimateContrast(baseY: number, targetY: number): number {
-	if (targetY < baseY) {
-		return 1.14 * (baseY ** 0.56 - targetY ** 0.57) - 0.027
-	}
-	return 1.14 * (targetY ** 0.62 - baseY ** 0.65) - 0.027
-}
-
 /**
  * Solve for target Y given signed contrast value.
- * Positive contrast = normal polarity (darker), negative = reverse polarity (lighter).
- * When preferred polarity is out of gamut, falls back to opposite polarity if allowed.
+ * Positive contrast = lighter text, negative = darker text.
+ * The result is clamped to the gamut boundary [0, 1].
  */
-export function solveTargetY(
-	Y: number,
-	signedContrast: number,
-	allowPolarityInversion: boolean,
-): number {
+export function solveTargetY(Y: number, signedContrast: number): number {
 	const x = Math.abs(signedContrast) / 100
-	const preferLight = signedContrast < 0
+	const preferLight = signedContrast > 0
 
-	const preferred = preferLight ? solveApcaReverse(Y, x) : solveApcaNormal(Y, x)
+	const solution = preferLight ? solveApcaReverse(Y, x) : solveApcaNormal(Y, x)
 
-	if (preferred.inGamut || !allowPolarityInversion) {
-		return preferred.targetY
-	}
-
-	const fallback = preferLight ? solveApcaNormal(Y, x) : solveApcaReverse(Y, x)
-
-	if (fallback.inGamut) {
-		return fallback.targetY
-	}
-
-	// Both out of gamut - choose higher contrast
-	const contrastPreferred = estimateContrast(Y, preferred.targetY)
-	const contrastFallback = estimateContrast(Y, fallback.targetY)
-	return contrastPreferred >= contrastFallback ? preferred.targetY : fallback.targetY
+	return solution.targetY
 }

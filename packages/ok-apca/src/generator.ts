@@ -83,12 +83,6 @@ function collectContrastColorProperties(label: string, prefix: string): Property
 	return [
 		// Runtime inputs (inherit so they cascade)
 		{ name: `--contrast-${label}`, syntax: '<number>', inherits: true, initialValue: '0' },
-		{
-			name: `--allow-polarity-inversion-${label}`,
-			syntax: '<integer>',
-			inherits: true,
-			initialValue: '0',
-		},
 
 		// Heuristic boost properties (internal)
 		{ name: `--_boost-pct-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
@@ -113,33 +107,20 @@ function collectContrastColorProperties(label: string, prefix: string): Property
 
 		// Smoothing and epsilon (internal)
 		{ name: `--_smooth-t-${label}`, syntax: '<number>', inherits: false, initialValue: '0.022' },
-		{ name: `--_ep-${label}`, syntax: '<number>', inherits: false, initialValue: '0.0001' },
+
+		// Polarity selection (internal)
+		{ name: `--_prefer-light-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
+		{ name: `--_prefer-dark-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
 
 		// Normal polarity (internal)
 		{ name: `--_Y-dark-min-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
 		{ name: `--_Y-dark-v-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
 		{ name: `--_Y-dark-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-		{ name: `--_dark-ok-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
 
 		// Reverse polarity (internal)
 		{ name: `--_Y-light-min-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
 		{ name: `--_Y-light-v-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
 		{ name: `--_Y-light-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-		{ name: `--_light-ok-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-
-		// Polarity selection (internal)
-		{ name: `--_use-light-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-		{ name: `--_prefer-light-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-		{ name: `--_prefer-dark-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-		{ name: `--_Y-preferred-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-		{ name: `--_preferred-ok-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-		{ name: `--_Y-fallback-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-		{ name: `--_fallback-ok-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-
-		// Best contrast fallback (internal)
-		{ name: `--_lc-dark-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-		{ name: `--_lc-light-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
-		{ name: `--_Y-best-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
 
 		// Final Y and intermediate output (internal)
 		{ name: `--_Y-final-${label}`, syntax: '<number>', inherits: false, initialValue: '0' },
@@ -216,16 +197,8 @@ function formatNumber(n: number, precision = 10) {
 	return formatted.replace(/\.?0+$/, '') || '0'
 }
 
-function cssIsInGamut(luminanceVar: string, epsilonVar = 'var(--_ep)'): string {
-	return `calc((sign(${luminanceVar} + ${epsilonVar}) + sign(1 - ${epsilonVar} - ${luminanceVar})) / 2)`
-}
-
 function cssBooleanFlag(condition: string): string {
 	return `min(1, max(0, ${condition}))`
-}
-
-function cssGreaterThan(a: string, b: string): string {
-	return `sign(${a} - ${b} + 0.0001)`
 }
 
 /**
@@ -276,28 +249,6 @@ function cssHermiteInterpolation(
 	`
 }
 
-function cssApcaNormalContrast(bgLuminanceVar: string, fgLuminanceVar: string): string {
-	return `calc(1.14 * (pow(${bgLuminanceVar}, 0.56) - pow(clamp(0, ${fgLuminanceVar}, 1), 0.57)) - 0.027)`
-}
-
-function cssApcaReverseContrast(bgLuminanceVar: string, fgLuminanceVar: string): string {
-	return `calc(1.14 * (pow(clamp(0, ${fgLuminanceVar}, 1), 0.62) - pow(${bgLuminanceVar}, 0.65)) - 0.027)`
-}
-
-function cssBestContrastFallback(
-	normalVar: string,
-	reverseVar: string,
-	normalContrast: string,
-	reverseContrast: string,
-): string {
-	return outdent`
-		calc(
-			max(0, ${cssGreaterThan(reverseContrast, normalContrast)}) * clamp(0, ${reverseVar}, 1) +
-			max(0, ${cssGreaterThan(normalContrast, reverseContrast)}) * clamp(0, ${normalVar}, 1)
-		)
-	`
-}
-
 function generateBaseColorCss(hue: number, slice: GamutSlice, prefix: string) {
 	const apexLightness = formatNumber(slice.apex.lightness)
 	const apexChroma = formatNumber(slice.apex.chroma)
@@ -345,7 +296,6 @@ function generateNormalPolarityCss(label: string, yBgVar: string) {
 	const V_LC_NORM = cssVar('lc-norm', label)
 	const V_Y_DARK_MIN = cssVar('Y-dark-min', label)
 	const V_Y_DARK_V = cssVar('Y-dark-v', label)
-	const V_Y_DARK = cssVar('Y-dark', label)
 
 	const apcaTermThreshold = `(pow(${yBgVar}, 0.56) - (${V_SMOOTH_T} + 0.027) / 1.14)`
 	const apcaTermDynamic = `(pow(${yBgVar}, 0.56) - (${V_LC_NORM} + 0.027) / 1.14)`
@@ -360,8 +310,6 @@ function generateNormalPolarityCss(label: string, yBgVar: string) {
 
 	const aboveThreshold = cssBooleanFlag(`sign(${V_LC_NORM} - ${V_SMOOTH_T}) + 1`)
 
-	const V_DARK_OK_VALUE = cssIsInGamut(V_Y_DARK)
-
 	return outdent`
 		/* Normal polarity: solve for darker Y (dark text on light background) */
 		--_Y-dark-min-${label}: calc(
@@ -373,7 +321,6 @@ function generateNormalPolarityCss(label: string, yBgVar: string) {
 			${aboveThreshold} * (${directSolution}) +
 			(1 - ${aboveThreshold}) * (${bezierInterpolation})
 		);
-		--_dark-ok-${label}: ${V_DARK_OK_VALUE};
 	`
 }
 
@@ -382,7 +329,6 @@ function generateReversePolarityCss(label: string, yBgVar: string) {
 	const V_LC_NORM = cssVar('lc-norm', label)
 	const V_Y_LIGHT_MIN = cssVar('Y-light-min', label)
 	const V_Y_LIGHT_V = cssVar('Y-light-v', label)
-	const V_Y_LIGHT = cssVar('Y-light', label)
 
 	const apcaTermThreshold = `(pow(${yBgVar}, 0.65) + (${V_SMOOTH_T} + 0.027) / 1.14)`
 	const apcaTermDynamic = `(pow(${yBgVar}, 0.65) - ((-1 * ${V_LC_NORM}) - 0.027) / 1.14)`
@@ -399,8 +345,6 @@ function generateReversePolarityCss(label: string, yBgVar: string) {
 
 	const aboveThreshold = cssBooleanFlag(`sign(${V_LC_NORM} - ${V_SMOOTH_T}) + 1`)
 
-	const V_LIGHT_OK_VALUE = cssIsInGamut(V_Y_LIGHT)
-
 	return outdent`
 		/* Reverse polarity: solve for lighter Y (light text on dark background) */
 		--_Y-light-min-${label}: calc(
@@ -412,73 +356,27 @@ function generateReversePolarityCss(label: string, yBgVar: string) {
 			${aboveThreshold} * (${directSolution}) +
 			(1 - ${aboveThreshold}) * (${bezierInterpolation})
 		);
-		--_light-ok-${label}: ${V_LIGHT_OK_VALUE};
 	`
 }
 
 function generateTargetYCss(label: string) {
 	const V_CONTRAST_SIGNED = cssVar('contrast-signed', label)
-	const V_USE_LIGHT = cssVar('use-light', label)
 	const V_PREFER_LIGHT = cssVar('prefer-light', label)
 	const V_PREFER_DARK = cssVar('prefer-dark', label)
 	const V_Y_LIGHT = cssVar('Y-light', label)
 	const V_Y_DARK = cssVar('Y-dark', label)
-	const V_Y_PREFERRED = cssVar('Y-preferred', label)
-	const V_PREFERRED_OK = cssVar('preferred-ok', label)
-	const V_LIGHT_OK = cssVar('light-ok', label)
-	const V_DARK_OK = cssVar('dark-ok', label)
-	const V_Y_FALLBACK = cssVar('Y-fallback', label)
-	const V_FALLBACK_OK = cssVar('fallback-ok', label)
-	const V_LC_DARK = cssVar('lc-dark', label)
-	const V_LC_LIGHT = cssVar('lc-light', label)
-	const V_Y_BEST = cssVar('Y-best', label)
-	const V_Y_BG = cssVar('Y-bg', label)
 
 	return outdent`
-		/* Select preferred polarity based on contrast sign */
-		/* use-light: -1 if negative (prefer light text), 1 if positive (prefer dark text) */
-		--_use-light-${label}: sign(${V_CONTRAST_SIGNED} - 0.0001);
-		--_prefer-light-${label}: ${cssBooleanFlag(`-1 * ${V_USE_LIGHT}`)};
-		--_prefer-dark-${label}: ${cssBooleanFlag(V_USE_LIGHT)};
+		/* Select polarity based on contrast sign */
+		/* Positive contrast = lighter text, negative = darker text */
+		--_prefer-light-${label}: ${cssBooleanFlag(`sign(${V_CONTRAST_SIGNED} - 0.0001)`)};
+		--_prefer-dark-${label}: ${cssBooleanFlag(`-1 * sign(${V_CONTRAST_SIGNED} - 0.0001)`)};
 
-		--_Y-preferred-${label}: calc(
+		/* Final Y selection based on polarity */
+		--_Y-final-${label}: clamp(0,
 			${V_PREFER_LIGHT} * ${V_Y_LIGHT} +
-			${V_PREFER_DARK} * ${V_Y_DARK}
-		);
-
-		--_preferred-ok-${label}: calc(
-			${V_PREFER_LIGHT} * ${V_LIGHT_OK} +
-			${V_PREFER_DARK} * ${V_DARK_OK}
-		);
-
-		/* Fallback polarity (opposite of preferred) */
-		--_Y-fallback-${label}: calc(
-			${V_PREFER_LIGHT} * ${V_Y_DARK} +
-			${V_PREFER_DARK} * ${V_Y_LIGHT}
-		);
-
-		--_fallback-ok-${label}: calc(
-			${V_PREFER_LIGHT} * ${V_DARK_OK} +
-			${V_PREFER_DARK} * ${V_LIGHT_OK}
-		);
-
-		/* Best contrast fallback when both are out of gamut */
-		/* Estimate contrast for each polarity using APCA formulas */
-		--_lc-dark-${label}: ${cssApcaNormalContrast(V_Y_BG, V_Y_DARK)};
-		--_lc-light-${label}: ${cssApcaReverseContrast(V_Y_BG, V_Y_LIGHT)};
-		--_Y-best-${label}: ${cssBestContrastFallback(V_Y_DARK, V_Y_LIGHT, V_LC_DARK, V_LC_LIGHT)};
-
-		/* Final Y selection */
-		--_Y-final-${label}: calc(
-			/* Use preferred if in gamut */
-			${V_PREFERRED_OK} * clamp(0, ${V_Y_PREFERRED}, 1) +
-			/* Use fallback if preferred out of gamut and inversion allowed */
-			(1 - ${V_PREFERRED_OK}) * var(--allow-polarity-inversion-${label}, 0) * ${V_FALLBACK_OK} * clamp(0, ${V_Y_FALLBACK}, 1) +
-			/* Use best contrast if both out of gamut and inversion allowed */
-			(1 - ${V_PREFERRED_OK}) * var(--allow-polarity-inversion-${label}, 0) * (1 - ${V_FALLBACK_OK}) * clamp(0, ${V_Y_BEST}, 1) +
-			/* Force preferred if inversion not allowed (even if out of gamut) */
-			(1 - ${V_PREFERRED_OK}) * (1 - var(--allow-polarity-inversion-${label}, 0)) * clamp(0, ${V_Y_PREFERRED}, 1)
-		);
+			${V_PREFER_DARK} * ${V_Y_DARK},
+		1);
 	`
 }
 
@@ -509,7 +407,6 @@ function generateContrastColorCss(
 		--_Y-bg-${label}: var(--_Y-bg);
 
 		--_smooth-t-${label}: 0.022;
-		--_ep-${label}: 0.0001;
 
 		${generateNormalPolarityCss(label, cssVar('Y-bg', label))}
 
@@ -534,7 +431,6 @@ function generateContrastColorCss(
  * Runtime inputs:
  * - `--lightness` (0-100), `--chroma` (0-100)
  * - `--contrast-{label}` (-108 to 108)
- * - `--allow-polarity-inversion-{label}` (0 or 1)
  *
  * Outputs:
  * - `--{prefix}-color`

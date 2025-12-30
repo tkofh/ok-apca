@@ -32,36 +32,35 @@ import { generateColorCss } from 'ok-apca'
 const css = generateColorCss({
   hue: 30,
   selector: '.orange',
-  contrast: {
-    allowPolarityInversion: true,
-    selector: '&.contrast'
-  }
+  contrastColors: [{ label: 'text' }]
 })
 ```
 
 This generates CSS like:
 
 ```css
+@property --lightness { ... }
+@property --chroma { ... }
+@property --contrast-text { ... }
+
 .orange {
   /* Runtime inputs */
-  --_l: clamp(0, var(--lightness) / 100, 1);
-  --_c-req: clamp(0, var(--chroma) / 100, 1);
+  --_lum-norm: clamp(0, var(--lightness) / 100, 1);
+  --_chr-pct: clamp(0, var(--chroma) / 100, 1);
 
   /* Build-time constants for hue 30 (gamut apex) */
-  --_apex-lum: 0.705;
-  --_apex-chr: 0.1686;
+  /* ... apex lightness, chroma, curve scale ... */
 
-  /* Gamut mapping via tent function */
-  --_tent: min(var(--_l) / var(--_apex-lum), (1 - var(--_l)) / (1 - var(--_apex-lum)));
-  --_c: min(var(--_c-req), calc(var(--_apex-chr) * var(--_tent)));
+  /* Gamut mapping via tent function with curvature correction */
+  --_max-chr: calc(...);
+  --_chr: calc(var(--_max-chr) * var(--_chr-pct));
 
   /* Output color */
-  --o-color: oklch(var(--_l) var(--_c) 30);
-}
+  --o-color: oklch(var(--_lum-norm) var(--_chr) 30);
 
-.orange.contrast {
-  /* APCA contrast solving equations... */
-  --o-color-contrast: oklch(var(--_contrast-l) var(--_contrast-c) 30);
+  /* Contrast color calculations */
+  /* ... APCA solving equations ... */
+  --o-color-text: oklch(var(--_con-lum-text) var(--_con-chr-text) 30);
 }
 ```
 
@@ -70,106 +69,14 @@ Use the generated CSS:
 ```html
 <div class="orange" style="--lightness: 60; --chroma: 80">
   Background
-  <span class="contrast" style="--contrast: 60; --allow-polarity-inversion: 1">
-    Text with 60 Lc contrast (darker text preferred)
+  <span style="color: var(--o-color-text); --contrast-text: 60">
+    Text with 60 Lc contrast (lighter text)
   </span>
-  <span class="contrast" style="--contrast: -60; --allow-polarity-inversion: 1">
-    Text with 60 Lc contrast (lighter text preferred)
-  </span>
-</div>
-```
-
-### Pulse Animations
-
-The library includes built-in support for pulsing color animations using the `.pulse` class:
-
-```html
-<style>
-  .pulsing-card {
-    --lightness: 50;
-    --chroma: 80;
-    
-    /* Pulse configuration */
-    --pulse-frequency: 2; /* Pulse every 2 seconds */
-    --pulse-lightness-offset: 10; /* Pulse between 50 and 60 lightness */
-    --pulse-chroma-offset: 5; /* Pulse between 80% and 85% chroma */
-  }
-</style>
-
-<div class="orange pulse pulsing-card">
-  Pulsing background
-  <span class="contrast" style="--contrast: 60; --allow-polarity-inversion: 1">
-    Contrast color automatically pulses too!
+  <span style="color: var(--o-color-text); --contrast-text: -60">
+    Text with 60 Lc contrast (darker text)
   </span>
 </div>
 ```
-
-The `.pulse` class animates colors using CSS custom properties and `@keyframes`. The pulse is one-directional (base → base + offset) using an ease-in-out timing function.
-
-**Pulse Variables:**
-- `--pulse-frequency` (default: `1`): Animation duration in seconds
-- `--pulse-lightness-offset` (default: `0`): Additive lightness offset (0-100 scale)
-- `--pulse-chroma-offset` (default: `0`): Additive chroma offset (0-100 scale)
-
-**Behavior:**
-- The animation oscillates from the base value to base + offset
-- Applied to the base selector (`.orange.pulse`)
-- The contrast color automatically recalculates during the animation for smooth, reactive contrast
-- Offsets can be negative to pulse downward
-
-**Example use cases:**
-- Loading states or activity indicators
-- Hover effects with smooth pulsing
-- Drawing attention to interactive elements
-- Breathing animations for ambient UI
-
-### Locking Polarity for Animations
-
-When animating `--lightness` or `--chroma`, the polarity may flip if the contrast color crosses the gamut boundary, creating a jarring visual effect. Use the `.polarity-fixed` class with `--polarity-from` to lock the polarity decision:
-
-```html
-<style>
-  .pulsing-button {
-    --lightness: 50;
-    --chroma: 80;
-    --contrast: 60;
-    --polarity-from: 50; /* Lock polarity as if lightness were 50 */
-    
-    animation: pulse 2s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { --lightness: 50; }
-    50% { --lightness: 55; } /* Polarity won't flip during animation */
-  }
-</style>
-
-<div class="orange pulsing-button">
-  Background
-  <span class="contrast polarity-fixed" style="--contrast: 60; --allow-polarity-inversion: 1">
-    Text maintains consistent polarity during pulse
-  </span>
-</div>
-```
-
-The `.polarity-fixed` class tells the contrast selector to determine text vs. background polarity based on `--polarity-from` instead of the current `--lightness`. This "locks" the polarity at a specific lightness value while allowing the actual color to vary.
-
-**Combining `.pulse` and `.polarity-fixed`:**
-```html
-<div class="orange pulse" style="--pulse-lightness-offset: 10">
-  <span class="contrast polarity-fixed" style="--polarity-from: 50; --contrast: 60">
-    Smooth pulsing with locked polarity
-  </span>
-</div>
-```
-
-**When to use:**
-- Animating `--lightness` or `--chroma` for hover effects or loading states
-- Transitions that might cross the polarity inversion threshold
-- Any time you want stable contrast behavior while varying color properties
-
-**Fallback behavior:**
-If `--polarity-from` is not set, it falls back to using `--lightness` (making `.polarity-fixed` a no-op).
 
 ### Programmatic API
 
@@ -182,18 +89,16 @@ import { gamutMap, applyContrast, measureContrast } from 'ok-apca'
 const color = gamutMap({ hue: 264, chroma: 0.3, lightness: 0.5 })
 // → { hue: 264, chroma: 0.237, lightness: 0.5 }
 
-// Compute a contrast color (darker text preferred)
+// Compute a contrast color (lighter text)
 const contrast = applyContrast(
   { hue: 30, chroma: 0.15, lightness: 0.6 },
-  60, // positive = darker text (normal polarity)
-  true // allow polarity inversion if needed
+  60 // positive = lighter text
 )
 
-// Compute lighter text instead
-const contrastLight = applyContrast(
+// Compute darker text instead
+const contrastDark = applyContrast(
   { hue: 30, chroma: 0.15, lightness: 0.6 },
-  -60, // negative = lighter text (reverse polarity)
-  true
+  -60 // negative = darker text
 )
 
 // Verify the actual contrast
@@ -210,28 +115,20 @@ Generate CSS for a hue with optional contrast support.
 **Options:**
 - `hue` (number): Hue angle in degrees (0-360)
 - `selector` (string): CSS selector for the generated styles
-- `contrast` (optional): Contrast color configuration
-  - `allowPolarityInversion` (boolean): Allow fallback to opposite polarity if preferred is out of gamut
-  - `selector`: CSS selector for contrast variant (default: `'&.contrast'`)
+- `prefix` (string, optional): Prefix for output CSS variables (default: `'o'`)
+- `contrastColors` (array, optional): Array of contrast color definitions
+  - `label` (string): Label for the contrast color (e.g., `'text'`, `'fill'`)
 
 **CSS Variables (input):**
 - `--lightness` (0-100): Perceptual lightness
-- `--chroma` (0-100): Color saturation (Display P3 supports higher chroma than sRGB)
-- `--contrast` (-108 to 108): Target APCA Lc value, signed
-  - Positive: Normal polarity (darker text on lighter background)
-  - Negative: Reverse polarity (lighter text on darker background)
-- `--allow-polarity-inversion` (0 or 1): Runtime control of polarity inversion
-- `--polarity-from` (0-100, optional): Lightness value for polarity decision when using `.polarity-fixed` class
-  - Only used with `.polarity-fixed` class on the contrast selector
-  - Falls back to `--lightness` if not set
-  - Useful for locking polarity during animations
-- `--pulse-frequency` (default: 1): Animation duration in seconds when using `.pulse` class
-- `--pulse-lightness-offset` (default: 0): Lightness offset for pulse animation (0-100 scale)
-- `--pulse-chroma-offset` (default: 0): Chroma offset for pulse animation (0-100 scale)
+- `--chroma` (0-100): Color saturation as percentage of maximum available
+- `--contrast-{label}` (-108 to 108): Target APCA Lc value, signed
+  - Positive: Lighter text (text is lighter than background)
+  - Negative: Darker text (text is darker than background)
 
 **CSS Variables (output):**
-- `--o-color`: The gamut-mapped OKLCH color (Display P3)
-- `--o-color-contrast`: The contrast color (Display P3)
+- `--{prefix}-color`: The gamut-mapped OKLCH color (Display P3)
+- `--{prefix}-color-{label}`: The contrast color for each label (Display P3)
 
 ### `gamutMap(color)`
 
@@ -247,25 +144,23 @@ interface Color {
 }
 ```
 
-### `applyContrast(color, signedContrast, allowPolarityInversion)`
+### `applyContrast(color, signedContrast)`
 
 Compute a contrast color achieving the target APCA Lc value.
 
 ```typescript
 function applyContrast(
   color: Color,
-  signedContrast: number, // -108 to 108
-  allowPolarityInversion: boolean
+  signedContrast: number // -108 to 108
 ): Color
 ```
 
 **Parameters:**
 - `signedContrast`: Target APCA Lc value
-  - Positive: Normal polarity (darker text)
-  - Negative: Reverse polarity (lighter text)
-- `allowPolarityInversion`: If `true`, allows fallback to opposite polarity when preferred is out of gamut
+  - Positive: Lighter text (text is lighter than background)
+  - Negative: Darker text (text is darker than background)
 
-This uses the same simplified math as the CSS output, so results match.
+The result is clamped to the gamut boundary [0, 1] for lightness. This uses the same simplified math as the CSS output, so results match.
 
 ### `measureContrast(baseColor, contrastColor)`
 
@@ -276,39 +171,33 @@ function measureContrast(baseColor: Color, contrastColor: Color): number
 ```
 
 Returns signed Lc value:
-- Positive: dark on light (normal polarity)
-- Negative: light on dark (reverse polarity)
+- Positive: light on dark (text is lighter than background)
+- Negative: dark on light (text is darker than background)
 
 ## Contrast Polarity
 
 The library uses a **signed contrast** system:
 
-| Contrast Value | Polarity | Behavior |
-|---------------|----------|-----------|
-| Positive (e.g., `60`) | Normal | Darker text on lighter background |
-| Negative (e.g., `-60`) | Reverse | Lighter text on darker background |
+| Contrast Value | Behavior |
+|---------------|-----------|
+| Positive (e.g., `60`) | Lighter text (text is lighter than background) |
+| Negative (e.g., `-60`) | Darker text (text is darker than background) |
 
-**Polarity Inversion:**
-- `allowPolarityInversion: false` — Forces the specified polarity (even if out of gamut)
-- `allowPolarityInversion: true` — Allows fallback to opposite polarity if preferred is out of gamut
+This convention makes it intuitive: positive = lighter, negative = darker.
 
-**Migration from old API:**
-- `force-light` → `contrast: -60, allowPolarityInversion: false`
-- `force-dark` → `contrast: 60, allowPolarityInversion: false`
-- `prefer-light` → `contrast: -60, allowPolarityInversion: true`
-- `prefer-dark` → `contrast: 60, allowPolarityInversion: true`
+When the requested polarity would result in an out-of-gamut color (e.g., requesting lighter text when the background is already very light), the result is clamped to the gamut boundary.
 
 ## How It Works
 
 ### Gamut Mapping
 
-The Display P3 gamut boundary for each hue is approximated by a tent function:
+The Display P3 gamut boundary for each hue is approximated by a tent function with curvature correction:
 
 ```
-maxChroma = apexChroma × min(L / apexLightness, (1 - L) / (1 - apexLightness))
+maxChroma = apexChroma × min(L / apexLightness, (1 - L) / (1 - apexLightness)) + correction
 ```
 
-Where `apexLightness` is the lightness where peak chroma occurs (the gamut apex), and `apexChroma` is the maximum chroma at that lightness. These values are computed at build time for each hue.
+Where `apexLightness` is the lightness where peak chroma occurs (the gamut apex), and `apexChroma` is the maximum chroma at that lightness. The curvature correction improves accuracy on the right half of the tent. These values are computed at build time for each hue.
 
 ### APCA Contrast
 
@@ -320,14 +209,14 @@ The library inverts the APCA equations to solve for the target luminance (Y) tha
 
 ### Heuristic Correction
 
-CSS uses simplified math (`Y = L³`) that ignores chroma's contribution to luminance. This causes slight under-delivery of contrast. The library fits heuristic correction coefficients for each hue and mode to compensate.
+CSS uses simplified math (`Y = L³`) that ignores chroma's contribution to luminance. This causes slight under-delivery of contrast. The library fits heuristic correction coefficients for each hue to compensate.
 
 ## Browser Support
 
 The generated CSS uses:
 - `oklch()` color function with Display P3 gamut
 - `pow()`, `sign()`, `abs()` math functions
-- CSS custom properties
+- CSS custom properties with `@property` declarations
 
 This requires modern browsers with Display P3 support:
 - **Chrome/Edge**: 111+ (full P3 support)
@@ -351,7 +240,7 @@ The library uses a simplified Y = L³ approximation for luminance calculations i
 - The Y = L³ simplification becomes less accurate
 
 **Heuristic corrections:**
-- Automatically fitted per-hue and per-mode to compensate for approximation errors
+- Automatically fitted per-hue to compensate for approximation errors
 - Multiplicative boost for dark bases and mid-lightness colors
 - Additional boost for high-contrast targets (> 30 Lc)
 - Reduces under-delivery significantly but cannot eliminate all errors

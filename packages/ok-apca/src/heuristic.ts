@@ -33,14 +33,9 @@ function computeSamplePoint(
 	chroma: number,
 	lightness: number,
 	targetContrast: number,
-	allowPolarityInversion: boolean,
 ): SamplePoint {
 	const baseColor = gamutMap({ hue, chroma, lightness })
-	const contrastColor = applyContrast(
-		{ hue, chroma, lightness },
-		targetContrast,
-		allowPolarityInversion,
-	)
+	const contrastColor = applyContrast({ hue, chroma, lightness }, targetContrast)
 	const actual = Math.abs(measureContrast(baseColor, contrastColor))
 	const error = actual - targetContrast
 
@@ -58,7 +53,7 @@ function computeSamplePoint(
 	}
 }
 
-function sampleErrors(hue: number, allowPolarityInversion: boolean): SamplePoint[] {
+function sampleErrors(hue: number): SamplePoint[] {
 	const lightnessSteps = 21
 	const chromaSteps = 5
 	const contrastSteps = 16
@@ -73,9 +68,7 @@ function sampleErrors(hue: number, allowPolarityInversion: boolean): SamplePoint
 
 			for (let contIdx = 0; contIdx < contrastSteps; contIdx++) {
 				const targetContrast = 30 + (contIdx / (contrastSteps - 1)) * 75
-				samples.push(
-					computeSamplePoint(hue, chroma, lightness, targetContrast, allowPolarityInversion),
-				)
+				samples.push(computeSamplePoint(hue, chroma, lightness, targetContrast))
 			}
 		}
 	}
@@ -198,18 +191,21 @@ function fineGridSearch(
  * Fit heuristic coefficients via grid search.
  * Minimizes under-delivery while keeping average error reasonable.
  * Results are cached.
+ *
+ * @param hue - The hue angle (0-360)
+ * @param _allowPolarityInversion - Deprecated, ignored. Kept for API compatibility.
  */
 export function fitHeuristicCoefficients(
 	hue: number,
-	allowPolarityInversion: boolean,
+	_allowPolarityInversion?: boolean,
 ): HeuristicFitResult {
-	const cacheKey = `${hue}:${allowPolarityInversion}`
+	const cacheKey = `${hue}`
 	const cached = fittedCoefficientsCache.get(cacheKey)
 	if (cached) {
 		return cached
 	}
 
-	const samples = sampleErrors(hue, allowPolarityInversion)
+	const samples = sampleErrors(hue)
 
 	const coarseResult = coarseGridSearch(samples)
 	const bestCoeffs = fineGridSearch(samples, coarseResult.coeffs)

@@ -12,26 +12,22 @@ describe('fitHeuristicCoefficients', () => {
 
 	describe('P3 gamut fitting quality', () => {
 		const testHues = [0, 30, 60, 120, 180, 240, 264, 300]
-		const allowInversionOptions = [false, true]
 
-		it('should produce reasonable MAE for all hues and inversion options', () => {
+		it('should produce reasonable MAE for all hues', () => {
 			const results: Array<{
 				hue: number
-				allowInversion: boolean
 				result: HeuristicFitResult
 			}> = []
 
 			for (const hue of testHues) {
-				for (const allowInversion of allowInversionOptions) {
-					const result = fitHeuristicCoefficients(hue, allowInversion)
-					results.push({ hue, allowInversion, result })
+				const result = fitHeuristicCoefficients(hue)
+				results.push({ hue, result })
 
-					// MAE is higher because we prioritize avoiding under-delivery over minimizing MAE
-					// The simplified Y=L³ approximation has larger errors with P3's higher chroma
-					// Over-delivery is safer for accessibility than under-delivery
-					expect(result.mae).toBeLessThan(45)
-					expect(result.mae).toBeGreaterThan(0)
-				}
+				// MAE is higher because we prioritize avoiding under-delivery over minimizing MAE
+				// The simplified Y=L³ approximation has larger errors with P3's higher chroma
+				// Over-delivery is safer for accessibility than under-delivery
+				expect(result.mae).toBeLessThan(45)
+				expect(result.mae).toBeGreaterThan(0)
 			}
 
 			// Summary statistics are computed but not logged during tests
@@ -47,19 +43,16 @@ describe('fitHeuristicCoefficients', () => {
 		it('should minimize under-delivery rates', () => {
 			const results: Array<{
 				hue: number
-				allowInversion: boolean
 				result: HeuristicFitResult
 			}> = []
 
 			for (const hue of testHues) {
-				for (const allowInversion of allowInversionOptions) {
-					const result = fitHeuristicCoefficients(hue, allowInversion)
-					results.push({ hue, allowInversion, result })
+				const result = fitHeuristicCoefficients(hue)
+				results.push({ hue, result })
 
-					// Under-delivery rate should be acceptable (< 80% for P3)
-					// P3's wider gamut makes heuristic corrections less effective
-					expect(result.underDeliveryRate).toBeLessThan(0.8)
-				}
+				// Under-delivery rate should be acceptable (< 80% for P3)
+				// P3's wider gamut makes heuristic corrections less effective
+				expect(result.underDeliveryRate).toBeLessThan(0.8)
 			}
 
 			const rates = results.map((r) => r.result.underDeliveryRate)
@@ -74,18 +67,15 @@ describe('fitHeuristicCoefficients', () => {
 		it('should avoid severe under-delivery', () => {
 			const results: Array<{
 				hue: number
-				allowInversion: boolean
 				result: HeuristicFitResult
 			}> = []
 
 			for (const hue of testHues) {
-				for (const allowInversion of allowInversionOptions) {
-					const result = fitHeuristicCoefficients(hue, allowInversion)
-					results.push({ hue, allowInversion, result })
+				const result = fitHeuristicCoefficients(hue)
+				results.push({ hue, result })
 
-					// Worst under-delivery should not be too severe (> -50 Lc with improved scoring)
-					expect(result.worstUnderDelivery).toBeGreaterThan(-50)
-				}
+				// Worst under-delivery should not be too severe (> -50 Lc with improved scoring)
+				expect(result.worstUnderDelivery).toBeGreaterThan(-50)
 			}
 
 			const worstValues = results.map((r) => r.result.worstUnderDelivery)
@@ -99,12 +89,10 @@ describe('fitHeuristicCoefficients', () => {
 
 		it('should have sufficient valid samples', () => {
 			for (const hue of testHues) {
-				for (const allowInversion of allowInversionOptions) {
-					const result = fitHeuristicCoefficients(hue, allowInversion)
+				const result = fitHeuristicCoefficients(hue)
 
-					// Should have at least 1000 valid (non-gamut-limited) samples
-					expect(result.sampleCount).toBeGreaterThan(1000)
-				}
+				// Should have at least 1000 valid (non-gamut-limited) samples
+				expect(result.sampleCount).toBeGreaterThan(1000)
 			}
 		})
 	})
@@ -112,8 +100,7 @@ describe('fitHeuristicCoefficients', () => {
 	describe('coefficient values', () => {
 		it('should produce reasonable coefficient ranges', () => {
 			const hue = 264
-			const allowInversion = true
-			const result = fitHeuristicCoefficients(hue, allowInversion)
+			const result = fitHeuristicCoefficients(hue)
 
 			// Coefficients should be in reasonable ranges (P3 requires more aggressive corrections)
 			expect(result.coefficients.darkBoost).toBeGreaterThan(0)
@@ -128,10 +115,9 @@ describe('fitHeuristicCoefficients', () => {
 
 		it('should cache results', () => {
 			const hue = 30
-			const allowInversion = true
 
-			const result1 = fitHeuristicCoefficients(hue, allowInversion)
-			const result2 = fitHeuristicCoefficients(hue, allowInversion)
+			const result1 = fitHeuristicCoefficients(hue)
+			const result2 = fitHeuristicCoefficients(hue)
 
 			// Should return the same object (cached)
 			expect(result1).toBe(result2)
@@ -146,7 +132,7 @@ describe('fitHeuristicCoefficients', () => {
 			// Over-delivery is preferred over under-delivery for accessibility
 
 			const hue = 264
-			const result = fitHeuristicCoefficients(hue, true)
+			const result = fitHeuristicCoefficients(hue)
 
 			// Verify P3 fitting produces acceptable results
 			expect(result.mae).toBeLessThan(45)
@@ -155,36 +141,18 @@ describe('fitHeuristicCoefficients', () => {
 		})
 	})
 
-	describe('inversion-specific fitting', () => {
-		it('should fit different coefficients for different inversion settings', () => {
-			const hue = 180
-			const withInversion = fitHeuristicCoefficients(hue, true)
-			const withoutInversion = fitHeuristicCoefficients(hue, false)
-
-			// Different inversion settings may produce different coefficients
-			const withCoeffs = JSON.stringify(withInversion.coefficients)
-			const withoutCoeffs = JSON.stringify(withoutInversion.coefficients)
-
-			// Coefficients might differ based on inversion behavior
-			// (though they could also be the same if the heuristic doesn't need adjustment)
-			expect(withCoeffs).toBeDefined()
-			expect(withoutCoeffs).toBeDefined()
-		})
-	})
-
 	describe('cache clearing', () => {
 		it('should clear cache and recompute', () => {
 			const hue = 90
-			const allowInversion = true
 
 			// Fit once
-			const result1 = fitHeuristicCoefficients(hue, allowInversion)
+			const result1 = fitHeuristicCoefficients(hue)
 
 			// Clear cache
 			clearHeuristicCache()
 
 			// Fit again - should recompute but produce same result
-			const result2 = fitHeuristicCoefficients(hue, allowInversion)
+			const result2 = fitHeuristicCoefficients(hue)
 
 			// Results should be equal but not the same object
 			expect(result1).not.toBe(result2)
@@ -198,7 +166,7 @@ describe('fitHeuristicCoefficients', () => {
 			const keyHues = [0, 120, 240, 264]
 
 			for (const hue of keyHues) {
-				const result = fitHeuristicCoefficients(hue, true)
+				const result = fitHeuristicCoefficients(hue)
 
 				// All metrics should be acceptable for P3
 				expect(result.mae).toBeLessThan(45)
