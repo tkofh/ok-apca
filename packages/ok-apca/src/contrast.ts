@@ -33,7 +33,7 @@ function computeMaxChroma(L: number, slice: GamutSlice): number {
 
 /**
  * Compute contrast color achieving target APCA Lc value.
- * Positive contrast = lighter text, negative = darker text.
+ * Positive contrast = darker text, negative = lighter text.
  */
 export function applyContrast(
 	color: Color,
@@ -42,7 +42,7 @@ export function applyContrast(
 ) {
 	const { hue } = color
 
-	const clampedContrast = -1 * clamp(-108, signedContrast, 108)
+	const clampedContrast = clamp(-108, signedContrast, 108)
 
 	const baseColor = gamutMap(color)
 	const L = baseColor.lightness

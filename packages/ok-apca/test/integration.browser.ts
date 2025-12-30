@@ -188,17 +188,8 @@ describe('CSS Color Generation Integration', () => {
 		})
 	})
 
-	/**
-	 * BUG: These tests document the polarity inversion bug.
-	 * When polarity inversion is disabled (--allow-polarity-inversion-text: 0),
-	 * the contrast colors behave erratically - they tend to prefer lighter colors
-	 * even with positive contrast values, and jump around unexpectedly.
-	 *
-	 * These tests use it.fails() to document the expected behavior that is
-	 * currently broken. When the bug is fixed, these tests should pass.
-	 */
-	describe('Contrast color computation WITHOUT polarity inversion (KNOWN BUG)', () => {
-		it.fails('produces dark text on light background with positive contrast', () => {
+	describe('Contrast color computation WITHOUT polarity inversion', () => {
+		it('produces dark text on light background with positive contrast', () => {
 			// Light background
 			testElement.style.setProperty('--lightness', '80')
 			testElement.style.setProperty('--chroma', '50')
@@ -213,7 +204,7 @@ describe('CSS Color Generation Integration', () => {
 			expect(textLightness).toBeLessThan(bgLightness)
 		})
 
-		it.fails('produces light text on dark background with negative contrast', () => {
+		it('produces light text on dark background with negative contrast', () => {
 			// Dark background
 			testElement.style.setProperty('--lightness', '20')
 			testElement.style.setProperty('--chroma', '50')
@@ -228,7 +219,7 @@ describe('CSS Color Generation Integration', () => {
 			expect(textLightness).toBeGreaterThan(bgLightness)
 		})
 
-		it.fails('increases contrast difference as contrast value increases', () => {
+		it('increases contrast difference as contrast value increases', () => {
 			testElement.style.setProperty('--lightness', '70')
 			testElement.style.setProperty('--chroma', '50')
 			testElement.style.setProperty('--allow-polarity-inversion-text', '0')
@@ -248,12 +239,15 @@ describe('CSS Color Generation Integration', () => {
 			expect.assert(differences[1] !== undefined)
 			expect.assert(differences[2] !== undefined)
 
-			// Higher contrast values should produce larger lightness differences
-			expect(differences[1]).toBeGreaterThan(differences[0])
-			expect(differences[2]).toBeGreaterThan(differences[1])
+			// Higher contrast values should produce larger or equal lightness differences
+			// (equal when hitting the L=0 or L=1 boundary)
+			expect(differences[1]).toBeGreaterThanOrEqual(differences[0])
+			expect(differences[2]).toBeGreaterThanOrEqual(differences[1])
+			// But at least some increase should happen between 30 and 90
+			expect(differences[2]).toBeGreaterThan(differences[0])
 		})
 
-		it.fails('handles maximum contrast values', () => {
+		it('handles maximum contrast values', () => {
 			testElement.style.setProperty('--lightness', '50')
 			testElement.style.setProperty('--chroma', '50')
 			testElement.style.setProperty('--contrast-text', '108')
@@ -265,7 +259,7 @@ describe('CSS Color Generation Integration', () => {
 			expect(textLightness).toBeLessThan(0.2)
 		})
 
-		it.fails('handles minimum contrast values', () => {
+		it('handles minimum contrast values', () => {
 			testElement.style.setProperty('--lightness', '50')
 			testElement.style.setProperty('--chroma', '50')
 			testElement.style.setProperty('--contrast-text', '-108')
@@ -277,7 +271,7 @@ describe('CSS Color Generation Integration', () => {
 			expect(textLightness).toBeGreaterThan(0.8)
 		})
 
-		it.fails('does not invert polarity even when preferred is out of gamut', () => {
+		it('does not invert polarity even when preferred is out of gamut', () => {
 			// Very dark background
 			testElement.style.setProperty('--lightness', '5')
 			testElement.style.setProperty('--chroma', '50')

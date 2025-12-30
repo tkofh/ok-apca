@@ -503,7 +503,7 @@ function generateContrastColorCss(
 		/* Contrast color: ${label} */
 		${generateHeuristicCss(coefficients, label)}
 
-		--_contrast-signed-${label}: clamp(-108, -1 * var(--_contrast-adjusted-${label}), 108);
+		--_contrast-signed-${label}: clamp(-108, var(--_contrast-adjusted-${label}), 108);
 		--_lc-norm-${label}: calc(abs(var(--_contrast-signed-${label})) / 100);
 
 		--_Y-bg-${label}: var(--_Y-bg);
