@@ -20,7 +20,7 @@
 	"scripts": {
 		"build": "tsdown",
 		"test": "vitest run",
-		"test:watch": "vitest",
+		"test:watch": "vitest watch",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
@@ -28,7 +28,6 @@
 	},
 	"devDependencies": {
 		"tsdown": "^0.18.3",
-		"typescript": "^5.9.3",
 		"vitest": "^4.0.16"
 	},
 	"publishConfig": {
