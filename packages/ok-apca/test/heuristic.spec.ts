@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-	clearHeuristicCache,
-	fitHeuristicCoefficients,
-	type HeuristicFitResult,
-} from '../src/heuristic.ts'
+import { clearHeuristicCache, fitHeuristicCoefficients } from '../src/heuristic.ts'
+import type { HeuristicFitResult } from '../src/types.ts'
 
 // ============================================================================
 // Heuristic Fitting Tests for Display P3

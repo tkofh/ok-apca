@@ -21,12 +21,15 @@
 		"build": "tsdown",
 		"test": "vitest run",
 		"test:watch": "vitest watch",
+		"test:unit": "vitest run --project unit",
+		"test:browser": "vitest run --project browser",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
 		"colorjs.io": "^0.6.0"
 	},
 	"devDependencies": {
+		"@vitest/browser-playwright": "^4.0.16",
 		"tsdown": "^0.18.3",
 		"vitest": "^4.0.16"
 	},
