@@ -1,60 +1,60 @@
 <script setup lang="ts">
 import { generateColorCss } from 'ok-apca'
 
-const hue = ref(240)
-const chroma = ref(50)
-const lightness = ref(50)
-const contrast = ref(60)
-const allowPolarityInversion = ref(true)
-const polarityFixed = ref(false)
-const polarityFrom = ref(50)
-const pulseEnabled = ref(false)
-const pulseFrequency = ref(1)
-const pulseLightnessOffset = ref(10)
-const pulseChromaOffset = ref(5)
+const route = useRoute()
+const router = useRouter()
+
+const state = reactive({
+	hue: 240,
+	chroma: 50,
+	lightness: 50,
+	contrast: 60,
+	allowPolarityInversion: true,
+})
+
+// Apply query string values
+for (const key of ['hue', 'chroma', 'lightness', 'contrast'] as const) {
+	if (typeof route.query[key] === 'string') {
+	const num = Number.parseFloat(route.query[key])
+		if (!Number.isNaN(num)) {
+			state[key] = num
+		}
+	}
+}
+if (typeof route.query.allowPolarityInversion === 'string') {
+	state.allowPolarityInversion = route.query.allowPolarityInversion === 'true' || route.query.allowPolarityInversion === '1'
+}
+
+// Clear query string after reading initial values
+onMounted(() => {
+	if (Object.keys(route.query).length > 0) {
+		router.replace({ query: {} })
+	}
+})
 
 const generatedCss = computed(() => {
 	return generateColorCss({
-		hue: hue.value,
+		hue: state.hue,
 		selector: '.preview',
-		contrast: {
-			allowPolarityInversion: allowPolarityInversion.value,
-			selector: '&',
-		},
+		contrastColors: [{ label: 'text' }],
 	})
 })
 
-const tag = useStyleTag('')
-
-watchEffect(() => {
-	if (generatedCss.value !== tag.css.value) {
-		tag.css.value = generatedCss.value
-	}
+useHead({
+  style: [
+    {
+      id: 'preview-css',
+      innerHTML: generatedCss,
+    }
+  ]
 })
 
 const previewStyle = computed(() => ({
-	'--lightness': lightness.value,
-	'--chroma': chroma.value,
-	'--contrast': contrast.value,
-	'--allow-polarity-inversion': allowPolarityInversion.value ? 1 : 0,
-	'--polarity-from': polarityFrom.value,
-	'--pulse-frequency': pulseFrequency.value,
-	'--pulse-lightness-offset': pulseLightnessOffset.value,
-	'--pulse-chroma-offset': pulseChromaOffset.value,
+	'--lightness': state.lightness,
+	'--chroma': state.chroma,
+	'--contrast-text': state.contrast,
+	'--allow-polarity-inversion-text': state.allowPolarityInversion ? 1 : 0,
 }))
-
-const previewClass = computed(() => ({
-	preview: true,
-	'polarity-fixed': polarityFixed.value,
-	pulse: pulseEnabled.value,
-}))
-
-// Sync polarityFrom with lightness when not fixed
-watch(lightness, (newLightness) => {
-	if (!polarityFixed.value) {
-		polarityFrom.value = newLightness
-	}
-})
 </script>
 
 <template>
@@ -63,81 +63,39 @@ watch(lightness, (newLightness) => {
 			<div class="controls">
 				<label>
 					Hue
-					<input v-model.number="hue" type="number" min="0" max="360" step="0.1" />
-					<input v-model.number="hue" type="range" min="0" max="360" step="0.1" />
+					<input v-model.number="state.hue" type="number" min="0" max="360" step="0.1" />
+					<input v-model.number="state.hue" type="range" min="0" max="360" step="0.1" />
 				</label>
 
 				<label>
 					Chroma (% of max)
-					<input v-model.number="chroma" type="number" min="0" max="100" step="0.1" />
-					<input v-model.number="chroma" type="range" min="0" max="100" step="0.1" />
+					<input v-model.number="state.chroma" type="number" min="0" max="100" step="0.1" />
+					<input v-model.number="state.chroma" type="range" min="0" max="100" step="0.1" />
 					<span class="hint">Percentage of maximum chroma available at current lightness</span>
 				</label>
 
 				<label>
 					Lightness
-					<input v-model.number="lightness" type="number" min="0" max="100" step="0.1" />
-					<input v-model.number="lightness" type="range" min="0" max="100" step="0.1" />
+					<input v-model.number="state.lightness" type="number" min="0" max="100" step="0.1" />
+					<input v-model.number="state.lightness" type="range" min="0" max="100" step="0.1" />
 				</label>
 
 				<label>
 					Contrast (signed)
-					<input v-model.number="contrast" type="number" min="-108" max="108" step="0.1" />
-					<input v-model.number="contrast" type="range" min="-108" max="108" step="0.1" />
+					<input v-model.number="state.contrast" type="number" min="-108" max="108" step="0.1" />
+					<input v-model.number="state.contrast" type="range" min="-108" max="108" step="0.1" />
 					<span class="hint">Positive = light text, Negative = dark text</span>
 				</label>
 
 				<label>
-					<input v-model="allowPolarityInversion" type="checkbox" />
+					<input v-model="state.allowPolarityInversion" type="checkbox" />
 					Allow Polarity Inversion
 					<span class="hint">Fallback to opposite polarity if preferred is out of gamut</span>
-				</label>
-
-				<label>
-					<input v-model="polarityFixed" type="checkbox" />
-					Fix Polarity
-					<span class="hint">Lock polarity decision to --polarity-from (for animations)</span>
-				</label>
-
-				<label v-if="polarityFixed">
-					Polarity From
-					<input v-model.number="polarityFrom" type="number" min="0" max="100" step="0.1" />
-					<input v-model.number="polarityFrom" type="range" min="0" max="100" step="0.1" />
-					<span class="hint">Lightness value used for polarity decision</span>
-				</label>
-
-				<div class="divider"></div>
-
-				<label>
-					<input v-model="pulseEnabled" type="checkbox" />
-					Enable Pulse Animation
-					<span class="hint">Animate lightness and chroma with configurable offsets</span>
-				</label>
-
-				<label v-if="pulseEnabled">
-					Pulse Frequency (seconds)
-					<input v-model.number="pulseFrequency" type="number" min="0.1" max="10" step="0.1" />
-					<input v-model.number="pulseFrequency" type="range" min="0.1" max="10" step="0.1" />
-					<span class="hint">Animation duration in seconds</span>
-				</label>
-
-				<label v-if="pulseEnabled">
-					Lightness Offset
-					<input v-model.number="pulseLightnessOffset" type="number" min="-50" max="50" step="0.1" />
-					<input v-model.number="pulseLightnessOffset" type="range" min="-50" max="50" step="0.1" />
-					<span class="hint">Pulse between base and base + offset</span>
-				</label>
-
-				<label v-if="pulseEnabled">
-					Chroma Offset
-					<input v-model.number="pulseChromaOffset" type="number" min="-50" max="50" step="0.1" />
-					<input v-model.number="pulseChromaOffset" type="range" min="-50" max="50" step="0.1" />
-					<span class="hint">Pulse between base and base + offset</span>
 				</label>
 			</div>
 		</div>
 
-		<div :class="previewClass" :style="previewStyle">
+		<div class="preview" :style="previewStyle">
 			<span class="preview-text">Contrast Text</span>
 		</div>
 	</div>
@@ -198,12 +156,6 @@ body {
 	gap: 1.5rem;
 }
 
-.divider {
-	height: 1px;
-	background: #3a3a3a;
-	margin: 0.5rem 0;
-}
-
 .controls label {
 	display: flex;
 	flex-direction: column;
@@ -261,7 +213,7 @@ body {
 }
 
 .preview-text {
-	color: var(--o-color-contrast);
+	color: var(--o-color-text);
 	font-size: 2rem;
 	font-weight: 600;
 }

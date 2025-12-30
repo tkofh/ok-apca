@@ -361,14 +361,6 @@ function generateContrastColorCss(
 	`
 }
 
-const POLARITY_FIXED_CSS = outdent`
-	&.polarity-fixed {
-		/* Override polarity decision to use --polarity-from (fallback to --lightness) */
-		--_polarity-lum-norm: clamp(0, var(--polarity-from, var(--lightness)) / 100, 1);
-		--_Y-bg: pow(var(--_polarity-lum-norm), 3);
-	}
-`
-
 /**
  * Generate CSS for OKLCH color with optional APCA-based contrast colors.
  *
@@ -407,8 +399,6 @@ export function generateColorCss(options: ColorGeneratorOptions) {
 		.map(({ label }) => generateContrastColorCss(label, hue, slice, prefix))
 		.join('\n\n')
 
-	const polarityFixedCss = contrastColors.length > 0 ? POLARITY_FIXED_CSS : ''
-
 	return outdent`
 		${options.selector} {
 			${baseColorCss}
@@ -416,8 +406,6 @@ export function generateColorCss(options: ColorGeneratorOptions) {
 			${sharedYBackground}
 
 			${contrastColorsCss}
-
-			${polarityFixedCss}
 		}
 	`
 }
