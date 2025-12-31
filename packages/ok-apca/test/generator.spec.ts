@@ -15,9 +15,6 @@ describe('generateColorCss', () => {
 		expect(css).toContain('var(--lightness)')
 		expect(css).toContain('var(--chroma)')
 
-		// Should contain build-time constants comment (apex values are inlined)
-		expect(css).toContain('/* Build-time constants for hue 30:')
-
 		// Should output the color with default prefix
 		expect(css).toContain('--o-color: oklch(')
 		expect(css).toContain('30')
@@ -98,7 +95,6 @@ describe('generateColorCss', () => {
 
 		// Should have helpful comments
 		expect(css).toContain('/* Runtime inputs')
-		expect(css).toContain('/* Build-time constants')
 		expect(css).toContain('/* Max chroma at this lightness')
 		expect(css).toContain('/* Output color')
 	})
@@ -111,13 +107,9 @@ describe('generateColorCss', () => {
 		})
 
 		// Check that numbers are properly formatted (no trailing zeros like "0.5000000000")
-		// Apex values are now inlined in the comment, e.g., "apex L=0.654, C=0.293..."
-		const apexMatch = css.match(/apex L=([\d.]+), C=([\d.]+)/)
-		expect(apexMatch).not.toBeNull()
-		if (apexMatch) {
-			const apexLum = apexMatch[1]
-			expect(apexLum).not.toMatch(/0{4,}$/)
-		}
+		// Numbers in the generated CSS should be reasonably short (max 8 decimal places)
+		const numbers = css.match(/\d+\.\d{9,}/g)
+		expect(numbers).toBeNull() // No numbers with 9+ decimal places
 	})
 
 	it('generates different CSS for different hues', () => {
@@ -208,10 +200,6 @@ describe('generateColorCss output structure', () => {
 			hue: 60,
 			selector: '.test',
 		})
-
-		// Apex values are now inlined directly in calc() expressions (not as var() references)
-		// The comment should document the build-time constants
-		expect(css).toContain('/* Build-time constants for hue 60:')
 
 		// Should have max chroma variable
 		expect(css).toContain('--_max-chr:')

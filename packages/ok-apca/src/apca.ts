@@ -1,13 +1,12 @@
-/**
- * APCA solving functions for computing target luminance values.
- */
-
 import { clamp, signedPow } from './util.ts'
 
-/**
- * Smoothing threshold for Bézier interpolation near zero contrast.
- */
-const APCA_SMOOTH_THRESHOLD = 0.022
+// APCA algorithm constants (exported for CSS generation)
+export const APCA_SMOOTH_THRESHOLD = 0.022
+export const APCA_SMOOTH_THRESHOLD_OFFSET = (APCA_SMOOTH_THRESHOLD + 0.027) / 1.14
+export const APCA_NORMAL_INV_EXP = 1 / 0.57
+export const APCA_REVERSE_INV_EXP = 1 / 0.62
+export const APCA_DARK_V_SCALE = APCA_SMOOTH_THRESHOLD / 0.6498
+export const APCA_LIGHT_V_SCALE = APCA_SMOOTH_THRESHOLD / 0.7068
 
 interface ApcaSolution {
 	readonly targetY: number
@@ -19,12 +18,12 @@ interface ApcaSolution {
  * Formula: Lc = 1.14 * (Ybg^0.56 - Yfg^0.57) - 0.027
  */
 function solveApcaNormal(Y: number, x: number): ApcaSolution {
-	const xnmin = signedPow(Y ** 0.56 - (APCA_SMOOTH_THRESHOLD + 0.027) / 1.14, 1 / 0.57)
-	const xnv = -Math.abs((Math.abs(xnmin) ** 0.43 * APCA_SMOOTH_THRESHOLD) / 0.6498)
+	const xnmin = signedPow(Y ** 0.56 - APCA_SMOOTH_THRESHOLD_OFFSET, APCA_NORMAL_INV_EXP)
+	const xnv = -(Math.abs(xnmin) ** 0.43) * APCA_DARK_V_SCALE
 
 	let targetY: number
 	if (x >= APCA_SMOOTH_THRESHOLD) {
-		targetY = signedPow(Y ** 0.56 - (x + 0.027) / 1.14, 1 / 0.57)
+		targetY = signedPow(Y ** 0.56 - (x + 0.027) / 1.14, APCA_NORMAL_INV_EXP)
 	} else {
 		// Bézier smoothing below threshold
 		const t = x / APCA_SMOOTH_THRESHOLD
@@ -44,12 +43,12 @@ function solveApcaNormal(Y: number, x: number): ApcaSolution {
  * Formula: Lc = 1.14 * (Yfg^0.62 - Ybg^0.65) - 0.027
  */
 function solveApcaReverse(Y: number, x: number): ApcaSolution {
-	const xrmin = signedPow(Y ** 0.65 + (APCA_SMOOTH_THRESHOLD + 0.027) / 1.14, 1 / 0.62)
-	const xrv = -Math.abs((Math.abs(xrmin) ** 0.38 * -APCA_SMOOTH_THRESHOLD) / 0.7068)
+	const xrmin = signedPow(Y ** 0.65 + APCA_SMOOTH_THRESHOLD_OFFSET, APCA_REVERSE_INV_EXP)
+	const xrv = Math.abs(xrmin) ** 0.38 * APCA_LIGHT_V_SCALE
 
 	let targetY: number
 	if (x >= APCA_SMOOTH_THRESHOLD) {
-		targetY = (Y ** 0.65 + (x + 0.027) / 1.14) ** (1 / 0.62)
+		targetY = (Y ** 0.65 + (x + 0.027) / 1.14) ** APCA_REVERSE_INV_EXP
 	} else {
 		// Bézier smoothing below threshold
 		const t = x / APCA_SMOOTH_THRESHOLD
