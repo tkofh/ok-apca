@@ -40,8 +40,6 @@ function generatePropertyRules(prefix: string, labels: readonly string[]): strin
 		css.property.numeric('chroma', true),
 		css.property.numeric('_lum-norm'),
 		css.property.numeric('_chr-pct'),
-		css.property.numeric('_max-chr'),
-		css.property.numeric('_chr'),
 		css.property.color(`${prefix}-color`, true),
 	]
 
@@ -54,25 +52,12 @@ function generatePropertyRules(prefix: string, labels: readonly string[]): strin
 	for (const label of labels) {
 		properties.push(
 			css.property.numeric(`contrast-${label}`, true),
-			css.property.numeric(`_boost-pct-${label}`),
-			css.property.numeric(`_boost-multiplicative-${label}`),
-			css.property.numeric(`_boost-absolute-${label}`),
-			css.property.numeric(`_contrast-adjusted-${label}`),
 			css.property.numeric(`_contrast-signed-${label}`),
 			css.property.numeric(`_lc-norm-${label}`),
 			css.property.numeric(`_Y-bg-${label}`),
-			css.property.numeric(`_prefer-light-${label}`),
-			css.property.numeric(`_prefer-dark-${label}`),
 			css.property.numeric(`_Y-dark-min-${label}`),
-			css.property.numeric(`_Y-dark-v-${label}`),
-			css.property.numeric(`_Y-dark-${label}`),
 			css.property.numeric(`_Y-light-min-${label}`),
-			css.property.numeric(`_Y-light-v-${label}`),
-			css.property.numeric(`_Y-light-${label}`),
-			css.property.numeric(`_Y-final-${label}`),
 			css.property.numeric(`_con-lum-${label}`),
-			css.property.numeric(`_con-max-chr-${label}`),
-			css.property.numeric(`_con-chr-${label}`),
 			css.property.color(`${prefix}-color-${label}`, true),
 		)
 	}
@@ -103,6 +88,7 @@ function validateUniqueLabels(labels: readonly string[]): void {
 
 // Shared CSS variable references
 const V_LUM_NORM = css.var('_lum-norm')
+const V_CHR_PCT = css.var('_chr-pct')
 
 /**
  * Generate CSS for the max chroma calculation with curvature correction.
@@ -155,38 +141,43 @@ function cssHermiteInterpolation(
 }
 
 function generateBaseColorCss(hue: number, slice: GamutSlice, prefix: string) {
+	// Build the max chroma expression (used once, inlined)
+	const maxChromaExpr = cssMaxChroma(V_LUM_NORM, slice)
+
+	// Build the chroma expression: maxChroma * chrPct (used once, inlined into output)
+	const chromaExpr = `(${maxChromaExpr}) * ${V_CHR_PCT}`
+
 	return outdent`
 		/* Runtime inputs: --lightness (0-100), --chroma (0-100 as % of max) */
 		--_lum-norm: clamp(0, ${css.var('lightness')} / 100, 1);
 		--_chr-pct: clamp(0, ${css.var('chroma')} / 100, 1);
 
-		/* Max chroma at this lightness (tent with curvature correction) */
-		--_max-chr: calc(
-			${cssMaxChroma(V_LUM_NORM, slice)}
-		);
-
-		/* Chroma as percentage of maximum available at this lightness */
-		--_chr: calc(${css.var('_max-chr')} * ${css.var('_chr-pct')});
-
-		/* Output color */
-		--${prefix}-color: oklch(${V_LUM_NORM} ${css.var('_chr')} ${hue});
+		/* Output color (max chroma and chroma inlined) */
+		--${prefix}-color: oklch(${V_LUM_NORM} calc(${chromaExpr}) ${hue});
 	`
 }
 
-function generateHeuristicCss(coefficients: HeuristicCoefficients, label: string): string {
-	return outdent`
-		/* Heuristic correction to prevent under-delivery of contrast */
-		/* Uses multiplicative boost for smooth interpolation from 0 */
-		/* boostPct = (darkBoost * max(0, 0.3 - L) + midBoost * max(0, 1 - |L - 0.5| * 2.5)) / 100 */
-		/* adjusted = target * (1 + boostPct) + contrastBoost * max(0, target - 30) */
-		--_boost-pct-${label}: calc(
-			(${css.number(coefficients.darkBoost)} * max(0, 0.3 - ${css.var('_lum-norm')}) +
-		 ${css.number(coefficients.midBoost)} * max(0, 1 - abs(${css.var('_lum-norm')} - 0.5) * 2.5)) / 100
-		);
-		--_boost-multiplicative-${label}: calc(${css.var(`contrast-${label}`, '0')} * ${css.var(`_boost-pct-${label}`)});
-		--_boost-absolute-${label}: calc(${css.number(coefficients.contrastBoost)} * max(0, ${css.var(`contrast-${label}`, '0')} - 30));
-		--_contrast-adjusted-${label}: calc(${css.var(`contrast-${label}`, '0')} + ${css.var(`_boost-multiplicative-${label}`)} + ${css.var(`_boost-absolute-${label}`)});
-	`
+/**
+ * Generate the heuristic-adjusted contrast value as a JS expression string.
+ * This inlines boost-pct, boost-multiplicative, boost-absolute, and contrast-adjusted.
+ */
+function buildContrastAdjustedExpr(
+	coefficients: HeuristicCoefficients,
+	label: string,
+): string {
+	const contrastVar = css.var(`contrast-${label}`, '0')
+
+	// boostPct = (darkBoost * max(0, 0.3 - L) + midBoost * max(0, 1 - |L - 0.5| * 2.5)) / 100
+	const boostPctExpr = `(${css.number(coefficients.darkBoost)} * max(0, 0.3 - ${V_LUM_NORM}) + ${css.number(coefficients.midBoost)} * max(0, 1 - abs(${V_LUM_NORM} - 0.5) * 2.5)) / 100`
+
+	// boostMultiplicative = contrast * boostPct
+	const boostMultiplicativeExpr = `${contrastVar} * (${boostPctExpr})`
+
+	// boostAbsolute = contrastBoost * max(0, contrast - 30)
+	const boostAbsoluteExpr = `${css.number(coefficients.contrastBoost)} * max(0, ${contrastVar} - 30)`
+
+	// contrastAdjusted = contrast + boostMultiplicative + boostAbsolute
+	return `${contrastVar} + (${boostMultiplicativeExpr}) + (${boostAbsoluteExpr})`
 }
 
 // Pre-computed CSS constants from APCA algorithm
@@ -197,12 +188,17 @@ const CSS_REVERSE_INV_EXP = css.number(APCA_REVERSE_INV_EXP)
 const CSS_DARK_V_SCALE = css.number(APCA_DARK_V_SCALE)
 const CSS_LIGHT_V_SCALE = css.number(APCA_LIGHT_V_SCALE)
 
-function generateNormalPolarityCss(label: string, yBgVar: string) {
+/**
+ * Build the Y-dark expression (normal polarity).
+ * Inlines Y-dark-v into the Hermite interpolation.
+ */
+function buildYDarkExpr(label: string, yBgVar: string): string {
 	const V_LC_NORM = css.var(`_lc-norm-${label}`)
 	const V_Y_DARK_MIN = css.var(`_Y-dark-min-${label}`)
-	const V_Y_DARK_V = css.var(`_Y-dark-v-${label}`)
 
-	const apcaTermThreshold = `pow(${yBgVar}, 0.56) - ${CSS_SMOOTH_THRESHOLD_OFFSET}`
+	// Y-dark-v = -1 * pow(abs(Y-dark-min), 0.43) * DARK_V_SCALE
+	const yDarkVExpr = `-1 * pow(abs(${V_Y_DARK_MIN}), 0.43) * ${CSS_DARK_V_SCALE}`
+
 	const apcaTermDynamic = `pow(${yBgVar}, 0.56) - (${V_LC_NORM} + 0.027) / 1.14`
 
 	const directSolution = outdent`
@@ -211,30 +207,27 @@ function generateNormalPolarityCss(label: string, yBgVar: string) {
 	`
 
 	const tParameter = `${V_LC_NORM} / ${CSS_SMOOTH_THRESHOLD}`
-	const bezierInterpolation = cssHermiteInterpolation(yBgVar, V_Y_DARK_MIN, V_Y_DARK_V, tParameter)
+	const bezierInterpolation = cssHermiteInterpolation(yBgVar, V_Y_DARK_MIN, yDarkVExpr, tParameter)
 
 	const aboveThreshold = css.unitClamp(`sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1`)
 
 	return outdent`
-		/* Normal polarity: solve for darker Y (dark text on light background) */
-		--_Y-dark-min-${label}: calc(
-			pow(abs(${apcaTermThreshold}), ${CSS_NORMAL_INV_EXP}) *
-			sign(${apcaTermThreshold})
-		);
-		--_Y-dark-v-${label}: calc(-1 * pow(abs(${V_Y_DARK_MIN}), 0.43) * ${CSS_DARK_V_SCALE});
-		--_Y-dark-${label}: calc(
-			${aboveThreshold} * (${directSolution}) +
-			(1 - ${aboveThreshold}) * (${bezierInterpolation})
-		);
+		${aboveThreshold} * (${directSolution}) +
+		(1 - ${aboveThreshold}) * (${bezierInterpolation})
 	`
 }
 
-function generateReversePolarityCss(label: string, yBgVar: string) {
+/**
+ * Build the Y-light expression (reverse polarity).
+ * Inlines Y-light-v into the Hermite interpolation.
+ */
+function buildYLightExpr(label: string, yBgVar: string): string {
 	const V_LC_NORM = css.var(`_lc-norm-${label}`)
 	const V_Y_LIGHT_MIN = css.var(`_Y-light-min-${label}`)
-	const V_Y_LIGHT_V = css.var(`_Y-light-v-${label}`)
 
-	const apcaTermThreshold = `pow(${yBgVar}, 0.65) + ${CSS_SMOOTH_THRESHOLD_OFFSET}`
+	// Y-light-v = pow(abs(Y-light-min), 0.38) * LIGHT_V_SCALE
+	const yLightVExpr = `pow(abs(${V_Y_LIGHT_MIN}), 0.38) * ${CSS_LIGHT_V_SCALE}`
+
 	const apcaTermDynamic = `pow(${yBgVar}, 0.65) - ((-1 * ${V_LC_NORM}) - 0.027) / 1.14`
 
 	const directSolution = `pow(${apcaTermDynamic}, ${CSS_REVERSE_INV_EXP})`
@@ -243,11 +236,56 @@ function generateReversePolarityCss(label: string, yBgVar: string) {
 	const bezierInterpolation = cssHermiteInterpolation(
 		yBgVar,
 		V_Y_LIGHT_MIN,
-		V_Y_LIGHT_V,
+		yLightVExpr,
 		tParameter,
 	)
 
 	const aboveThreshold = css.unitClamp(`sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1`)
+
+	return outdent`
+		${aboveThreshold} * (${directSolution}) +
+		(1 - ${aboveThreshold}) * (${bezierInterpolation})
+	`
+}
+
+/**
+ * Build the Y-final expression.
+ * Inlines prefer-light, prefer-dark, Y-light, and Y-dark.
+ */
+function buildYFinalExpr(label: string, yBgVar: string): string {
+	const V_CONTRAST_SIGNED = css.var(`_contrast-signed-${label}`)
+
+	// prefer-light = clamp(0, sign(contrast-signed - 0.0001), 1)
+	const preferLightExpr = css.unitClamp(`sign(${V_CONTRAST_SIGNED} - 0.0001)`)
+
+	// prefer-dark = clamp(0, -1 * sign(contrast-signed - 0.0001), 1)
+	const preferDarkExpr = css.unitClamp(`-1 * sign(${V_CONTRAST_SIGNED} - 0.0001)`)
+
+	const yLightExpr = buildYLightExpr(label, yBgVar)
+	const yDarkExpr = buildYDarkExpr(label, yBgVar)
+
+	return outdent`
+		(${preferLightExpr}) * (${yLightExpr}) +
+		(${preferDarkExpr}) * (${yDarkExpr})
+	`
+}
+
+function generateNormalPolarityCss(label: string, yBgVar: string) {
+	const V_Y_DARK_MIN = css.var(`_Y-dark-min-${label}`)
+
+	const apcaTermThreshold = `pow(${yBgVar}, 0.56) - ${CSS_SMOOTH_THRESHOLD_OFFSET}`
+
+	return outdent`
+		/* Normal polarity: solve for darker Y (dark text on light background) */
+		--_Y-dark-min-${label}: calc(
+			pow(abs(${apcaTermThreshold}), ${CSS_NORMAL_INV_EXP}) *
+			sign(${apcaTermThreshold})
+		);
+	`
+}
+
+function generateReversePolarityCss(label: string, yBgVar: string) {
+	const apcaTermThreshold = `pow(${yBgVar}, 0.65) + ${CSS_SMOOTH_THRESHOLD_OFFSET}`
 
 	return outdent`
 		/* Reverse polarity: solve for lighter Y (light text on dark background) */
@@ -255,32 +293,6 @@ function generateReversePolarityCss(label: string, yBgVar: string) {
 			pow(abs(${apcaTermThreshold}), ${CSS_REVERSE_INV_EXP}) *
 			sign(${apcaTermThreshold})
 		);
-		--_Y-light-v-${label}: calc(pow(abs(${V_Y_LIGHT_MIN}), 0.38) * ${CSS_LIGHT_V_SCALE});
-		--_Y-light-${label}: calc(
-			${aboveThreshold} * (${directSolution}) +
-			(1 - ${aboveThreshold}) * (${bezierInterpolation})
-		);
-	`
-}
-
-function generateTargetYCss(label: string) {
-	const V_CONTRAST_SIGNED = css.var(`_contrast-signed-${label}`)
-	const V_PREFER_LIGHT = css.var(`_prefer-light-${label}`)
-	const V_PREFER_DARK = css.var(`_prefer-dark-${label}`)
-	const V_Y_LIGHT = css.var(`_Y-light-${label}`)
-	const V_Y_DARK = css.var(`_Y-dark-${label}`)
-
-	return outdent`
-		/* Select polarity based on contrast sign */
-		/* Positive contrast = lighter text, negative = darker text */
-		--_prefer-light-${label}: ${css.unitClamp(`sign(${V_CONTRAST_SIGNED} - 0.0001)`)};
-		--_prefer-dark-${label}: ${css.unitClamp(`-1 * sign(${V_CONTRAST_SIGNED} - 0.0001)`)};
-
-		/* Final Y selection based on polarity */
-		--_Y-final-${label}: clamp(0,
-			${V_PREFER_LIGHT} * ${V_Y_LIGHT} +
-			${V_PREFER_DARK} * ${V_Y_DARK},
-		1);
 	`
 }
 
@@ -292,34 +304,39 @@ function generateContrastColorCss(
 ): string {
 	const { coefficients } = fitHeuristicCoefficients(hue)
 
-	const V_Y_FINAL = css.var(`_Y-final-${label}`)
+	const V_Y_BG_LABEL = css.var(`_Y-bg-${label}`)
 	const V_CON_LUM = css.var(`_con-lum-${label}`)
-	const V_CON_MAX_CHR = css.var(`_con-max-chr-${label}`)
-	const V_CON_CHR = css.var(`_con-chr-${label}`)
+
+	// Build inlined expressions
+	const contrastAdjustedExpr = buildContrastAdjustedExpr(coefficients, label)
+	const yFinalExpr = buildYFinalExpr(label, V_Y_BG_LABEL)
+
+	// con-lum = clamp(0, pow(Y-final, 1/3), 1) - but Y-final is inlined
+	const conLumExpr = `pow(clamp(0, ${yFinalExpr}, 1), 1 / 3)`
+
+	// con-max-chr uses con-lum (which is a CSS var since it's used twice)
+	const conMaxChrExpr = cssMaxChroma(V_CON_LUM, slice)
+
+	// con-chr = con-max-chr * chr-pct (inlined into output)
+	const conChrExpr = `(${conMaxChrExpr}) * ${V_CHR_PCT}`
 
 	return outdent`
 		/* Contrast color: ${label} */
-		${generateHeuristicCss(coefficients, label)}
-
-		--_contrast-signed-${label}: clamp(-108, ${css.var(`_contrast-adjusted-${label}`)}, 108);
+		/* Heuristic correction inlined: boostPct, boostMultiplicative, boostAbsolute, contrastAdjusted */
+		--_contrast-signed-${label}: clamp(-108, calc(${contrastAdjustedExpr}), 108);
 		--_lc-norm-${label}: calc(abs(${css.var(`_contrast-signed-${label}`)}) / 100);
 
 		--_Y-bg-${label}: ${css.var('_Y-bg')};
 
-		${generateNormalPolarityCss(label, css.var(`_Y-bg-${label}`))}
+		${generateNormalPolarityCss(label, V_Y_BG_LABEL)}
 
-		${generateReversePolarityCss(label, css.var(`_Y-bg-${label}`))}
+		${generateReversePolarityCss(label, V_Y_BG_LABEL)}
 
-		${generateTargetYCss(label)}
+		/* Y-final, prefer-light, prefer-dark, Y-light, Y-dark all inlined into con-lum */
+		--_con-lum-${label}: clamp(0, calc(${conLumExpr}), 1);
 
-		--_con-lum-${label}: clamp(0, pow(${V_Y_FINAL}, 1 / 3), 1);
-
-		--_con-max-chr-${label}: calc(
-			${cssMaxChroma(V_CON_LUM, slice)}
-		);
-		--_con-chr-${label}: calc(${V_CON_MAX_CHR} * ${css.var('_chr-pct')});
-
-		--${prefix}-color-${label}: oklch(${V_CON_LUM} ${V_CON_CHR} ${hue});
+		/* con-max-chr and con-chr inlined into output color */
+		--${prefix}-color-${label}: oklch(${V_CON_LUM} calc(${conChrExpr}) ${hue});
 	`
 }
 

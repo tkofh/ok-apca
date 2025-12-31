@@ -95,7 +95,6 @@ describe('generateColorCss', () => {
 
 		// Should have helpful comments
 		expect(css).toContain('/* Runtime inputs')
-		expect(css).toContain('/* Max chroma at this lightness')
 		expect(css).toContain('/* Output color')
 	})
 
@@ -201,12 +200,12 @@ describe('generateColorCss output structure', () => {
 			selector: '.test',
 		})
 
-		// Should have max chroma variable
-		expect(css).toContain('--_max-chr:')
-
 		// The output should reference the computed values
 		expect(css).toContain('var(--_lum-norm)')
-		expect(css).toContain('var(--_chr)')
+		expect(css).toContain('var(--_chr-pct)')
+
+		// Max chroma and chroma are inlined into the output color
+		expect(css).toContain('--o-color: oklch(')
 	})
 
 	it('produces contrast CSS with APCA calculation chain', () => {
@@ -222,42 +221,41 @@ describe('generateColorCss output structure', () => {
 		// Should have per-label Y-bg
 		expect(css).toContain('--_Y-bg-text:')
 
-		// Should always have both polarities
-		expect(css).toContain('--_Y-dark-text:')
-		expect(css).toContain('--_Y-light-text:')
+		// Should have Y-dark-min and Y-light-min (used by Hermite interpolation)
+		expect(css).toContain('--_Y-dark-min-text:')
+		expect(css).toContain('--_Y-light-min-text:')
 
 		// Should have contrast lightness
 		expect(css).toContain('--_con-lum-text:')
 	})
 
-	it('produces contrast CSS with both polarities for runtime selection', () => {
+	it('produces contrast CSS with both polarities inlined into con-lum', () => {
 		const css = generateColorCss({
 			hue: 60,
 			selector: '.test',
 			contrastColors: [{ label: 'text' }],
 		})
 
-		// Should always have both polarities for runtime selection
-		expect(css).toContain('--_Y-dark-text:')
-		expect(css).toContain('--_Y-light-text:')
+		// Y-dark, Y-light, prefer-light, prefer-dark are inlined into con-lum
+		// Check that con-lum contains the polarity selection logic
+		expect(css).toContain('--_con-lum-text:')
 
-		// Should have polarity selection logic
-		expect(css).toContain('--_prefer-light-text:')
-		expect(css).toContain('--_prefer-dark-text:')
+		// The inlined expression should contain sign() for polarity detection
+		expect(css).toContain('sign(var(--_contrast-signed-text)')
 	})
 
-	it('includes heuristic correction boost in contrast CSS', () => {
+	it('includes heuristic correction inlined in contrast-signed', () => {
 		const css = generateColorCss({
 			hue: 60,
 			selector: '.test',
 			contrastColors: [{ label: 'text' }],
 		})
 
-		// Should have heuristic boost calculations
-		expect(css).toContain('--_boost-pct-text:')
-		expect(css).toContain('--_boost-multiplicative-text:')
-		expect(css).toContain('--_boost-absolute-text:')
-		expect(css).toContain('--_contrast-adjusted-text:')
+		// Heuristic boost is inlined into contrast-signed
+		expect(css).toContain('--_contrast-signed-text:')
+
+		// The comment mentions the inlining
+		expect(css).toContain('Heuristic correction inlined')
 	})
 
 	it('uses fallback value of 0 for --contrast-{label}', () => {
@@ -278,10 +276,16 @@ describe('generateColorCss output structure', () => {
 			contrastColors: [{ label: 'text' }, { label: 'fill' }],
 		})
 
-		// Each contrast color should reference var(--_chr-pct)
-		expect(css).toContain('--_con-chr-text: calc(')
-		expect(css).toContain('var(--_chr-pct)')
-		expect(css).toContain('--_con-chr-fill: calc(')
+		// Each contrast color output should reference var(--_chr-pct)
+		// (con-chr is now inlined into the output color)
+		expect(css).toContain('--o-color-text: oklch(')
+		expect(css).toContain('--o-color-fill: oklch(')
+
+		// The chroma calculation in output colors should use chr-pct
+		const textColorMatch = css.match(/--o-color-text:[^;]+var\(--_chr-pct\)/)
+		const fillColorMatch = css.match(/--o-color-fill:[^;]+var\(--_chr-pct\)/)
+		expect(textColorMatch).not.toBeNull()
+		expect(fillColorMatch).not.toBeNull()
 	})
 })
 
