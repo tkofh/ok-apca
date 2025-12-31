@@ -7,7 +7,7 @@
 
 import Color from 'colorjs.io'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { generateColorCss } from '../src/index.ts'
+import { defineHue } from '../src/index.ts'
 
 /**
  * Test configuration matching the playground app.
@@ -26,7 +26,7 @@ describe('CSS Color Generation Integration', () => {
 
 	beforeEach(() => {
 		// Generate and inject CSS
-		const css = generateColorCss(TEST_CONFIG)
+		const { css } = defineHue(TEST_CONFIG)
 
 		styleElement = document.createElement('style')
 		styleElement.textContent = css
@@ -51,18 +51,18 @@ describe('CSS Color Generation Integration', () => {
 	})
 
 	function getColor() {
-		const colorStr = getComputedStyle(testElement).getPropertyValue('--o-color').trim()
+		const colorStr = getComputedStyle(testElement).getPropertyValue('--color').trim()
 		return new Color(colorStr)
 	}
 
 	function getTextColor() {
-		const colorStr = getComputedStyle(testElement).getPropertyValue('--o-color-text').trim()
+		const colorStr = getComputedStyle(testElement).getPropertyValue('--color-text').trim()
 		return new Color(colorStr)
 	}
 
 	describe('Base color computation', () => {
 		it('produces a valid oklch color at default values', () => {
-			const bgColorStr = getComputedStyle(testElement).getPropertyValue('--o-color').trim()
+			const bgColorStr = getComputedStyle(testElement).getPropertyValue('--color').trim()
 
 			expect(bgColorStr).toMatch(/oklch\(/)
 			const lightness = getColor().get('oklch.l')

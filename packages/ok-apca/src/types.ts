@@ -8,15 +8,43 @@ export interface Color {
 	readonly lightness: number
 }
 
-interface ContrastColorDefinition {
+export interface ContrastColor {
 	readonly label: string
 }
 
-export interface ColorGeneratorOptions {
+/**
+ * Options for defining a hue with optional contrast colors.
+ * All optional fields have sensible defaults applied by `defineHue`.
+ */
+export interface HueOptions {
 	readonly hue: number
 	readonly selector: string
-	readonly contrastColors?: readonly ContrastColorDefinition[]
-	readonly prefix?: string
+	readonly contrastColors?: readonly ContrastColor[]
+	/**
+	 * Base name for the output CSS custom properties.
+	 * @default 'color'
+	 */
+	readonly output?: string
+}
+
+/**
+ * Internal type for generateHueCss input.
+ */
+export interface HueDefinition {
+	readonly hue: number
+	readonly selector: string
+	readonly output: string
+	readonly contrastColors: readonly ContrastColor[]
+}
+
+/**
+ * Validated and normalized hue with generated CSS.
+ * Created by `defineHue`.
+ */
+export interface Hue {
+	readonly hue: number
+	readonly selector: string
+	readonly css: string
 }
 
 export interface GamutApex {

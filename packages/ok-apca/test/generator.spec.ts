@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { generateColorCss } from '../src/index.ts'
+import { defineHue } from '../src/index.ts'
 
-describe('generateColorCss', () => {
+describe('defineHue', () => {
 	it('generates basic color CSS for a given hue', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 30,
 			selector: '.color',
 		})
@@ -15,13 +15,13 @@ describe('generateColorCss', () => {
 		expect(css).toContain('var(--lightness)')
 		expect(css).toContain('var(--chroma)')
 
-		// Should output the color with default prefix
-		expect(css).toContain('--o-color: oklch(')
+		// Should output the color with default output name
+		expect(css).toContain('--color: oklch(')
 		expect(css).toContain('30')
 	})
 
 	it('generates contrast CSS when contrastColors provided', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 30,
 			selector: '.color',
 			contrastColors: [{ label: 'text' }],
@@ -31,23 +31,23 @@ describe('generateColorCss', () => {
 		expect(css).toContain('--_Y-bg:')
 
 		// Should output contrast color
-		expect(css).toContain('--o-color-text: oklch(')
+		expect(css).toContain('--color-text: oklch(')
 
 		// Should contain labeled variables
 		expect(css).toContain('--contrast-text')
 	})
 
 	it('generates multiple contrast colors', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 30,
 			selector: '.color',
 			contrastColors: [{ label: 'text' }, { label: 'fill' }, { label: 'stroke' }],
 		})
 
 		// Should output all contrast colors
-		expect(css).toContain('--o-color-text: oklch(')
-		expect(css).toContain('--o-color-fill: oklch(')
-		expect(css).toContain('--o-color-stroke: oklch(')
+		expect(css).toContain('--color-text: oklch(')
+		expect(css).toContain('--color-fill: oklch(')
+		expect(css).toContain('--color-stroke: oklch(')
 
 		// Should contain labeled variables for each
 		expect(css).toContain('--contrast-text')
@@ -55,21 +55,21 @@ describe('generateColorCss', () => {
 		expect(css).toContain('--contrast-stroke')
 	})
 
-	it('uses custom prefix when provided', () => {
-		const css = generateColorCss({
+	it('uses custom output name when provided', () => {
+		const { css } = defineHue({
 			hue: 30,
 			selector: '.color',
-			prefix: 'theme',
+			output: 'theme',
 			contrastColors: [{ label: 'text' }],
 		})
 
-		expect(css).toContain('--theme-color: oklch(')
-		expect(css).toContain('--theme-color-text: oklch(')
-		expect(css).not.toContain('--o-color')
+		expect(css).toContain('--theme: oklch(')
+		expect(css).toContain('--theme-text: oklch(')
+		expect(css).not.toContain('--color:')
 	})
 
 	it('normalizes hue values outside 0-360 range', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 390, // Should become 30
 			selector: '.color',
 		})
@@ -79,7 +79,7 @@ describe('generateColorCss', () => {
 	})
 
 	it('handles negative hue values', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: -30, // Should become 330
 			selector: '.color',
 		})
@@ -88,7 +88,7 @@ describe('generateColorCss', () => {
 	})
 
 	it('generates readable CSS with comments', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 30,
 			selector: '.color',
 		})
@@ -99,7 +99,7 @@ describe('generateColorCss', () => {
 	})
 
 	it('generates valid CSS property values', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 200,
 			selector: '[data-color]',
 			contrastColors: [{ label: 'text' }],
@@ -112,12 +112,12 @@ describe('generateColorCss', () => {
 	})
 
 	it('generates different CSS for different hues', () => {
-		const css30 = generateColorCss({
+		const { css: css30 } = defineHue({
 			hue: 30,
 			selector: '.color',
 		})
 
-		const css180 = generateColorCss({
+		const { css: css180 } = defineHue({
 			hue: 180,
 			selector: '.color',
 		})
@@ -131,13 +131,13 @@ describe('generateColorCss', () => {
 	})
 
 	it('generates CSS without contrast when contrastColors omitted', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 30,
 			selector: '.color',
 		})
 
 		// Should not contain contrast-specific variables
-		expect(css).not.toContain('--o-color-')
+		expect(css).not.toContain('--color-')
 		expect(css).not.toContain('--_Y-bg:')
 		expect(css).not.toContain('--_Y-dark')
 		expect(css).not.toContain('--_Y-light')
@@ -147,7 +147,7 @@ describe('generateColorCss', () => {
 	it('validates contrast color labels', () => {
 		// Invalid: starts with number
 		expect(() =>
-			generateColorCss({
+			defineHue({
 				hue: 30,
 				selector: '.color',
 				contrastColors: [{ label: '1text' }],
@@ -156,7 +156,7 @@ describe('generateColorCss', () => {
 
 		// Invalid: contains space
 		expect(() =>
-			generateColorCss({
+			defineHue({
 				hue: 30,
 				selector: '.color',
 				contrastColors: [{ label: 'text color' }],
@@ -165,7 +165,7 @@ describe('generateColorCss', () => {
 
 		// Invalid: contains special character
 		expect(() =>
-			generateColorCss({
+			defineHue({
 				hue: 30,
 				selector: '.color',
 				contrastColors: [{ label: 'text!' }],
@@ -174,7 +174,7 @@ describe('generateColorCss', () => {
 
 		// Valid labels should not throw
 		expect(() =>
-			generateColorCss({
+			defineHue({
 				hue: 30,
 				selector: '.color',
 				contrastColors: [{ label: 'text' }, { label: 'fill-color' }, { label: 'stroke_2' }],
@@ -184,7 +184,7 @@ describe('generateColorCss', () => {
 
 	it('validates unique labels', () => {
 		expect(() =>
-			generateColorCss({
+			defineHue({
 				hue: 30,
 				selector: '.color',
 				contrastColors: [{ label: 'text' }, { label: 'text' }],
@@ -193,9 +193,9 @@ describe('generateColorCss', () => {
 	})
 })
 
-describe('generateColorCss output structure', () => {
+describe('defineHue output structure', () => {
 	it('produces CSS with proper variable dependencies', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 60,
 			selector: '.test',
 		})
@@ -205,11 +205,11 @@ describe('generateColorCss output structure', () => {
 		expect(css).toContain('var(--_chr-pct)')
 
 		// Max chroma and chroma are inlined into the output color
-		expect(css).toContain('--o-color: oklch(')
+		expect(css).toContain('--color: oklch(')
 	})
 
 	it('produces contrast CSS with APCA calculation chain', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 60,
 			selector: '.test',
 			contrastColors: [{ label: 'text' }],
@@ -230,7 +230,7 @@ describe('generateColorCss output structure', () => {
 	})
 
 	it('produces contrast CSS with both polarities inlined into con-lum', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 60,
 			selector: '.test',
 			contrastColors: [{ label: 'text' }],
@@ -245,7 +245,7 @@ describe('generateColorCss output structure', () => {
 	})
 
 	it('includes heuristic correction inlined in contrast-signed', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 60,
 			selector: '.test',
 			contrastColors: [{ label: 'text' }],
@@ -259,7 +259,7 @@ describe('generateColorCss output structure', () => {
 	})
 
 	it('uses fallback value of 0 for --contrast-{label}', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 60,
 			selector: '.test',
 			contrastColors: [{ label: 'text' }],
@@ -270,7 +270,7 @@ describe('generateColorCss output structure', () => {
 	})
 
 	it('shares chroma percentage across all contrast colors', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 60,
 			selector: '.test',
 			contrastColors: [{ label: 'text' }, { label: 'fill' }],
@@ -278,12 +278,12 @@ describe('generateColorCss output structure', () => {
 
 		// Each contrast color output should reference var(--_chr-pct)
 		// (con-chr is now inlined into the output color)
-		expect(css).toContain('--o-color-text: oklch(')
-		expect(css).toContain('--o-color-fill: oklch(')
+		expect(css).toContain('--color-text: oklch(')
+		expect(css).toContain('--color-fill: oklch(')
 
 		// The chroma calculation in output colors should use chr-pct
-		const textColorMatch = css.match(/--o-color-text:[^;]+var\(--_chr-pct\)/)
-		const fillColorMatch = css.match(/--o-color-fill:[^;]+var\(--_chr-pct\)/)
+		const textColorMatch = css.match(/--color-text:[^;]+var\(--_chr-pct\)/)
+		const fillColorMatch = css.match(/--color-fill:[^;]+var\(--_chr-pct\)/)
 		expect(textColorMatch).not.toBeNull()
 		expect(fillColorMatch).not.toBeNull()
 	})
@@ -291,7 +291,7 @@ describe('generateColorCss output structure', () => {
 
 describe('shared Y-bg', () => {
 	it('should reference shared Y-bg for all contrast colors', () => {
-		const css = generateColorCss({
+		const { css } = defineHue({
 			hue: 30,
 			selector: '.orange',
 			contrastColors: [{ label: 'text' }, { label: 'fill' }],
@@ -300,5 +300,31 @@ describe('shared Y-bg', () => {
 		// Per-label Y-bg should reference shared Y-bg
 		expect(css).toContain('--_Y-bg-text: var(--_Y-bg)')
 		expect(css).toContain('--_Y-bg-fill: var(--_Y-bg)')
+	})
+})
+
+describe('output option', () => {
+	it('defaults to "color" for output name', () => {
+		const { css } = defineHue({
+			hue: 30,
+			selector: '.test',
+			contrastColors: [{ label: 'text' }],
+		})
+
+		expect(css).toContain('--color: oklch(')
+		expect(css).toContain('--color-text: oklch(')
+	})
+
+	it('allows custom output name', () => {
+		const { css } = defineHue({
+			hue: 30,
+			selector: '.test',
+			output: 'accent',
+			contrastColors: [{ label: 'text' }],
+		})
+
+		expect(css).toContain('--accent: oklch(')
+		expect(css).toContain('--accent-text: oklch(')
+		expect(css).not.toContain('--color:')
 	})
 })

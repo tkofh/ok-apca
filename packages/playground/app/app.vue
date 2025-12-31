@@ -190,7 +190,7 @@ body {
 .preview {
 	aspect-ratio: 1;
 	max-height: calc(100vh - 4rem);
-	background: var(--o-color);
+	background: var(--color);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -201,8 +201,8 @@ body {
 }
 
 .preview-text {
-   	background: var(--o-color);
-	color: var(--o-color-text);
+   	background: var(--color);
+	color: var(--color-text);
 	font-size: 2rem;
 	font-weight: 600;
 }

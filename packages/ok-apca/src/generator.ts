@@ -8,7 +8,7 @@ import {
 } from './apca.ts'
 import { findGamutSlice } from './color.ts'
 import { fitHeuristicCoefficients } from './heuristic.ts'
-import type { ColorGeneratorOptions, GamutSlice, HeuristicCoefficients } from './types.ts'
+import type { GamutSlice, HeuristicCoefficients, HueDefinition } from './types.ts'
 import { outdent } from './util.ts'
 
 const css = {
@@ -33,14 +33,14 @@ const css = {
 	var: (name: string, fallback?: string) => `var(--${name}${fallback ? `, ${fallback}` : ''})`,
 } as const
 
-function generatePropertyRules(prefix: string, labels: readonly string[]): string {
+function generatePropertyRules(output: string, labels: readonly string[]): string {
 	const properties: string[] = [
 		// Base color properties
 		css.property.numeric('lightness', true),
 		css.property.numeric('chroma', true),
 		css.property.numeric('_lum-norm'),
 		css.property.numeric('_chr-pct'),
-		css.property.color(`${prefix}-color`, true),
+		css.property.color(output, true),
 	]
 
 	// Shared Y background if we have contrast colors
@@ -58,32 +58,11 @@ function generatePropertyRules(prefix: string, labels: readonly string[]): strin
 			css.property.numeric(`_Y-dark-min-${label}`),
 			css.property.numeric(`_Y-light-min-${label}`),
 			css.property.numeric(`_con-lum-${label}`),
-			css.property.color(`${prefix}-color-${label}`, true),
+			css.property.color(`${output}-${label}`, true),
 		)
 	}
 
 	return properties.join('\n')
-}
-
-function validateLabel(label: string): void {
-	const labelRegex = /^[a-z][a-z0-9_-]*$/i
-	if (!labelRegex.test(label)) {
-		throw new Error(
-			`Invalid contrast color label '${label}'. Labels must start with a letter and contain only letters, numbers, hyphens, and underscores.`,
-		)
-	}
-}
-
-function validateUniqueLabels(labels: readonly string[]): void {
-	const seen = new Set<string>()
-	for (const label of labels) {
-		if (seen.has(label)) {
-			throw new Error(
-				`Duplicate contrast color label '${label}'. Each contrast color must have a unique label.`,
-			)
-		}
-		seen.add(label)
-	}
 }
 
 // Shared CSS variable references
@@ -140,7 +119,7 @@ function cssHermiteInterpolation(
 	`
 }
 
-function generateBaseColorCss(hue: number, slice: GamutSlice, prefix: string) {
+function generateBaseColorCss(hue: number, slice: GamutSlice, output: string) {
 	// Build the max chroma expression (used once, inlined)
 	const maxChromaExpr = cssMaxChroma(V_LUM_NORM, slice)
 
@@ -153,7 +132,7 @@ function generateBaseColorCss(hue: number, slice: GamutSlice, prefix: string) {
 		--_chr-pct: clamp(0, ${css.var('chroma')} / 100, 1);
 
 		/* Output color (max chroma and chroma inlined) */
-		--${prefix}-color: oklch(${V_LUM_NORM} calc(${chromaExpr}) ${hue});
+		--${output}: oklch(${V_LUM_NORM} calc(${chromaExpr}) ${hue});
 	`
 }
 
@@ -161,10 +140,7 @@ function generateBaseColorCss(hue: number, slice: GamutSlice, prefix: string) {
  * Generate the heuristic-adjusted contrast value as a JS expression string.
  * This inlines boost-pct, boost-multiplicative, boost-absolute, and contrast-adjusted.
  */
-function buildContrastAdjustedExpr(
-	coefficients: HeuristicCoefficients,
-	label: string,
-): string {
+function buildContrastAdjustedExpr(coefficients: HeuristicCoefficients, label: string): string {
 	const contrastVar = css.var(`contrast-${label}`, '0')
 
 	// boostPct = (darkBoost * max(0, 0.3 - L) + midBoost * max(0, 1 - |L - 0.5| * 2.5)) / 100
@@ -271,8 +247,6 @@ function buildYFinalExpr(label: string, yBgVar: string): string {
 }
 
 function generateNormalPolarityCss(label: string, yBgVar: string) {
-	const V_Y_DARK_MIN = css.var(`_Y-dark-min-${label}`)
-
 	const apcaTermThreshold = `pow(${yBgVar}, 0.56) - ${CSS_SMOOTH_THRESHOLD_OFFSET}`
 
 	return outdent`
@@ -300,7 +274,7 @@ function generateContrastColorCss(
 	label: string,
 	hue: number,
 	slice: GamutSlice,
-	prefix: string,
+	output: string,
 ): string {
 	const { coefficients } = fitHeuristicCoefficients(hue)
 
@@ -336,39 +310,34 @@ function generateContrastColorCss(
 		--_con-lum-${label}: clamp(0, calc(${conLumExpr}), 1);
 
 		/* con-max-chr and con-chr inlined into output color */
-		--${prefix}-color-${label}: oklch(${V_CON_LUM} calc(${conChrExpr}) ${hue});
+		--${output}-${label}: oklch(${V_CON_LUM} calc(${conChrExpr}) ${hue});
 	`
 }
 
 /**
  * Generate CSS for OKLCH color with optional APCA-based contrast colors.
  *
+ * Accepts a pre-validated `HueDefinition` from `defineHue`.
+ *
  * Runtime inputs:
  * - `--lightness` (0-100), `--chroma` (0-100)
  * - `--contrast-{label}` (-108 to 108)
  *
  * Outputs:
- * - `--{prefix}-color`
- * - `--{prefix}-color-{label}`
+ * - `--{output}` (e.g., `--color`)
+ * - `--{output}-{label}` (e.g., `--color-text`)
  *
  * The generated CSS includes `@property` declarations for all custom properties,
  * enabling proper type checking, animation support, and initial values.
  */
-export function generateColorCss(options: ColorGeneratorOptions) {
-	const hue = ((options.hue % 360) + 360) % 360
+export function generateHueCss(definition: HueDefinition): string {
+	const { hue, selector, output, contrastColors } = definition
 	const slice = findGamutSlice(hue)
-	const prefix = options.prefix ?? 'o'
-	const contrastColors = options.contrastColors ?? []
-
 	const labels = contrastColors.map((c) => c.label)
-	for (const label of labels) {
-		validateLabel(label)
-	}
-	validateUniqueLabels(labels)
 
-	const propertyRules = generatePropertyRules(prefix, labels)
+	const propertyRules = generatePropertyRules(output, labels)
 
-	const baseColorCss = generateBaseColorCss(hue, slice, prefix)
+	const baseColorCss = generateBaseColorCss(hue, slice, output)
 
 	const sharedYBackground =
 		contrastColors.length > 0
@@ -379,13 +348,13 @@ export function generateColorCss(options: ColorGeneratorOptions) {
 			: ''
 
 	const contrastColorsCss = contrastColors
-		.map(({ label }) => generateContrastColorCss(label, hue, slice, prefix))
+		.map(({ label }) => generateContrastColorCss(label, hue, slice, output))
 		.join('\n\n')
 
 	return outdent`
 		${propertyRules}
 
-		${options.selector} {
+		${selector} {
 			${baseColorCss}
 
 			${sharedYBackground}
