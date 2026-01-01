@@ -9,13 +9,17 @@ import { findGamutSlice } from './color.ts'
 import type { GamutSlice, HueDefinition, InputMode } from './types.ts'
 import { outdent } from './util.ts'
 
-function cssNumber(n: number): string {
-	return n.toFixed(5).replace(/\.?0+$/, '') || '0'
-}
+const cssNumber = (n: number): string => n.toFixed(5).replace(/\.?0+$/, '') || '0'
 
-function cssVar(name: string, fallback?: string): string {
-	return `var(--${name}${fallback ? `, ${fallback}` : ''})`
-}
+const cssVar = (name: string, fallback?: string): string =>
+	`var(--${name}${fallback ? `, ${fallback}` : ''})`
+
+const CSS_SMOOTH_POWER = cssNumber(APCA_SMOOTH_POWER)
+const CSS_SMOOTH_THRESHOLD = cssNumber(APCA_SMOOTH_THRESHOLD)
+const CSS_SMOOTH_THRESHOLD_OFFSET = cssNumber(APCA_SMOOTH_THRESHOLD_OFFSET)
+const CSS_NORMAL_INV_EXP = cssNumber(APCA_NORMAL_INV_EXP)
+const CSS_REVERSE_INV_EXP = cssNumber(APCA_REVERSE_INV_EXP)
+const V_Y_BG = cssVar('_Y-bg')
 
 function generatePropertyRules(
 	output: string,
@@ -81,7 +85,7 @@ function cssMaxChroma(lightness: string, slice: GamutSlice): string {
 
 /** Sine-based smoothing: start + (end - start) * pow(sin(t * π/2), power). Clamps t to avoid NaN. */
 function cssSineInterpolation(startValue: string, endValue: string, tParameter: string): string {
-	return `${startValue} + (${endValue} - ${startValue}) * pow(sin(min(${tParameter}, 1) * 1.5708), ${cssNumber(APCA_SMOOTH_POWER)})`
+	return `${startValue} + (${endValue} - ${startValue}) * pow(sin(min(${tParameter}, 1) * 1.5708), ${CSS_SMOOTH_POWER})`
 }
 
 function getLumNormVar(inputMode: InputMode): string {
@@ -111,12 +115,6 @@ function generateBaseColorCss(
 
 	return `--${output}: oklch(${vLumNorm} calc(${chromaExpr}) ${cssNumber(hue)});`
 }
-
-const CSS_SMOOTH_THRESHOLD = cssNumber(APCA_SMOOTH_THRESHOLD)
-const CSS_SMOOTH_THRESHOLD_OFFSET = cssNumber(APCA_SMOOTH_THRESHOLD_OFFSET)
-const CSS_NORMAL_INV_EXP = cssNumber(APCA_NORMAL_INV_EXP)
-const CSS_REVERSE_INV_EXP = cssNumber(APCA_REVERSE_INV_EXP)
-const V_Y_BG = cssVar('_Y-bg')
 
 function buildYDarkExpr(label: string): string {
 	const V_LC_NORM = cssVar(`_lc-norm-${label}`)
