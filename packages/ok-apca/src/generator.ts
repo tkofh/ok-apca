@@ -1,8 +1,7 @@
 import {
-	APCA_DARK_V_SCALE,
-	APCA_LIGHT_V_SCALE,
 	APCA_NORMAL_INV_EXP,
 	APCA_REVERSE_INV_EXP,
+	APCA_SMOOTH_POWER,
 	APCA_SMOOTH_THRESHOLD,
 	APCA_SMOOTH_THRESHOLD_OFFSET,
 } from './apca.ts'
@@ -108,16 +107,17 @@ function cssMaxChroma(lightness: string, slice: GamutSlice): string {
 	`
 }
 
-function cssHermiteInterpolation(
-	startValue: string,
-	endValue: string,
-	endVelocity: string,
-	tParameter: string,
-): string {
+/**
+ * Generate CSS for sine-based smoothing interpolation.
+ * Formula: start + (end - start) * pow(sin(t * π/2), power)
+ *
+ * This references t only once, reducing CSS variable expansion.
+ */
+function cssSineInterpolation(startValue: string, endValue: string, tParameter: string): string {
+	const power = css.number(APCA_SMOOTH_POWER)
+	// Clamp t to [0, 1] to avoid NaN when CSS evaluates both branches of conditionals
 	return outdent`
-		${startValue} +
-		(-3 * ${startValue} + 3 * ${endValue} - ${endVelocity}) * pow(${tParameter}, 2) +
-		(2 * ${startValue} - 2 * ${endValue} + ${endVelocity}) * pow(${tParameter}, 3)
+		${startValue} + (${endValue} - ${startValue}) * pow(sin(min(${tParameter}, 1) * 1.5708), ${power})
 	`
 }
 
@@ -143,19 +143,14 @@ const CSS_SMOOTH_THRESHOLD = css.number(APCA_SMOOTH_THRESHOLD)
 const CSS_SMOOTH_THRESHOLD_OFFSET = css.number(APCA_SMOOTH_THRESHOLD_OFFSET)
 const CSS_NORMAL_INV_EXP = css.number(APCA_NORMAL_INV_EXP)
 const CSS_REVERSE_INV_EXP = css.number(APCA_REVERSE_INV_EXP)
-const CSS_DARK_V_SCALE = css.number(APCA_DARK_V_SCALE)
-const CSS_LIGHT_V_SCALE = css.number(APCA_LIGHT_V_SCALE)
 
 /**
  * Build the Y-dark expression (normal polarity).
- * Inlines Y-dark-v into the Hermite interpolation.
+ * Uses sine-based smoothing below threshold.
  */
 function buildYDarkExpr(label: string, yBgVar: string): string {
 	const V_LC_NORM = css.var(`_lc-norm-${label}`)
 	const V_Y_DARK_MIN = css.var(`_Y-dark-min-${label}`)
-
-	// Y-dark-v = -1 * pow(abs(Y-dark-min), 0.43) * DARK_V_SCALE
-	const yDarkVExpr = `-1 * pow(abs(${V_Y_DARK_MIN}), 0.43) * ${CSS_DARK_V_SCALE}`
 
 	const apcaTermDynamic = `pow(${yBgVar}, 0.56) - (${V_LC_NORM} + 0.027) / 1.14`
 
@@ -165,44 +160,36 @@ function buildYDarkExpr(label: string, yBgVar: string): string {
 	`
 
 	const tParameter = `${V_LC_NORM} / ${CSS_SMOOTH_THRESHOLD}`
-	const bezierInterpolation = cssHermiteInterpolation(yBgVar, V_Y_DARK_MIN, yDarkVExpr, tParameter)
+	const sineInterpolation = cssSineInterpolation(yBgVar, V_Y_DARK_MIN, tParameter)
 
 	const aboveThreshold = css.unitClamp(`sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1`)
 
 	return outdent`
 		${aboveThreshold} * (${directSolution}) +
-		(1 - ${aboveThreshold}) * (${bezierInterpolation})
+		(1 - ${aboveThreshold}) * (${sineInterpolation})
 	`
 }
 
 /**
  * Build the Y-light expression (reverse polarity).
- * Inlines Y-light-v into the Hermite interpolation.
+ * Uses sine-based smoothing below threshold.
  */
 function buildYLightExpr(label: string, yBgVar: string): string {
 	const V_LC_NORM = css.var(`_lc-norm-${label}`)
 	const V_Y_LIGHT_MIN = css.var(`_Y-light-min-${label}`)
 
-	// Y-light-v = pow(abs(Y-light-min), 0.38) * LIGHT_V_SCALE
-	const yLightVExpr = `pow(abs(${V_Y_LIGHT_MIN}), 0.38) * ${CSS_LIGHT_V_SCALE}`
-
-	const apcaTermDynamic = `pow(${yBgVar}, 0.65) - ((-1 * ${V_LC_NORM}) - 0.027) / 1.14`
+	const apcaTermDynamic = `pow(${yBgVar}, 0.65) + (${V_LC_NORM} + 0.027) / 1.14`
 
 	const directSolution = `pow(${apcaTermDynamic}, ${CSS_REVERSE_INV_EXP})`
 
 	const tParameter = `${V_LC_NORM} / ${CSS_SMOOTH_THRESHOLD}`
-	const bezierInterpolation = cssHermiteInterpolation(
-		yBgVar,
-		V_Y_LIGHT_MIN,
-		yLightVExpr,
-		tParameter,
-	)
+	const sineInterpolation = cssSineInterpolation(yBgVar, V_Y_LIGHT_MIN, tParameter)
 
 	const aboveThreshold = css.unitClamp(`sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1`)
 
 	return outdent`
 		${aboveThreshold} * (${directSolution}) +
-		(1 - ${aboveThreshold}) * (${bezierInterpolation})
+		(1 - ${aboveThreshold}) * (${sineInterpolation})
 	`
 }
 
