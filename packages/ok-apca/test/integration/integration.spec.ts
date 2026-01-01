@@ -7,7 +7,7 @@
 
 import Color from 'colorjs.io'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { defineHue } from '../src/index.ts'
+import { defineHue } from '../../src/index.ts'
 
 /**
  * Test configuration matching the playground app.

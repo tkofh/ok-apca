@@ -25,7 +25,7 @@ function solveApcaNormal(Y: number, x: number): ApcaSolution {
 	if (x >= APCA_SMOOTH_THRESHOLD) {
 		targetY = signedPow(Y ** 0.56 - (x + 0.027) / 1.14, APCA_NORMAL_INV_EXP)
 	} else {
-		// Bézier smoothing below threshold
+		// Hermite smoothing below threshold
 		const t = x / APCA_SMOOTH_THRESHOLD
 		const t2 = t * t
 		const t3 = t2 * t
@@ -50,7 +50,7 @@ function solveApcaReverse(Y: number, x: number): ApcaSolution {
 	if (x >= APCA_SMOOTH_THRESHOLD) {
 		targetY = (Y ** 0.65 + (x + 0.027) / 1.14) ** APCA_REVERSE_INV_EXP
 	} else {
-		// Bézier smoothing below threshold
+		// Hermite smoothing below threshold
 		const t = x / APCA_SMOOTH_THRESHOLD
 		const t2 = t * t
 		const t3 = t2 * t

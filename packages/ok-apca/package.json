@@ -30,6 +30,7 @@
 	},
 	"devDependencies": {
 		"@vitest/browser-playwright": "^4.0.16",
+		"fast-check": "^4.5.3",
 		"tsdown": "^0.18.3",
 		"vitest": "^4.0.16"
 	},

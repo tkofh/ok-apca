@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defineHue } from '../src/index.ts'
+import { defineHue } from '../../src/index.ts'
 
 describe('defineHue', () => {
 	it('generates basic color CSS for a given hue', () => {
@@ -244,18 +244,15 @@ describe('defineHue output structure', () => {
 		expect(css).toContain('sign(var(--_contrast-signed-text)')
 	})
 
-	it('includes heuristic correction inlined in contrast-signed', () => {
+	it('generates contrast-signed variable', () => {
 		const { css } = defineHue({
 			hue: 60,
 			selector: '.test',
 			contrastColors: [{ label: 'text' }],
 		})
 
-		// Heuristic boost is inlined into contrast-signed
+		// Contrast signed variable is generated
 		expect(css).toContain('--_contrast-signed-text:')
-
-		// The comment mentions the inlining
-		expect(css).toContain('Heuristic correction inlined')
 	})
 
 	it('uses fallback value of 0 for --contrast-{label}', () => {

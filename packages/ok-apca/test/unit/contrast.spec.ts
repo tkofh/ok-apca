@@ -1,7 +1,19 @@
+import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { gamutMap } from '../src/color.ts'
-import { applyContrast } from '../src/contrast.ts'
-import { measureContrast } from '../src/measure.ts'
+import { gamutMap } from '../../src/color.ts'
+import { applyContrast } from '../../src/contrast.ts'
+import { measureContrast } from '../../src/measure.ts'
+
+// Arbitraries for OKLCH color components
+const hueArb = fc.double({ min: 0, max: 360, noNaN: true })
+const chromaArb = fc.double({ min: 0, max: 0.4, noNaN: true })
+const lightnessArb = fc.double({ min: 0, max: 1, noNaN: true })
+const contrastArb = fc.double({ min: -108, max: 108, noNaN: true })
+const oklchColorArb = fc.record({
+	hue: hueArb,
+	chroma: chromaArb,
+	lightness: lightnessArb,
+})
 
 // ============================================================================
 // applyContrast basic behavior tests
@@ -162,6 +174,97 @@ describe('applyContrast', () => {
 
 			// Negative contrast goes darker
 			expect(result.lightness).toBeLessThan(1)
+		})
+	})
+
+	describe('property-based tests', () => {
+		it('always produces valid color ranges', () => {
+			fc.assert(
+				fc.property(oklchColorArb, contrastArb, (input, contrast) => {
+					const result = applyContrast(input, contrast)
+
+					expect(result.lightness).toBeGreaterThanOrEqual(0)
+					expect(result.lightness).toBeLessThanOrEqual(1)
+					expect(result.chroma).toBeGreaterThanOrEqual(0)
+				}),
+			)
+		})
+
+		it('always preserves hue', () => {
+			fc.assert(
+				fc.property(oklchColorArb, contrastArb, (input, contrast) => {
+					const result = applyContrast(input, contrast)
+					expect(result.hue).toBe(input.hue)
+				}),
+			)
+		})
+
+		it('positive contrast produces lighter or equal lightness', () => {
+			fc.assert(
+				fc.property(
+					oklchColorArb,
+					fc.double({ min: 0, max: 108, noNaN: true }),
+					(input, contrast) => {
+						const result = applyContrast(input, contrast)
+						// Positive contrast should not make the color darker
+						expect(result.lightness).toBeGreaterThanOrEqual(input.lightness - 0.001)
+					},
+				),
+			)
+		})
+
+		it('negative contrast produces darker or equal lightness', () => {
+			fc.assert(
+				fc.property(
+					oklchColorArb,
+					fc.double({ min: -108, max: 0, noNaN: true }),
+					(input, contrast) => {
+						const result = applyContrast(input, contrast)
+						// Negative contrast should not make the color lighter
+						expect(result.lightness).toBeLessThanOrEqual(input.lightness + 0.001)
+					},
+				),
+			)
+		})
+
+		it('output chroma never significantly exceeds input chroma', () => {
+			fc.assert(
+				fc.property(
+					fc.record({
+						hue: hueArb,
+						chroma: fc.double({ min: 0.02, max: 0.4, noNaN: true }),
+						lightness: fc.double({ min: 0.05, max: 0.95, noNaN: true }),
+					}),
+					contrastArb,
+					(input, contrast) => {
+						const result = applyContrast(input, contrast)
+						// Output chroma should be approximately <= input chroma (within 5%)
+						const maxAllowedChroma = input.chroma * 1.05
+						expect(result.chroma).toBeCloseTo(Math.min(result.chroma, maxAllowedChroma), 8)
+					},
+				),
+			)
+		})
+
+		it('higher contrast magnitude produces more lightness change', () => {
+			fc.assert(
+				fc.property(
+					oklchColorArb,
+					fc.double({ min: 10, max: 50, noNaN: true }),
+					(input, baseContrast) => {
+						// Only test mid-range lightness where there's room to move
+						if (input.lightness < 0.2 || input.lightness > 0.8) {
+							return
+						}
+
+						const lowResult = applyContrast(input, baseContrast)
+						const highResult = applyContrast(input, baseContrast + 30)
+
+						// Higher positive contrast should produce higher or equal lightness
+						expect(highResult.lightness).toBeGreaterThanOrEqual(lowResult.lightness - 0.001)
+					},
+				),
+			)
 		})
 	})
 })

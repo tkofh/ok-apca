@@ -8,7 +8,7 @@ export default defineConfig({
 				extends: true,
 				test: {
 					name: 'unit',
-					include: ['test/**/*.spec.ts'],
+					include: ['test/unit/**/*.spec.ts'],
 					environment: 'node',
 				},
 			},
@@ -16,7 +16,7 @@ export default defineConfig({
 				extends: true,
 				test: {
 					name: 'browser',
-					include: ['test/**/*.browser.ts'],
+					include: ['test/integration/**/*.spec.ts'],
 					browser: {
 						enabled: true,
 						provider: playwright(),

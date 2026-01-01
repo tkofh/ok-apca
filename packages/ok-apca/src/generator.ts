@@ -7,8 +7,7 @@ import {
 	APCA_SMOOTH_THRESHOLD_OFFSET,
 } from './apca.ts'
 import { findGamutSlice } from './color.ts'
-import { fitHeuristicCoefficients } from './heuristic.ts'
-import type { GamutSlice, HeuristicCoefficients, HueDefinition } from './types.ts'
+import type { GamutSlice, HueDefinition } from './types.ts'
 import { outdent } from './util.ts'
 
 const css = {
@@ -139,26 +138,6 @@ function generateBaseColorCss(hue: number, slice: GamutSlice, output: string) {
 	`
 }
 
-/**
- * Generate the heuristic-adjusted contrast value as a JS expression string.
- * This inlines boost-pct, boost-multiplicative, boost-absolute, and contrast-adjusted.
- */
-function buildContrastAdjustedExpr(coefficients: HeuristicCoefficients, label: string): string {
-	const contrastVar = css.var(`contrast-${label}`, '0')
-
-	// boostPct = (darkBoost * max(0, 0.3 - L) + midBoost * max(0, 1 - |L - 0.5| * 2.5)) / 100
-	const boostPctExpr = `(${css.number(coefficients.darkBoost)} * max(0, 0.3 - ${V_LUM_NORM}) + ${css.number(coefficients.midBoost)} * max(0, 1 - abs(${V_LUM_NORM} - 0.5) * 2.5)) / 100`
-
-	// boostMultiplicative = contrast * boostPct
-	const boostMultiplicativeExpr = `${contrastVar} * (${boostPctExpr})`
-
-	// boostAbsolute = contrastBoost * max(0, contrast - 30)
-	const boostAbsoluteExpr = `${css.number(coefficients.contrastBoost)} * max(0, ${contrastVar} - 30)`
-
-	// contrastAdjusted = contrast + boostMultiplicative + boostAbsolute
-	return `${contrastVar} + (${boostMultiplicativeExpr}) + (${boostAbsoluteExpr})`
-}
-
 // Pre-computed CSS constants from APCA algorithm
 const CSS_SMOOTH_THRESHOLD = css.number(APCA_SMOOTH_THRESHOLD)
 const CSS_SMOOTH_THRESHOLD_OFFSET = css.number(APCA_SMOOTH_THRESHOLD_OFFSET)
@@ -279,13 +258,10 @@ function generateContrastColorCss(
 	slice: GamutSlice,
 	output: string,
 ): string {
-	const { coefficients } = fitHeuristicCoefficients(hue)
-
 	const V_Y_BG_LABEL = css.var(`_Y-bg-${label}`)
 	const V_CON_LUM = css.var(`_con-lum-${label}`)
 
 	// Build inlined expressions
-	const contrastAdjustedExpr = buildContrastAdjustedExpr(coefficients, label)
 	const yFinalExpr = buildYFinalExpr(label, V_Y_BG_LABEL)
 
 	// con-lum = clamp(0, pow(Y-final, 1/3), 1) - but Y-final is inlined
@@ -299,8 +275,7 @@ function generateContrastColorCss(
 
 	return outdent`
 		/* Contrast color: ${label} */
-		/* Heuristic correction inlined: boostPct, boostMultiplicative, boostAbsolute, contrastAdjusted */
-		--_contrast-signed-${label}: clamp(-108, calc(${contrastAdjustedExpr}), 108);
+		--_contrast-signed-${label}: clamp(-108, ${css.var(`contrast-${label}`, '0')}, 108);
 		--_lc-norm-${label}: calc(abs(${css.var(`_contrast-signed-${label}`)}) / 100);
 
 		--_Y-bg-${label}: ${css.var('_Y-bg')};
@@ -310,7 +285,7 @@ function generateContrastColorCss(
 		${generateReversePolarityCss(label, V_Y_BG_LABEL)}
 
 		/* Y-final, prefer-light, prefer-dark, Y-light, Y-dark all inlined into con-lum */
-		--_con-lum-${label}: clamp(0, calc(${conLumExpr}), 1);
+		--_con-lum-${label}: clamp(0, ${conLumExpr}, 1);
 
 		/* con-max-chr and con-chr inlined into output color */
 		--${output}-${label}: oklch(${V_CON_LUM} calc(${conChrExpr}) ${css.number(hue)});
