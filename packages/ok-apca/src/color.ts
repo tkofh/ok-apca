@@ -116,9 +116,9 @@ export function findGamutSlice(hue: number): GamutSlice {
 
 /**
  * Compute the maximum chroma at a given lightness using the tent function
- * with quadratic curvature correction on the right half.
+ * with sine-based curvature correction on the right half.
  */
-function computeMaxChroma(L: number, slice: GamutSlice): number {
+function computeMaxChromaInternal(L: number, slice: GamutSlice): number {
 	const { apex, curvature } = slice
 
 	if (L <= 0 || L >= 1) {
@@ -142,6 +142,15 @@ function computeMaxChroma(L: number, slice: GamutSlice): number {
 }
 
 /**
+ * Compute the maximum in-gamut chroma at a given lightness for a hue.
+ * Uses the tent function with sine-based curvature correction.
+ */
+export function getMaxChroma(lightness: number, hue: number): number {
+	const slice = findGamutSlice(hue)
+	return computeMaxChromaInternal(lightness, slice)
+}
+
+/**
  * Clamp chroma to Display P3 gamut boundary using tent function
  * with curvature correction.
  */
@@ -150,7 +159,7 @@ export function gamutMap(color: Color): Color {
 	const slice = findGamutSlice(hue)
 
 	const L = clamp(0, lightness, 1)
-	const maxChroma = computeMaxChroma(L, slice)
+	const maxChroma = computeMaxChromaInternal(L, slice)
 	const clampedChroma = clamp(0, chroma, maxChroma)
 
 	return new ColorImpl(hue, clampedChroma, L)

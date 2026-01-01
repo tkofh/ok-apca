@@ -246,7 +246,7 @@ describe('applyContrast', () => {
 						const result = applyContrast(input, contrast)
 						// Output chroma should be approximately <= input chroma (within 5%)
 						const maxAllowedChroma = input.chroma * 1.05
-						expect(result.chroma).toBeCloseTo(Math.min(result.chroma, maxAllowedChroma), 8)
+						expect(result.chroma).toBeLessThanOrEqual(maxAllowedChroma + 1e-6)
 					},
 				),
 				{ numRuns },

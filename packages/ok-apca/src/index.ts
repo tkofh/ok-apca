@@ -5,7 +5,7 @@
 import { generateHueCss } from './generator.ts'
 import type { ContrastColor, Hue, HueOptions, InputMode } from './types.ts'
 
-export { createColor, gamutMap } from './color.ts'
+export { createColor, gamutMap, getMaxChroma } from './color.ts'
 export { applyContrast } from './contrast.ts'
 export type { Color, ContrastColor, Hue, HueOptions, InputMode } from './types.ts'
 
