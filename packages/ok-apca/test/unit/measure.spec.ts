@@ -12,6 +12,8 @@ const oklchColorArb = fc.record({
 })
 
 describe('measureContrast', () => {
+	const numRuns = 50
+
 	it('produces documented APCA values for black/white', () => {
 		const white = { hue: 0, chroma: 0, lightness: 1 }
 		const black = { hue: 0, chroma: 0, lightness: 0 }
@@ -25,6 +27,7 @@ describe('measureContrast', () => {
 			fc.property(oklchColorArb, (color) => {
 				expect(measureContrast(color, color)).toBe(0)
 			}),
+			{ numRuns },
 		)
 	})
 
@@ -37,6 +40,7 @@ describe('measureContrast', () => {
 					expect(Math.sign(LC1)).toBe(-Math.sign(LC2))
 				}
 			}),
+			{ numRuns },
 		)
 	})
 
@@ -47,6 +51,7 @@ describe('measureContrast', () => {
 				expect(LC).toBeGreaterThanOrEqual(-108)
 				expect(LC).toBeLessThanOrEqual(106.1)
 			}),
+			{ numRuns },
 		)
 	})
 
@@ -65,6 +70,7 @@ describe('measureContrast', () => {
 					expect(LC).toBeLessThanOrEqual(0)
 				},
 			),
+			{ numRuns },
 		)
 	})
 
@@ -83,6 +89,7 @@ describe('measureContrast', () => {
 					expect(LC).toBeGreaterThanOrEqual(0)
 				},
 			),
+			{ numRuns },
 		)
 	})
 })

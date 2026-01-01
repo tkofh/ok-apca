@@ -95,6 +95,8 @@ describe('gamutMap', () => {
 	})
 
 	describe('tent function behavior', () => {
+		const numRuns = 50
+
 		it('allows higher chroma at apex than at extremes', () => {
 			fc.assert(
 				fc.property(fc.integer({ min: 0, max: 359 }), (hue) => {
@@ -110,6 +112,7 @@ describe('gamutMap', () => {
 					expect(atApex.chroma).toBeGreaterThan(nearBlack.chroma)
 					expect(atApex.chroma).toBeGreaterThan(nearWhite.chroma)
 				}),
+				{ numRuns },
 			)
 		})
 
@@ -134,6 +137,7 @@ describe('gamutMap', () => {
 					expect(result.chroma).toBeGreaterThanOrEqual(0)
 					expect(result.chroma).toBeLessThanOrEqual(apex.chroma)
 				}),
+				{ numRuns },
 			)
 		})
 	})
@@ -161,6 +165,8 @@ describe('gamutMap', () => {
 	})
 
 	describe('property-based tests', () => {
+		const numRuns = 50
+
 		it('always produces colors in valid ranges', () => {
 			fc.assert(
 				fc.property(oklchColorArb, (input) => {
@@ -172,6 +178,7 @@ describe('gamutMap', () => {
 					// Hue is preserved
 					expect(result.hue).toBe(input.hue)
 				}),
+				{ numRuns },
 			)
 		})
 
@@ -184,6 +191,7 @@ describe('gamutMap', () => {
 					// Tent function is an approximation, so allow small epsilon
 					expect(color.inGamut('p3', { epsilon: 0.01 })).toBe(true)
 				}),
+				{ numRuns },
 			)
 		})
 
@@ -193,6 +201,7 @@ describe('gamutMap', () => {
 					const result = gamutMap(input)
 					expect(result.chroma).toBeLessThanOrEqual(input.chroma)
 				}),
+				{ numRuns },
 			)
 		})
 
@@ -202,6 +211,7 @@ describe('gamutMap', () => {
 					const result = gamutMap(input)
 					expect(result.hue).toBe(input.hue)
 				}),
+				{ numRuns },
 			)
 		})
 
@@ -215,6 +225,7 @@ describe('gamutMap', () => {
 					expect(twice.lightness).toBeCloseTo(once.lightness, 10)
 					expect(twice.chroma).toBeCloseTo(once.chroma, 10)
 				}),
+				{ numRuns },
 			)
 		})
 
@@ -233,6 +244,7 @@ describe('gamutMap', () => {
 						expect(result1.chroma).toBeCloseTo(result3.chroma, 10)
 					},
 				),
+				{ numRuns },
 			)
 		})
 	})

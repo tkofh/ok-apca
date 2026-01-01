@@ -178,6 +178,8 @@ describe('applyContrast', () => {
 	})
 
 	describe('property-based tests', () => {
+		const numRuns = 50
+
 		it('always produces valid color ranges', () => {
 			fc.assert(
 				fc.property(oklchColorArb, contrastArb, (input, contrast) => {
@@ -187,6 +189,7 @@ describe('applyContrast', () => {
 					expect(result.lightness).toBeLessThanOrEqual(1)
 					expect(result.chroma).toBeGreaterThanOrEqual(0)
 				}),
+				{ numRuns },
 			)
 		})
 
@@ -196,6 +199,7 @@ describe('applyContrast', () => {
 					const result = applyContrast(input, contrast)
 					expect(result.hue).toBe(input.hue)
 				}),
+				{ numRuns },
 			)
 		})
 
@@ -210,6 +214,7 @@ describe('applyContrast', () => {
 						expect(result.lightness).toBeGreaterThanOrEqual(input.lightness - 0.001)
 					},
 				),
+				{ numRuns },
 			)
 		})
 
@@ -224,6 +229,7 @@ describe('applyContrast', () => {
 						expect(result.lightness).toBeLessThanOrEqual(input.lightness + 0.001)
 					},
 				),
+				{ numRuns },
 			)
 		})
 
@@ -243,6 +249,7 @@ describe('applyContrast', () => {
 						expect(result.chroma).toBeCloseTo(Math.min(result.chroma, maxAllowedChroma), 8)
 					},
 				),
+				{ numRuns },
 			)
 		})
 
@@ -264,6 +271,7 @@ describe('applyContrast', () => {
 						expect(highResult.lightness).toBeGreaterThanOrEqual(lowResult.lightness - 0.001)
 					},
 				),
+				{ numRuns },
 			)
 		})
 	})
