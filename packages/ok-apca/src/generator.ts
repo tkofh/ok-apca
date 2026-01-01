@@ -1,11 +1,16 @@
+import { findGamutSlice } from './color.ts'
 import {
+	APCA_BG_EXP_NORMAL,
+	APCA_BG_EXP_REVERSE,
 	APCA_NORMAL_INV_EXP,
+	APCA_OFFSET,
 	APCA_REVERSE_INV_EXP,
+	APCA_SCALE,
 	APCA_SMOOTH_POWER,
 	APCA_SMOOTH_THRESHOLD,
 	APCA_SMOOTH_THRESHOLD_OFFSET,
-} from './apca.ts'
-import { findGamutSlice } from './color.ts'
+	GAMUT_SINE_CURVATURE_EXPONENT,
+} from './constants.ts'
 import type { GamutSlice, HueDefinition, InputMode } from './types.ts'
 import { outdent } from './util.ts'
 
@@ -14,11 +19,16 @@ const cssNumber = (n: number): string => n.toFixed(5).replace(/\.?0+$/, '') || '
 const cssVar = (name: string, fallback?: string): string =>
 	`var(--${name}${fallback ? `, ${fallback}` : ''})`
 
+const CSS_SINE_CURVATURE_EXP = cssNumber(GAMUT_SINE_CURVATURE_EXPONENT)
 const CSS_SMOOTH_POWER = cssNumber(APCA_SMOOTH_POWER)
 const CSS_SMOOTH_THRESHOLD = cssNumber(APCA_SMOOTH_THRESHOLD)
 const CSS_SMOOTH_THRESHOLD_OFFSET = cssNumber(APCA_SMOOTH_THRESHOLD_OFFSET)
 const CSS_NORMAL_INV_EXP = cssNumber(APCA_NORMAL_INV_EXP)
 const CSS_REVERSE_INV_EXP = cssNumber(APCA_REVERSE_INV_EXP)
+const CSS_BG_EXP_NORMAL = cssNumber(APCA_BG_EXP_NORMAL)
+const CSS_BG_EXP_REVERSE = cssNumber(APCA_BG_EXP_REVERSE)
+const CSS_OFFSET = cssNumber(APCA_OFFSET)
+const CSS_SCALE = cssNumber(APCA_SCALE)
 const V_Y_BG = cssVar('_Y-bg')
 
 function generatePropertyRules(
@@ -74,7 +84,7 @@ function cssMaxChroma(lightness: string, slice: GamutSlice): string {
 	const lMax = cssNumber(apex.lightness)
 	const tExpr = `max(0, (${lightness} - ${lMax}) / ${cssNumber(1 - apex.lightness)})`
 	const leftHalf = `${lightness} * ${cssNumber(apex.chroma / apex.lightness)}`
-	const rightHalf = `(1 - ${lightness}) * ${cssNumber(apex.chroma / (1 - apex.lightness))} + ${cssNumber(curvature * apex.chroma)} * pow(sin((${tExpr}) * pi), 0.95)`
+	const rightHalf = `(1 - ${lightness}) * ${cssNumber(apex.chroma / (1 - apex.lightness))} + ${cssNumber(curvature * apex.chroma)} * pow(sin((${tExpr}) * pi), ${CSS_SINE_CURVATURE_EXP})`
 	const isRightHalf = `max(0, sign(${lightness} - ${lMax}))`
 
 	return outdent`
@@ -119,7 +129,7 @@ function generateBaseColorCss(
 function buildYDarkExpr(label: string): string {
 	const V_LC_NORM = cssVar(`_lc-norm-${label}`)
 	const V_Y_DARK_MIN = cssVar(`_Y-dark-min-${label}`)
-	const apcaTermDynamic = `pow(${V_Y_BG}, 0.56) - (${V_LC_NORM} + 0.027) / 1.14`
+	const apcaTermDynamic = `pow(${V_Y_BG}, ${CSS_BG_EXP_NORMAL}) - (${V_LC_NORM} + ${CSS_OFFSET}) / ${CSS_SCALE}`
 	const directSolution = `pow(abs(${apcaTermDynamic}), ${CSS_NORMAL_INV_EXP}) * sign(${apcaTermDynamic})`
 	const aboveThreshold = `min(1, sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1)`
 	const sineInterpolation = cssSineInterpolation(
@@ -137,7 +147,7 @@ function buildYDarkExpr(label: string): string {
 function buildYLightExpr(label: string): string {
 	const V_LC_NORM = cssVar(`_lc-norm-${label}`)
 	const V_Y_LIGHT_MIN = cssVar(`_Y-light-min-${label}`)
-	const apcaTermDynamic = `pow(${V_Y_BG}, 0.65) + (${V_LC_NORM} + 0.027) / 1.14`
+	const apcaTermDynamic = `pow(${V_Y_BG}, ${CSS_BG_EXP_REVERSE}) + (${V_LC_NORM} + ${CSS_OFFSET}) / ${CSS_SCALE}`
 	const directSolution = `pow(${apcaTermDynamic}, ${CSS_REVERSE_INV_EXP})`
 	const aboveThreshold = `min(1, sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1)`
 	const sineInterpolation = cssSineInterpolation(
@@ -164,12 +174,12 @@ function buildYFinalExpr(label: string): string {
 }
 
 function generateNormalPolarityCss(label: string) {
-	const apcaTermThreshold = `pow(${V_Y_BG}, 0.56) - ${CSS_SMOOTH_THRESHOLD_OFFSET}`
+	const apcaTermThreshold = `pow(${V_Y_BG}, ${CSS_BG_EXP_NORMAL}) - ${CSS_SMOOTH_THRESHOLD_OFFSET}`
 	return `--_Y-dark-min-${label}: calc(pow(abs(${apcaTermThreshold}), ${CSS_NORMAL_INV_EXP}) * sign(${apcaTermThreshold}));`
 }
 
 function generateReversePolarityCss(label: string) {
-	const apcaTermThreshold = `pow(${V_Y_BG}, 0.65) + ${CSS_SMOOTH_THRESHOLD_OFFSET}`
+	const apcaTermThreshold = `pow(${V_Y_BG}, ${CSS_BG_EXP_REVERSE}) + ${CSS_SMOOTH_THRESHOLD_OFFSET}`
 	return `--_Y-light-min-${label}: calc(pow(abs(${apcaTermThreshold}), ${CSS_REVERSE_INV_EXP}) * sign(${apcaTermThreshold}));`
 }
 

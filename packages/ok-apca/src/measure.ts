@@ -4,32 +4,26 @@
  */
 
 import { getLuminance } from './color.ts'
+import {
+	APCA_BG_EXP_NORMAL,
+	APCA_BG_EXP_REVERSE,
+	APCA_FG_EXP_NORMAL,
+	APCA_FG_EXP_REVERSE,
+	APCA_OFFSET,
+	APCA_SCALE,
+	APCA_SMOOTH_THRESHOLD,
+} from './constants.ts'
 import type { Color } from './types.ts'
 
 /**
  * APCA 0.0.98G constants (W3 version)
+ * Constants shared with contrast generation are imported from constants.ts.
+ * The following are specific to measurement only.
  */
 
-// Exponents for normal polarity (dark text on light background)
-const EXP_NORMAL_BACKGROUND = 0.56
-const EXP_NORMAL_TEXT = 0.57
-
-// Exponents for reverse polarity (light text on dark background)
-const EXP_REVERSE_BACKGROUND = 0.65
-const EXP_REVERSE_TEXT = 0.62
-
-// Black level soft clamp threshold and clamp factor
+// Black level soft clamp factor
 // biome-ignore lint/suspicious/noApproximativeNumericConstant: w3 spec uses 1.414
 const BLACK_CLAMP = 1.414
-const BLACK_THRESHOLD = 0.022
-
-// Scale factors for contrast calculation
-const SCALE_BLACK_ON_WHITE = 1.14
-const SCALE_WHITE_ON_BLACK = 1.14
-
-// Low contrast offsets
-const OFFSET_BLACK_ON_WHITE = 0.027
-const OFFSET_WHITE_ON_BLACK = 0.027
 
 // Minimum delta Y to avoid division issues
 const DELTA_Y_MIN = 0.0005
@@ -56,8 +50,8 @@ function calculateAPCAcontrast(txtY: number, bgY: number): number {
 	}
 
 	// Soft clamp black levels
-	txtY = txtY > BLACK_THRESHOLD ? txtY : txtY + (BLACK_THRESHOLD - txtY) ** BLACK_CLAMP
-	bgY = bgY > BLACK_THRESHOLD ? bgY : bgY + (BLACK_THRESHOLD - bgY) ** BLACK_CLAMP
+	txtY = txtY > APCA_SMOOTH_THRESHOLD ? txtY : txtY + (APCA_SMOOTH_THRESHOLD - txtY) ** BLACK_CLAMP
+	bgY = bgY > APCA_SMOOTH_THRESHOLD ? bgY : bgY + (APCA_SMOOTH_THRESHOLD - bgY) ** BLACK_CLAMP
 
 	// Return 0 for extremely low delta Y
 	if (Math.abs(bgY - txtY) < DELTA_Y_MIN) {
@@ -68,12 +62,12 @@ function calculateAPCAcontrast(txtY: number, bgY: number): number {
 
 	if (bgY > txtY) {
 		// Normal polarity: dark text on light background (BoW)
-		const sapc = (bgY ** EXP_NORMAL_BACKGROUND - txtY ** EXP_NORMAL_TEXT) * SCALE_BLACK_ON_WHITE
-		outputContrast = sapc < LOW_CLIP ? 0 : sapc - OFFSET_BLACK_ON_WHITE
+		const sapc = (bgY ** APCA_BG_EXP_NORMAL - txtY ** APCA_FG_EXP_NORMAL) * APCA_SCALE
+		outputContrast = sapc < LOW_CLIP ? 0 : sapc - APCA_OFFSET
 	} else {
 		// Reverse polarity: light text on dark background (WoB)
-		const sapc = (bgY ** EXP_REVERSE_BACKGROUND - txtY ** EXP_REVERSE_TEXT) * SCALE_WHITE_ON_BLACK
-		outputContrast = sapc > -LOW_CLIP ? 0 : sapc + OFFSET_WHITE_ON_BLACK
+		const sapc = (bgY ** APCA_BG_EXP_REVERSE - txtY ** APCA_FG_EXP_REVERSE) * APCA_SCALE
+		outputContrast = sapc > -LOW_CLIP ? 0 : sapc + APCA_OFFSET
 	}
 
 	return outputContrast * 100

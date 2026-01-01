@@ -3,6 +3,7 @@
  */
 
 import _Color from 'colorjs.io'
+import { GAMUT_SINE_CURVATURE_EXPONENT } from './constants.ts'
 import type { Color, GamutApex, GamutSlice } from './types.ts'
 import { clamp } from './util.ts'
 
@@ -68,7 +69,7 @@ function fitCurvature(hue: number, apex: GamutApex): number {
 		const linearChroma = (apex.chroma * (1 - L)) / (1 - apex.lightness)
 		const error = actualChroma - linearChroma
 
-		const basis = Math.sin(t * Math.PI) ** 0.95 * apex.chroma
+		const basis = Math.sin(t * Math.PI) ** GAMUT_SINE_CURVATURE_EXPONENT * apex.chroma
 		sumProduct += error * basis
 		sumBasisSquared += basis * basis
 	}
@@ -136,7 +137,8 @@ function computeMaxChromaInternal(L: number, slice: GamutSlice): number {
 	// Right half: linear with sine-based curvature correction
 	const linearChroma = (apex.chroma * (1 - L)) / (1 - apex.lightness)
 	const t = (L - apex.lightness) / (1 - apex.lightness)
-	const correction = curvature * Math.sin(t * Math.PI) ** 0.95 * apex.chroma
+	const correction =
+		curvature * Math.sin(t * Math.PI) ** GAMUT_SINE_CURVATURE_EXPONENT * apex.chroma
 
 	return linearChroma + correction
 }
