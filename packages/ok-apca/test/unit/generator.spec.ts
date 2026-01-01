@@ -87,17 +87,6 @@ describe('defineHue', () => {
 		expect(css).toContain('330')
 	})
 
-	it('generates readable CSS with comments', () => {
-		const { css } = defineHue({
-			hue: 30,
-			selector: '.color',
-		})
-
-		// Should have helpful comments
-		expect(css).toContain('/* Runtime inputs')
-		expect(css).toContain('/* Output color')
-	})
-
 	it('generates valid CSS property values', () => {
 		const { css } = defineHue({
 			hue: 200,
@@ -215,11 +204,8 @@ describe('defineHue output structure', () => {
 			contrastColors: [{ label: 'text' }],
 		})
 
-		// Should have shared Y-bg
+		// Should have shared Y-bg (used directly, no per-label copies)
 		expect(css).toContain('--_Y-bg:')
-
-		// Should have per-label Y-bg
-		expect(css).toContain('--_Y-bg-text:')
 
 		// Should have Y-dark-min and Y-light-min (used by Hermite interpolation)
 		expect(css).toContain('--_Y-dark-min-text:')
@@ -287,16 +273,22 @@ describe('defineHue output structure', () => {
 })
 
 describe('shared Y-bg', () => {
-	it('should reference shared Y-bg for all contrast colors', () => {
+	it('should use shared Y-bg directly for all contrast colors', () => {
 		const { css } = defineHue({
 			hue: 30,
 			selector: '.orange',
 			contrastColors: [{ label: 'text' }, { label: 'fill' }],
 		})
 
-		// Per-label Y-bg should reference shared Y-bg
-		expect(css).toContain('--_Y-bg-text: var(--_Y-bg)')
-		expect(css).toContain('--_Y-bg-fill: var(--_Y-bg)')
+		// Should have single shared Y-bg
+		expect(css).toContain('--_Y-bg:')
+
+		// Should NOT have per-label Y-bg variables
+		expect(css).not.toContain('--_Y-bg-text:')
+		expect(css).not.toContain('--_Y-bg-fill:')
+
+		// Y-dark-min and Y-light-min should reference var(--_Y-bg) directly
+		expect(css).toContain('var(--_Y-bg)')
 	})
 })
 
@@ -323,5 +315,61 @@ describe('output option', () => {
 		expect(css).toContain('--accent: oklch(')
 		expect(css).toContain('--accent-text: oklch(')
 		expect(css).not.toContain('--color:')
+	})
+})
+
+describe('inputMode option', () => {
+	it('defaults to percentage mode with clamping and normalization', () => {
+		const { css } = defineHue({
+			hue: 60,
+			selector: '.test',
+			contrastColors: [{ label: 'text' }],
+		})
+
+		// Should have intermediate variables for normalization
+		expect(css).toContain('@property --_lum-norm')
+		expect(css).toContain('@property --_chr-pct')
+
+		// Should clamp and normalize inputs
+		expect(css).toContain('--_lum-norm: clamp(0, var(--lightness) / 100, 1)')
+		expect(css).toContain('--_chr-pct: clamp(0, var(--chroma) / 100, 1)')
+
+		// Should clamp contrast input
+		expect(css).toContain('clamp(-108, var(--contrast-text, 0), 108)')
+
+		// Should normalize contrast
+		expect(css).toContain('abs(var(--_contrast-signed-text)) / 100')
+
+		// Y-bg should reference _lum-norm
+		expect(css).toContain('--_Y-bg: pow(var(--_lum-norm), 3)')
+	})
+
+	it('normalized mode skips intermediate variables and uses inputs directly', () => {
+		const { css } = defineHue({
+			hue: 60,
+			selector: '.test',
+			inputMode: 'normalized',
+			contrastColors: [{ label: 'text' }],
+		})
+
+		// Should NOT have intermediate variables
+		expect(css).not.toContain('@property --_lum-norm')
+		expect(css).not.toContain('@property --_chr-pct')
+		expect(css).not.toContain('--_lum-norm:')
+		expect(css).not.toContain('--_chr-pct:')
+
+		// Should NOT clamp inputs
+		expect(css).not.toContain('clamp(0, var(--lightness)')
+		expect(css).not.toContain('clamp(-108,')
+
+		// Should NOT divide by 100
+		expect(css).not.toContain('/ 100')
+
+		// Should use --lightness and --chroma directly
+		expect(css).toContain('var(--lightness)')
+		expect(css).toContain('var(--chroma)')
+
+		// Y-bg should reference --lightness directly
+		expect(css).toContain('--_Y-bg: pow(var(--lightness), 3)')
 	})
 })

@@ -31,6 +31,7 @@ const generatedCss = computed(() => defineHue({
 		hue: state.hue,
 		selector: '.preview',
 		contrastColors: [{ label: 'text' }],
+		inputMode: 'normalized',
 	}).css)
 
 useHead({
@@ -43,9 +44,9 @@ useHead({
 })
 
 const previewStyle = computed(() => ({
-	'--lightness': state.lightness,
-	'--chroma': state.chroma,
-	'--contrast-text': state.contrast,
+	'--lightness': Math.max(0, Math.min(state.lightness, 100)) / 100,
+	'--chroma': Math.max(0, Math.min(state.chroma, 100)) / 100,
+	'--contrast-text': Math.max(-108, Math.min(state.contrast, 108)) / 100,
 }))
 </script>
 

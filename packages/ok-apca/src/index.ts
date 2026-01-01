@@ -3,11 +3,11 @@
  */
 
 import { generateHueCss } from './generator.ts'
-import type { ContrastColor, Hue, HueOptions } from './types.ts'
+import type { ContrastColor, Hue, HueOptions, InputMode } from './types.ts'
 
 export { createColor, gamutMap } from './color.ts'
 export { applyContrast } from './contrast.ts'
-export type { Color, ContrastColor, Hue, HueOptions } from './types.ts'
+export type { Color, ContrastColor, Hue, HueOptions, InputMode } from './types.ts'
 
 const LABEL_REGEX = /^[a-z][a-z0-9_-]*$/i
 
@@ -49,6 +49,7 @@ export function defineHue(options: HueOptions): Hue {
 	const hue = ((options.hue % 360) + 360) % 360
 	const contrastColors: readonly ContrastColor[] = options.contrastColors ?? []
 	const output = options.output ?? 'color'
+	const inputMode: InputMode = options.inputMode ?? 'percentage'
 	const selector = options.selector
 
 	const labels = contrastColors.map((c) => c.label)
@@ -57,7 +58,7 @@ export function defineHue(options: HueOptions): Hue {
 	}
 	validateUniqueLabels(labels)
 
-	const css = generateHueCss({ hue, selector, output, contrastColors })
+	const css = generateHueCss({ hue, selector, output, contrastColors, inputMode })
 
 	return {
 		hue,

@@ -6,66 +6,70 @@ import {
 	APCA_SMOOTH_THRESHOLD_OFFSET,
 } from './apca.ts'
 import { findGamutSlice } from './color.ts'
-import type { GamutSlice, HueDefinition } from './types.ts'
+import type { GamutSlice, HueDefinition, InputMode } from './types.ts'
 import { outdent } from './util.ts'
 
-const css = {
-	number: (n: number, precision = 5) => n.toFixed(precision).replace(/\.?0+$/, '') || '0',
-	property: {
-		color: (name: string, inherits = false) => outdent`
-      @property --${name} {
-        inherits: ${inherits ? 'true' : 'false'};
-        initial-value: transparent;
-        syntax: '<color>';
-      }
-    `,
-		numeric: (name: string, inherits = false) => outdent`
-      @property --${name} {
-        inherits: ${inherits ? 'true' : 'false'};
-        initial-value: 0;
-        syntax: '<number>';
-      }
-    `,
-	},
-	unitClamp: (condition: string) => `clamp(0, ${condition}, 1)`,
-	var: (name: string, fallback?: string) => `var(--${name}${fallback ? `, ${fallback}` : ''})`,
-} as const
+function cssNumber(n: number): string {
+	return n.toFixed(5).replace(/\.?0+$/, '') || '0'
+}
 
-function generatePropertyRules(output: string, labels: readonly string[]): string {
+function cssVar(name: string, fallback?: string): string {
+	return `var(--${name}${fallback ? `, ${fallback}` : ''})`
+}
+
+function generatePropertyRules(
+	output: string,
+	labels: readonly string[],
+	inputMode: InputMode,
+): string {
+	const numeric = (name: string, inherits = false) => outdent`
+		@property --${name} {
+			inherits: ${inherits ? 'true' : 'false'};
+			initial-value: 0;
+			syntax: '<number>';
+		}
+	`
+	const color = (name: string, inherits = false) => outdent`
+		@property --${name} {
+			inherits: ${inherits ? 'true' : 'false'};
+			initial-value: transparent;
+			syntax: '<color>';
+		}
+	`
+
 	const properties: string[] = [
 		// Base color properties
-		css.property.numeric('lightness', true),
-		css.property.numeric('chroma', true),
-		css.property.numeric('_lum-norm'),
-		css.property.numeric('_chr-pct'),
-		css.property.color(output, true),
+		numeric('lightness', true),
+		numeric('chroma', true),
 	]
+
+	// Only need intermediate variables in percentage mode
+	if (inputMode === 'percentage') {
+		properties.push(numeric('_lum-norm'), numeric('_chr-pct'))
+	}
+
+	properties.push(color(output, true))
 
 	// Shared Y background if we have contrast colors
 	if (labels.length > 0) {
-		properties.push(css.property.numeric('_Y-bg'))
+		properties.push(numeric('_Y-bg'))
 	}
 
 	// Contrast color properties for each label
 	for (const label of labels) {
 		properties.push(
-			css.property.numeric(`contrast-${label}`, true),
-			css.property.numeric(`_contrast-signed-${label}`),
-			css.property.numeric(`_lc-norm-${label}`),
-			css.property.numeric(`_Y-bg-${label}`),
-			css.property.numeric(`_Y-dark-min-${label}`),
-			css.property.numeric(`_Y-light-min-${label}`),
-			css.property.numeric(`_con-lum-${label}`),
-			css.property.color(`${output}-${label}`, true),
+			numeric(`contrast-${label}`, true),
+			numeric(`_contrast-signed-${label}`),
+			numeric(`_lc-norm-${label}`),
+			numeric(`_Y-dark-min-${label}`),
+			numeric(`_Y-light-min-${label}`),
+			numeric(`_con-lum-${label}`),
+			color(`${output}-${label}`, true),
 		)
 	}
 
 	return properties.join('\n')
 }
-
-// Shared CSS variable references
-const V_LUM_NORM = css.var('_lum-norm')
-const V_CHR_PCT = css.var('_chr-pct')
 
 /**
  * Generate CSS for the max chroma calculation with curvature correction.
@@ -79,11 +83,11 @@ function cssMaxChroma(lightness: string, slice: GamutSlice): string {
 	const { apex, curvature } = slice
 
 	// Pre-computed constants
-	const lMax = css.number(apex.lightness)
-	const oneMinusLMax = css.number(1 - apex.lightness)
-	const leftSlope = css.number(apex.chroma / apex.lightness) // cMax / lMax
-	const rightSlope = css.number(apex.chroma / (1 - apex.lightness)) // cMax / (1 - lMax)
-	const curveScale = css.number(curvature * apex.chroma)
+	const lMax = cssNumber(apex.lightness)
+	const oneMinusLMax = cssNumber(1 - apex.lightness)
+	const leftSlope = cssNumber(apex.chroma / apex.lightness) // cMax / lMax
+	const rightSlope = cssNumber(apex.chroma / (1 - apex.lightness)) // cMax / (1 - lMax)
+	const curveScale = cssNumber(curvature * apex.chroma)
 
 	// t = (L - lMax) / (1 - lMax), clamped to right half only
 	const tExpr = `max(0, (${lightness} - ${lMax}) / ${oneMinusLMax})`
@@ -114,43 +118,64 @@ function cssMaxChroma(lightness: string, slice: GamutSlice): string {
  * This references t only once, reducing CSS variable expansion.
  */
 function cssSineInterpolation(startValue: string, endValue: string, tParameter: string): string {
-	const power = css.number(APCA_SMOOTH_POWER)
+	const power = cssNumber(APCA_SMOOTH_POWER)
 	// Clamp t to [0, 1] to avoid NaN when CSS evaluates both branches of conditionals
 	return outdent`
 		${startValue} + (${endValue} - ${startValue}) * pow(sin(min(${tParameter}, 1) * 1.5708), ${power})
 	`
 }
 
-function generateBaseColorCss(hue: number, slice: GamutSlice, output: string) {
+/** Get the CSS variable reference for normalized lightness based on input mode */
+function getLumNormVar(inputMode: InputMode): string {
+	return inputMode === 'percentage' ? cssVar('_lum-norm') : cssVar('lightness')
+}
+
+/** Get the CSS variable reference for chroma percentage based on input mode */
+function getChrPctVar(inputMode: InputMode): string {
+	return inputMode === 'percentage' ? cssVar('_chr-pct') : cssVar('chroma')
+}
+
+function generateBaseColorCss(
+	hue: number,
+	slice: GamutSlice,
+	output: string,
+	inputMode: InputMode,
+) {
+	const vLumNorm = getLumNormVar(inputMode)
+	const vChrPct = getChrPctVar(inputMode)
+
 	// Build the max chroma expression (used once, inlined)
-	const maxChromaExpr = cssMaxChroma(V_LUM_NORM, slice)
+	const maxChromaExpr = cssMaxChroma(vLumNorm, slice)
 
 	// Build the chroma expression: maxChroma * chrPct (used once, inlined into output)
-	const chromaExpr = `(${maxChromaExpr}) * ${V_CHR_PCT}`
+	const chromaExpr = `(${maxChromaExpr}) * ${vChrPct}`
+
+	if (inputMode === 'percentage') {
+		return outdent`
+			--_lum-norm: clamp(0, ${cssVar('lightness')} / 100, 1);
+			--_chr-pct: clamp(0, ${cssVar('chroma')} / 100, 1);
+			--${output}: oklch(${vLumNorm} calc(${chromaExpr}) ${cssNumber(hue)});
+		`
+	}
 
 	return outdent`
-		/* Runtime inputs: --lightness (0-100), --chroma (0-100 as % of max) */
-		--_lum-norm: clamp(0, ${css.var('lightness')} / 100, 1);
-		--_chr-pct: clamp(0, ${css.var('chroma')} / 100, 1);
-
-		/* Output color (max chroma and chroma inlined) */
-		--${output}: oklch(${V_LUM_NORM} calc(${chromaExpr}) ${css.number(hue)});
+		--${output}: oklch(${vLumNorm} calc(${chromaExpr}) ${cssNumber(hue)});
 	`
 }
 
 // Pre-computed CSS constants from APCA algorithm
-const CSS_SMOOTH_THRESHOLD = css.number(APCA_SMOOTH_THRESHOLD)
-const CSS_SMOOTH_THRESHOLD_OFFSET = css.number(APCA_SMOOTH_THRESHOLD_OFFSET)
-const CSS_NORMAL_INV_EXP = css.number(APCA_NORMAL_INV_EXP)
-const CSS_REVERSE_INV_EXP = css.number(APCA_REVERSE_INV_EXP)
+const CSS_SMOOTH_THRESHOLD = cssNumber(APCA_SMOOTH_THRESHOLD)
+const CSS_SMOOTH_THRESHOLD_OFFSET = cssNumber(APCA_SMOOTH_THRESHOLD_OFFSET)
+const CSS_NORMAL_INV_EXP = cssNumber(APCA_NORMAL_INV_EXP)
+const CSS_REVERSE_INV_EXP = cssNumber(APCA_REVERSE_INV_EXP)
 
 /**
  * Build the Y-dark expression (normal polarity).
  * Uses sine-based smoothing below threshold.
  */
 function buildYDarkExpr(label: string, yBgVar: string): string {
-	const V_LC_NORM = css.var(`_lc-norm-${label}`)
-	const V_Y_DARK_MIN = css.var(`_Y-dark-min-${label}`)
+	const V_LC_NORM = cssVar(`_lc-norm-${label}`)
+	const V_Y_DARK_MIN = cssVar(`_Y-dark-min-${label}`)
 
 	const apcaTermDynamic = `pow(${yBgVar}, 0.56) - (${V_LC_NORM} + 0.027) / 1.14`
 
@@ -162,7 +187,7 @@ function buildYDarkExpr(label: string, yBgVar: string): string {
 	const tParameter = `${V_LC_NORM} / ${CSS_SMOOTH_THRESHOLD}`
 	const sineInterpolation = cssSineInterpolation(yBgVar, V_Y_DARK_MIN, tParameter)
 
-	const aboveThreshold = css.unitClamp(`sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1`)
+	const aboveThreshold = `min(1, sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1)`
 
 	return outdent`
 		${aboveThreshold} * (${directSolution}) +
@@ -175,8 +200,8 @@ function buildYDarkExpr(label: string, yBgVar: string): string {
  * Uses sine-based smoothing below threshold.
  */
 function buildYLightExpr(label: string, yBgVar: string): string {
-	const V_LC_NORM = css.var(`_lc-norm-${label}`)
-	const V_Y_LIGHT_MIN = css.var(`_Y-light-min-${label}`)
+	const V_LC_NORM = cssVar(`_lc-norm-${label}`)
+	const V_Y_LIGHT_MIN = cssVar(`_Y-light-min-${label}`)
 
 	const apcaTermDynamic = `pow(${yBgVar}, 0.65) + (${V_LC_NORM} + 0.027) / 1.14`
 
@@ -185,7 +210,7 @@ function buildYLightExpr(label: string, yBgVar: string): string {
 	const tParameter = `${V_LC_NORM} / ${CSS_SMOOTH_THRESHOLD}`
 	const sineInterpolation = cssSineInterpolation(yBgVar, V_Y_LIGHT_MIN, tParameter)
 
-	const aboveThreshold = css.unitClamp(`sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1`)
+	const aboveThreshold = `min(1, sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1)`
 
 	return outdent`
 		${aboveThreshold} * (${directSolution}) +
@@ -198,13 +223,13 @@ function buildYLightExpr(label: string, yBgVar: string): string {
  * Inlines prefer-light, prefer-dark, Y-light, and Y-dark.
  */
 function buildYFinalExpr(label: string, yBgVar: string): string {
-	const V_CONTRAST_SIGNED = css.var(`_contrast-signed-${label}`)
+	const V_CONTRAST_SIGNED = cssVar(`_contrast-signed-${label}`)
 
-	// prefer-light = clamp(0, sign(contrast-signed - 0.0001), 1)
-	const preferLightExpr = css.unitClamp(`sign(${V_CONTRAST_SIGNED} - 0.0001)`)
+	// prefer-light = max(0, sign(contrast-signed - 0.0001))
+	const preferLightExpr = `max(0, sign(${V_CONTRAST_SIGNED} - 0.0001))`
 
-	// prefer-dark = clamp(0, -1 * sign(contrast-signed - 0.0001), 1)
-	const preferDarkExpr = css.unitClamp(`-1 * sign(${V_CONTRAST_SIGNED} - 0.0001)`)
+	// prefer-dark = max(0, -1 * sign(contrast-signed - 0.0001))
+	const preferDarkExpr = `max(0, -1 * sign(${V_CONTRAST_SIGNED} - 0.0001))`
 
 	const yLightExpr = buildYLightExpr(label, yBgVar)
 	const yDarkExpr = buildYDarkExpr(label, yBgVar)
@@ -219,7 +244,6 @@ function generateNormalPolarityCss(label: string, yBgVar: string) {
 	const apcaTermThreshold = `pow(${yBgVar}, 0.56) - ${CSS_SMOOTH_THRESHOLD_OFFSET}`
 
 	return outdent`
-		/* Normal polarity: solve for darker Y (dark text on light background) */
 		--_Y-dark-min-${label}: calc(
 			pow(abs(${apcaTermThreshold}), ${CSS_NORMAL_INV_EXP}) *
 			sign(${apcaTermThreshold})
@@ -231,7 +255,6 @@ function generateReversePolarityCss(label: string, yBgVar: string) {
 	const apcaTermThreshold = `pow(${yBgVar}, 0.65) + ${CSS_SMOOTH_THRESHOLD_OFFSET}`
 
 	return outdent`
-		/* Reverse polarity: solve for lighter Y (light text on dark background) */
 		--_Y-light-min-${label}: calc(
 			pow(abs(${apcaTermThreshold}), ${CSS_REVERSE_INV_EXP}) *
 			sign(${apcaTermThreshold})
@@ -244,12 +267,14 @@ function generateContrastColorCss(
 	hue: number,
 	slice: GamutSlice,
 	output: string,
+	inputMode: InputMode,
 ): string {
-	const V_Y_BG_LABEL = css.var(`_Y-bg-${label}`)
-	const V_CON_LUM = css.var(`_con-lum-${label}`)
+	const vChrPct = getChrPctVar(inputMode)
+	const V_Y_BG = cssVar('_Y-bg')
+	const V_CON_LUM = cssVar(`_con-lum-${label}`)
 
 	// Build inlined expressions
-	const yFinalExpr = buildYFinalExpr(label, V_Y_BG_LABEL)
+	const yFinalExpr = buildYFinalExpr(label, V_Y_BG)
 
 	// con-lum = clamp(0, pow(Y-final, 1/3), 1) - but Y-final is inlined
 	const conLumExpr = `pow(clamp(0, ${yFinalExpr}, 1), 1 / 3)`
@@ -258,24 +283,23 @@ function generateContrastColorCss(
 	const conMaxChrExpr = cssMaxChroma(V_CON_LUM, slice)
 
 	// con-chr = con-max-chr * chr-pct (inlined into output)
-	const conChrExpr = `(${conMaxChrExpr}) * ${V_CHR_PCT}`
+	const conChrExpr = `(${conMaxChrExpr}) * ${vChrPct}`
+
+	const isPercentage = inputMode === 'percentage'
+	const contrastSignedExpr = isPercentage
+		? `clamp(-108, ${cssVar(`contrast-${label}`, '0')}, 108)`
+		: cssVar(`contrast-${label}`, '0')
+	const lcNormExpr = isPercentage
+		? `abs(${cssVar(`_contrast-signed-${label}`)}) / 100`
+		: `abs(${cssVar(`_contrast-signed-${label}`)})`
 
 	return outdent`
-		/* Contrast color: ${label} */
-		--_contrast-signed-${label}: clamp(-108, ${css.var(`contrast-${label}`, '0')}, 108);
-		--_lc-norm-${label}: calc(abs(${css.var(`_contrast-signed-${label}`)}) / 100);
-
-		--_Y-bg-${label}: ${css.var('_Y-bg')};
-
-		${generateNormalPolarityCss(label, V_Y_BG_LABEL)}
-
-		${generateReversePolarityCss(label, V_Y_BG_LABEL)}
-
-		/* Y-final, prefer-light, prefer-dark, Y-light, Y-dark all inlined into con-lum */
+		--_contrast-signed-${label}: ${contrastSignedExpr};
+		--_lc-norm-${label}: calc(${lcNormExpr});
+		${generateNormalPolarityCss(label, V_Y_BG)}
+		${generateReversePolarityCss(label, V_Y_BG)}
 		--_con-lum-${label}: clamp(0, ${conLumExpr}, 1);
-
-		/* con-max-chr and con-chr inlined into output color */
-		--${output}-${label}: oklch(${V_CON_LUM} calc(${conChrExpr}) ${css.number(hue)});
+		--${output}-${label}: oklch(${V_CON_LUM} calc(${conChrExpr}) ${cssNumber(hue)});
 	`
 }
 
@@ -296,24 +320,19 @@ function generateContrastColorCss(
  * enabling proper type checking, animation support, and initial values.
  */
 export function generateHueCss(definition: HueDefinition): string {
-	const { hue, selector, output, contrastColors } = definition
+	const { hue, selector, output, contrastColors, inputMode } = definition
 	const slice = findGamutSlice(hue)
 	const labels = contrastColors.map((c) => c.label)
 
-	const propertyRules = generatePropertyRules(output, labels)
+	const propertyRules = generatePropertyRules(output, labels, inputMode)
 
-	const baseColorCss = generateBaseColorCss(hue, slice, output)
+	const baseColorCss = generateBaseColorCss(hue, slice, output, inputMode)
 
-	const sharedYBackground =
-		contrastColors.length > 0
-			? outdent`
-					/* Shared Y background for all contrast calculations */
-					--_Y-bg: pow(${css.var('_lum-norm')}, 3);
-				`
-			: ''
+	const vLumNorm = getLumNormVar(inputMode)
+	const sharedYBackground = contrastColors.length > 0 ? `--_Y-bg: pow(${vLumNorm}, 3);` : ''
 
 	const contrastColorsCss = contrastColors
-		.map(({ label }) => generateContrastColorCss(label, hue, slice, output))
+		.map(({ label }) => generateContrastColorCss(label, hue, slice, output, inputMode))
 		.join('\n\n')
 
 	return outdent`
