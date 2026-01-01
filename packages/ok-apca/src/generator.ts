@@ -37,25 +37,18 @@ function generatePropertyRules(
 		}
 	`
 
-	const properties: string[] = [
-		// Base color properties
-		numeric('lightness', true),
-		numeric('chroma', true),
-	]
+	const properties: string[] = [numeric('lightness', true), numeric('chroma', true)]
 
-	// Only need intermediate variables in percentage mode
 	if (inputMode === 'percentage') {
 		properties.push(numeric('_lum-norm'), numeric('_chr-pct'))
 	}
 
 	properties.push(color(output, true))
 
-	// Shared Y background if we have contrast colors
 	if (labels.length > 0) {
 		properties.push(numeric('_Y-bg'))
 	}
 
-	// Contrast color properties for each label
 	for (const label of labels) {
 		properties.push(
 			numeric(`contrast-${label}`, true),
@@ -71,38 +64,13 @@ function generatePropertyRules(
 	return properties.join('\n')
 }
 
-/**
- * Generate CSS for the max chroma calculation with curvature correction.
- * Left half: linear from origin to apex
- * Right half: linear with sine-based curvature correction
- *
- * Uses pow(sin(t * pi), 0.95) which only references t once,
- * reducing CSS variable expansion compared to t * (1 - t).
- */
+/** Max chroma with curvature correction: linear left of apex, sine-corrected right of apex. */
 function cssMaxChroma(lightness: string, slice: GamutSlice): string {
 	const { apex, curvature } = slice
-
-	// Pre-computed constants
 	const lMax = cssNumber(apex.lightness)
-	const oneMinusLMax = cssNumber(1 - apex.lightness)
-	const leftSlope = cssNumber(apex.chroma / apex.lightness) // cMax / lMax
-	const rightSlope = cssNumber(apex.chroma / (1 - apex.lightness)) // cMax / (1 - lMax)
-	const curveScale = cssNumber(curvature * apex.chroma)
-
-	// t = (L - lMax) / (1 - lMax), clamped to right half only
-	const tExpr = `max(0, (${lightness} - ${lMax}) / ${oneMinusLMax})`
-
-	// Left half: L * (cMax / lMax)
-	const leftHalf = `${lightness} * ${leftSlope}`
-
-	// Right half: (1 - L) * (cMax / (1 - lMax)) + curveScale * pow(sin(t * pi), 0.95)
-	const linearRight = `(1 - ${lightness}) * ${rightSlope}`
-	const correction = `${curveScale} * pow(sin((${tExpr}) * pi), 0.95)`
-	const rightHalf = `${linearRight} + ${correction}`
-
-	// Use sign to select left or right half
-	// When L <= lMax: sign(lMax - L) >= 0, use left
-	// When L > lMax: sign(lMax - L) < 0, use right
+	const tExpr = `max(0, (${lightness} - ${lMax}) / ${cssNumber(1 - apex.lightness)})`
+	const leftHalf = `${lightness} * ${cssNumber(apex.chroma / apex.lightness)}`
+	const rightHalf = `(1 - ${lightness}) * ${cssNumber(apex.chroma / (1 - apex.lightness))} + ${cssNumber(curvature * apex.chroma)} * pow(sin((${tExpr}) * pi), 0.95)`
 	const isRightHalf = `max(0, sign(${lightness} - ${lMax}))`
 
 	return outdent`
@@ -111,26 +79,15 @@ function cssMaxChroma(lightness: string, slice: GamutSlice): string {
 	`
 }
 
-/**
- * Generate CSS for sine-based smoothing interpolation.
- * Formula: start + (end - start) * pow(sin(t * π/2), power)
- *
- * This references t only once, reducing CSS variable expansion.
- */
+/** Sine-based smoothing: start + (end - start) * pow(sin(t * π/2), power). Clamps t to avoid NaN. */
 function cssSineInterpolation(startValue: string, endValue: string, tParameter: string): string {
-	const power = cssNumber(APCA_SMOOTH_POWER)
-	// Clamp t to [0, 1] to avoid NaN when CSS evaluates both branches of conditionals
-	return outdent`
-		${startValue} + (${endValue} - ${startValue}) * pow(sin(min(${tParameter}, 1) * 1.5708), ${power})
-	`
+	return `${startValue} + (${endValue} - ${startValue}) * pow(sin(min(${tParameter}, 1) * 1.5708), ${cssNumber(APCA_SMOOTH_POWER)})`
 }
 
-/** Get the CSS variable reference for normalized lightness based on input mode */
 function getLumNormVar(inputMode: InputMode): string {
 	return inputMode === 'percentage' ? cssVar('_lum-norm') : cssVar('lightness')
 }
 
-/** Get the CSS variable reference for chroma percentage based on input mode */
 function getChrPctVar(inputMode: InputMode): string {
 	return inputMode === 'percentage' ? cssVar('_chr-pct') : cssVar('chroma')
 }
@@ -142,13 +99,7 @@ function generateBaseColorCss(
 	inputMode: InputMode,
 ) {
 	const vLumNorm = getLumNormVar(inputMode)
-	const vChrPct = getChrPctVar(inputMode)
-
-	// Build the max chroma expression (used once, inlined)
-	const maxChromaExpr = cssMaxChroma(vLumNorm, slice)
-
-	// Build the chroma expression: maxChroma * chrPct (used once, inlined into output)
-	const chromaExpr = `(${maxChromaExpr}) * ${vChrPct}`
+	const chromaExpr = `(${cssMaxChroma(vLumNorm, slice)}) * ${getChrPctVar(inputMode)}`
 
 	if (inputMode === 'percentage') {
 		return outdent`
@@ -158,36 +109,26 @@ function generateBaseColorCss(
 		`
 	}
 
-	return outdent`
-		--${output}: oklch(${vLumNorm} calc(${chromaExpr}) ${cssNumber(hue)});
-	`
+	return `--${output}: oklch(${vLumNorm} calc(${chromaExpr}) ${cssNumber(hue)});`
 }
 
-// Pre-computed CSS constants from APCA algorithm
 const CSS_SMOOTH_THRESHOLD = cssNumber(APCA_SMOOTH_THRESHOLD)
 const CSS_SMOOTH_THRESHOLD_OFFSET = cssNumber(APCA_SMOOTH_THRESHOLD_OFFSET)
 const CSS_NORMAL_INV_EXP = cssNumber(APCA_NORMAL_INV_EXP)
 const CSS_REVERSE_INV_EXP = cssNumber(APCA_REVERSE_INV_EXP)
+const V_Y_BG = cssVar('_Y-bg')
 
-/**
- * Build the Y-dark expression (normal polarity).
- * Uses sine-based smoothing below threshold.
- */
-function buildYDarkExpr(label: string, yBgVar: string): string {
+function buildYDarkExpr(label: string): string {
 	const V_LC_NORM = cssVar(`_lc-norm-${label}`)
 	const V_Y_DARK_MIN = cssVar(`_Y-dark-min-${label}`)
-
-	const apcaTermDynamic = `pow(${yBgVar}, 0.56) - (${V_LC_NORM} + 0.027) / 1.14`
-
-	const directSolution = outdent`
-		pow(abs(${apcaTermDynamic}), ${CSS_NORMAL_INV_EXP}) *
-		sign(${apcaTermDynamic})
-	`
-
-	const tParameter = `${V_LC_NORM} / ${CSS_SMOOTH_THRESHOLD}`
-	const sineInterpolation = cssSineInterpolation(yBgVar, V_Y_DARK_MIN, tParameter)
-
+	const apcaTermDynamic = `pow(${V_Y_BG}, 0.56) - (${V_LC_NORM} + 0.027) / 1.14`
+	const directSolution = `pow(abs(${apcaTermDynamic}), ${CSS_NORMAL_INV_EXP}) * sign(${apcaTermDynamic})`
 	const aboveThreshold = `min(1, sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1)`
+	const sineInterpolation = cssSineInterpolation(
+		V_Y_BG,
+		V_Y_DARK_MIN,
+		`${V_LC_NORM} / ${CSS_SMOOTH_THRESHOLD}`,
+	)
 
 	return outdent`
 		${aboveThreshold} * (${directSolution}) +
@@ -195,22 +136,17 @@ function buildYDarkExpr(label: string, yBgVar: string): string {
 	`
 }
 
-/**
- * Build the Y-light expression (reverse polarity).
- * Uses sine-based smoothing below threshold.
- */
-function buildYLightExpr(label: string, yBgVar: string): string {
+function buildYLightExpr(label: string): string {
 	const V_LC_NORM = cssVar(`_lc-norm-${label}`)
 	const V_Y_LIGHT_MIN = cssVar(`_Y-light-min-${label}`)
-
-	const apcaTermDynamic = `pow(${yBgVar}, 0.65) + (${V_LC_NORM} + 0.027) / 1.14`
-
+	const apcaTermDynamic = `pow(${V_Y_BG}, 0.65) + (${V_LC_NORM} + 0.027) / 1.14`
 	const directSolution = `pow(${apcaTermDynamic}, ${CSS_REVERSE_INV_EXP})`
-
-	const tParameter = `${V_LC_NORM} / ${CSS_SMOOTH_THRESHOLD}`
-	const sineInterpolation = cssSineInterpolation(yBgVar, V_Y_LIGHT_MIN, tParameter)
-
 	const aboveThreshold = `min(1, sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1)`
+	const sineInterpolation = cssSineInterpolation(
+		V_Y_BG,
+		V_Y_LIGHT_MIN,
+		`${V_LC_NORM} / ${CSS_SMOOTH_THRESHOLD}`,
+	)
 
 	return outdent`
 		${aboveThreshold} * (${directSolution}) +
@@ -218,48 +154,25 @@ function buildYLightExpr(label: string, yBgVar: string): string {
 	`
 }
 
-/**
- * Build the Y-final expression.
- * Inlines prefer-light, prefer-dark, Y-light, and Y-dark.
- */
-function buildYFinalExpr(label: string, yBgVar: string): string {
+function buildYFinalExpr(label: string): string {
 	const V_CONTRAST_SIGNED = cssVar(`_contrast-signed-${label}`)
-
-	// prefer-light = max(0, sign(contrast-signed - 0.0001))
 	const preferLightExpr = `max(0, sign(${V_CONTRAST_SIGNED} - 0.0001))`
-
-	// prefer-dark = max(0, -1 * sign(contrast-signed - 0.0001))
 	const preferDarkExpr = `max(0, -1 * sign(${V_CONTRAST_SIGNED} - 0.0001))`
 
-	const yLightExpr = buildYLightExpr(label, yBgVar)
-	const yDarkExpr = buildYDarkExpr(label, yBgVar)
-
 	return outdent`
-		(${preferLightExpr}) * (${yLightExpr}) +
-		(${preferDarkExpr}) * (${yDarkExpr})
+		(${preferLightExpr}) * (${buildYLightExpr(label)}) +
+		(${preferDarkExpr}) * (${buildYDarkExpr(label)})
 	`
 }
 
-function generateNormalPolarityCss(label: string, yBgVar: string) {
-	const apcaTermThreshold = `pow(${yBgVar}, 0.56) - ${CSS_SMOOTH_THRESHOLD_OFFSET}`
-
-	return outdent`
-		--_Y-dark-min-${label}: calc(
-			pow(abs(${apcaTermThreshold}), ${CSS_NORMAL_INV_EXP}) *
-			sign(${apcaTermThreshold})
-		);
-	`
+function generateNormalPolarityCss(label: string) {
+	const apcaTermThreshold = `pow(${V_Y_BG}, 0.56) - ${CSS_SMOOTH_THRESHOLD_OFFSET}`
+	return `--_Y-dark-min-${label}: calc(pow(abs(${apcaTermThreshold}), ${CSS_NORMAL_INV_EXP}) * sign(${apcaTermThreshold}));`
 }
 
-function generateReversePolarityCss(label: string, yBgVar: string) {
-	const apcaTermThreshold = `pow(${yBgVar}, 0.65) + ${CSS_SMOOTH_THRESHOLD_OFFSET}`
-
-	return outdent`
-		--_Y-light-min-${label}: calc(
-			pow(abs(${apcaTermThreshold}), ${CSS_REVERSE_INV_EXP}) *
-			sign(${apcaTermThreshold})
-		);
-	`
+function generateReversePolarityCss(label: string) {
+	const apcaTermThreshold = `pow(${V_Y_BG}, 0.65) + ${CSS_SMOOTH_THRESHOLD_OFFSET}`
+	return `--_Y-light-min-${label}: calc(pow(abs(${apcaTermThreshold}), ${CSS_REVERSE_INV_EXP}) * sign(${apcaTermThreshold}));`
 }
 
 function generateContrastColorCss(
@@ -270,20 +183,9 @@ function generateContrastColorCss(
 	inputMode: InputMode,
 ): string {
 	const vChrPct = getChrPctVar(inputMode)
-	const V_Y_BG = cssVar('_Y-bg')
 	const V_CON_LUM = cssVar(`_con-lum-${label}`)
-
-	// Build inlined expressions
-	const yFinalExpr = buildYFinalExpr(label, V_Y_BG)
-
-	// con-lum = clamp(0, pow(Y-final, 1/3), 1) - but Y-final is inlined
-	const conLumExpr = `pow(clamp(0, ${yFinalExpr}, 1), 1 / 3)`
-
-	// con-max-chr uses con-lum (which is a CSS var since it's used twice)
-	const conMaxChrExpr = cssMaxChroma(V_CON_LUM, slice)
-
-	// con-chr = con-max-chr * chr-pct (inlined into output)
-	const conChrExpr = `(${conMaxChrExpr}) * ${vChrPct}`
+	const conLumExpr = `pow(clamp(0, ${buildYFinalExpr(label)}, 1), 1 / 3)`
+	const conChrExpr = `(${cssMaxChroma(V_CON_LUM, slice)}) * ${vChrPct}`
 
 	const isPercentage = inputMode === 'percentage'
 	const contrastSignedExpr = isPercentage
@@ -296,8 +198,8 @@ function generateContrastColorCss(
 	return outdent`
 		--_contrast-signed-${label}: ${contrastSignedExpr};
 		--_lc-norm-${label}: calc(${lcNormExpr});
-		${generateNormalPolarityCss(label, V_Y_BG)}
-		${generateReversePolarityCss(label, V_Y_BG)}
+		${generateNormalPolarityCss(label)}
+		${generateReversePolarityCss(label)}
 		--_con-lum-${label}: clamp(0, ${conLumExpr}, 1);
 		--${output}-${label}: oklch(${V_CON_LUM} calc(${conChrExpr}) ${cssNumber(hue)});
 	`
