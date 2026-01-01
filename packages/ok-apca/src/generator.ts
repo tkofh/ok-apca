@@ -12,7 +12,7 @@ import type { GamutSlice, HeuristicCoefficients, HueDefinition } from './types.t
 import { outdent } from './util.ts'
 
 const css = {
-	number: (n: number, precision = 8) => n.toFixed(precision).replace(/\.?0+$/, '') || '0',
+	number: (n: number, precision = 5) => n.toFixed(precision).replace(/\.?0+$/, '') || '0',
 	property: {
 		color: (name: string, inherits = false) => outdent`
       @property --${name} {
@@ -72,7 +72,10 @@ const V_CHR_PCT = css.var('_chr-pct')
 /**
  * Generate CSS for the max chroma calculation with curvature correction.
  * Left half: linear from origin to apex
- * Right half: linear with quadratic curvature correction
+ * Right half: linear with sine-based curvature correction
+ *
+ * Uses pow(sin(t * pi), 0.95) which only references t once,
+ * reducing CSS variable expansion compared to t * (1 - t).
  */
 function cssMaxChroma(lightness: string, slice: GamutSlice): string {
 	const { apex, curvature } = slice
@@ -90,9 +93,9 @@ function cssMaxChroma(lightness: string, slice: GamutSlice): string {
 	// Left half: L * (cMax / lMax)
 	const leftHalf = `${lightness} * ${leftSlope}`
 
-	// Right half: (1 - L) * (cMax / (1 - lMax)) + curveScale * t * (1 - t)
+	// Right half: (1 - L) * (cMax / (1 - lMax)) + curveScale * pow(sin(t * pi), 0.95)
 	const linearRight = `(1 - ${lightness}) * ${rightSlope}`
-	const correction = `${curveScale} * (${tExpr}) * (1 - (${tExpr}))`
+	const correction = `${curveScale} * pow(sin((${tExpr}) * pi), 0.95)`
 	const rightHalf = `${linearRight} + ${correction}`
 
 	// Use sign to select left or right half
@@ -132,7 +135,7 @@ function generateBaseColorCss(hue: number, slice: GamutSlice, output: string) {
 		--_chr-pct: clamp(0, ${css.var('chroma')} / 100, 1);
 
 		/* Output color (max chroma and chroma inlined) */
-		--${output}: oklch(${V_LUM_NORM} calc(${chromaExpr}) ${hue});
+		--${output}: oklch(${V_LUM_NORM} calc(${chromaExpr}) ${css.number(hue)});
 	`
 }
 
@@ -310,7 +313,7 @@ function generateContrastColorCss(
 		--_con-lum-${label}: clamp(0, calc(${conLumExpr}), 1);
 
 		/* con-max-chr and con-chr inlined into output color */
-		--${output}-${label}: oklch(${V_CON_LUM} calc(${conChrExpr}) ${hue});
+		--${output}-${label}: oklch(${V_CON_LUM} calc(${conChrExpr}) ${css.number(hue)});
 	`
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { generateColorCss } from 'ok-apca'
+import { defineHue } from 'ok-apca'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,13 +27,11 @@ onMounted(() => {
 	}
 })
 
-const generatedCss = computed(() => {
-	return generateColorCss({
+const generatedCss = computed(() => defineHue({
 		hue: state.hue,
 		selector: '.preview',
 		contrastColors: [{ label: 'text' }],
-	})
-})
+	}).css)
 
 useHead({
   style: [

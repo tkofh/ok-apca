@@ -106,9 +106,9 @@ describe('defineHue', () => {
 		})
 
 		// Check that numbers are properly formatted (no trailing zeros like "0.5000000000")
-		// Numbers in the generated CSS should be reasonably short (max 8 decimal places)
-		const numbers = css.match(/\d+\.\d{9,}/g)
-		expect(numbers).toBeNull() // No numbers with 9+ decimal places
+		// Numbers in the generated CSS should be reasonably short (max 5 decimal places)
+		const numbers = css.match(/\d+\.\d{6,}/g)
+		expect(numbers).toBeNull() // No numbers with 6+ decimal places
 	})
 
 	it('generates different CSS for different hues', () => {

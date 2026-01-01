@@ -47,9 +47,14 @@ function findMaxChromaAtLightness(hue: number, lightness: number): number {
 }
 
 /**
- * Fit quadratic curvature correction for the right half of the tent.
+ * Fit curvature correction for the right half of the tent using a sine basis.
  * The correction models how the actual gamut boundary curves inward
  * from the linear tent approximation.
+ *
+ * Uses pow(sin(t * π), 0.95) as the basis function, which:
+ * - Peaks at t=0.5 (like t*(1-t))
+ * - Optimal exponent determined by testing across all 360 hues
+ * - Allows single evaluation of t in CSS (sin only uses t once)
  */
 function fitCurvature(hue: number, apex: GamutApex): number {
 	const samples = 50
@@ -63,7 +68,7 @@ function fitCurvature(hue: number, apex: GamutApex): number {
 		const linearChroma = (apex.chroma * (1 - L)) / (1 - apex.lightness)
 		const error = actualChroma - linearChroma
 
-		const basis = t * (1 - t) * apex.chroma
+		const basis = Math.sin(t * Math.PI) ** 0.95 * apex.chroma
 		sumProduct += error * basis
 		sumBasisSquared += basis * basis
 	}
@@ -128,10 +133,10 @@ function computeMaxChroma(L: number, slice: GamutSlice): number {
 		return (apex.chroma * L) / apex.lightness
 	}
 
-	// Right half: linear with quadratic curvature correction
+	// Right half: linear with sine-based curvature correction
 	const linearChroma = (apex.chroma * (1 - L)) / (1 - apex.lightness)
 	const t = (L - apex.lightness) / (1 - apex.lightness)
-	const correction = curvature * t * (1 - t) * apex.chroma
+	const correction = curvature * Math.sin(t * Math.PI) ** 0.95 * apex.chroma
 
 	return linearChroma + correction
 }
