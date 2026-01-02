@@ -70,25 +70,25 @@ describe('serialization', () => {
 		it('serializes addition', () => {
 			const expr = add(reference('x'), constant(5))
 			const result = expr.evaluate({ x: reference('x') })
-			expect(result.css.expression).toBe('var(--x) + 5')
+			expect(result.css.expression).toBe('calc(var(--x) + 5)')
 		})
 
 		it('serializes subtraction', () => {
 			const expr = subtract(reference('x'), constant(5))
 			const result = expr.evaluate({ x: reference('x') })
-			expect(result.css.expression).toBe('var(--x) - 5')
+			expect(result.css.expression).toBe('calc(var(--x) - 5)')
 		})
 
 		it('serializes multiplication', () => {
 			const expr = multiply(reference('x'), constant(2))
 			const result = expr.evaluate({ x: reference('x') })
-			expect(result.css.expression).toBe('var(--x) * 2')
+			expect(result.css.expression).toBe('calc(var(--x) * 2)')
 		})
 
 		it('serializes division', () => {
 			const expr = divide(reference('x'), constant(2))
 			const result = expr.evaluate({ x: reference('x') })
-			expect(result.css.expression).toBe('var(--x) / 2')
+			expect(result.css.expression).toBe('calc(var(--x) / 2)')
 		})
 
 		it('serializes power', () => {
@@ -152,7 +152,7 @@ describe('serialization', () => {
 				b: reference('b'),
 				c: reference('c'),
 			})
-			expect(result.css.expression).toBe('(var(--a) + var(--b)) * var(--c)')
+			expect(result.css.expression).toBe('calc((var(--a) + var(--b)) * var(--c))')
 		})
 
 		it('adds parens to subtract when used in divide', () => {
@@ -162,7 +162,7 @@ describe('serialization', () => {
 				b: reference('b'),
 				c: reference('c'),
 			})
-			expect(result.css.expression).toBe('(var(--a) - var(--b)) / var(--c)')
+			expect(result.css.expression).toBe('calc((var(--a) - var(--b)) / var(--c))')
 		})
 
 		it('does not add parens to multiply when used in add', () => {
@@ -172,7 +172,7 @@ describe('serialization', () => {
 				b: reference('b'),
 				c: reference('c'),
 			})
-			expect(result.css.expression).toBe('var(--a) * var(--b) + var(--c)')
+			expect(result.css.expression).toBe('calc(var(--a) * var(--b) + var(--c))')
 		})
 
 		it('handles deeply nested expressions', () => {
@@ -187,7 +187,7 @@ describe('serialization', () => {
 				c: reference('c'),
 				d: reference('d'),
 			})
-			expect(result.css.expression).toBe('(var(--a) + var(--b)) * (var(--c) - var(--d))')
+			expect(result.css.expression).toBe('calc((var(--a) + var(--b)) * (var(--c) - var(--d)))')
 		})
 	})
 
@@ -199,7 +199,7 @@ describe('serialization', () => {
 				a: reference('a'),
 				x: reference('x'),
 			})
-			expect(result.css.expression).toBe('var(--a) * pow(var(--x), 2)')
+			expect(result.css.expression).toBe('calc(var(--a) * pow(var(--x), 2))')
 		})
 
 		it('serializes distance formula', () => {

@@ -1,4 +1,4 @@
-import { CalcExpression, NODE, REFS } from './expression.ts'
+import { CalcExpression } from './expression.ts'
 import {
 	AbsNode,
 	AddNode,
@@ -24,8 +24,7 @@ export function constant(value: number | string): CalcExpression<never> {
 	if (!Number.isFinite(num)) {
 		throw new TypeError('Constant value must be a finite number')
 	}
-	const node = new ConstantNode(num)
-	return CalcExpression._create(node, new Set())
+	return new CalcExpression(new ConstantNode(num))
 }
 
 /**
@@ -35,8 +34,23 @@ export function reference<Name extends string>(name: Name): CalcExpression<Name>
 	if (typeof name !== 'string' || name.length === 0) {
 		throw new TypeError('Reference name must be a non-empty string')
 	}
-	const node = new ReferenceNode(name)
-	return CalcExpression._create(node, new Set([name]))
+	return new CalcExpression(new ReferenceNode(name), new Set([name]))
+}
+
+// Helper to merge refs from multiple expressions
+function mergeRefs(...exprs: CalcExpression<string>[]): Set<string> {
+	const refs = new Set<string>()
+	for (const expr of exprs) {
+		for (const ref of expr.refs) {
+			refs.add(ref)
+		}
+	}
+	return refs
+}
+
+// Helper to check if a node is constant
+function isConstant(node: unknown): node is ConstantNode {
+	return node instanceof ConstantNode
 }
 
 /**
@@ -46,14 +60,11 @@ export function add<A extends string, B extends string>(
 	left: CalcExpression<A>,
 	right: CalcExpression<B>,
 ): CalcExpression<A | B> {
-	const leftNode = left[NODE]
-	const rightNode = right[NODE]
 	const node =
-		ConstantNode.is(leftNode) && ConstantNode.is(rightNode)
-			? new ConstantNode(leftNode.value + rightNode.value)
-			: new AddNode(leftNode, rightNode)
-	const refs = new Set([...left[REFS], ...right[REFS]])
-	return CalcExpression._create(node, refs)
+		isConstant(left.node) && isConstant(right.node)
+			? new ConstantNode(left.node.value + right.node.value)
+			: new AddNode(left.node, right.node)
+	return new CalcExpression(node, mergeRefs(left, right))
 }
 
 /**
@@ -63,14 +74,11 @@ export function subtract<A extends string, B extends string>(
 	left: CalcExpression<A>,
 	right: CalcExpression<B>,
 ): CalcExpression<A | B> {
-	const leftNode = left[NODE]
-	const rightNode = right[NODE]
 	const node =
-		ConstantNode.is(leftNode) && ConstantNode.is(rightNode)
-			? new ConstantNode(leftNode.value - rightNode.value)
-			: new SubtractNode(leftNode, rightNode)
-	const refs = new Set([...left[REFS], ...right[REFS]])
-	return CalcExpression._create(node, refs)
+		isConstant(left.node) && isConstant(right.node)
+			? new ConstantNode(left.node.value - right.node.value)
+			: new SubtractNode(left.node, right.node)
+	return new CalcExpression(node, mergeRefs(left, right))
 }
 
 /**
@@ -80,14 +88,11 @@ export function multiply<A extends string, B extends string>(
 	left: CalcExpression<A>,
 	right: CalcExpression<B>,
 ): CalcExpression<A | B> {
-	const leftNode = left[NODE]
-	const rightNode = right[NODE]
 	const node =
-		ConstantNode.is(leftNode) && ConstantNode.is(rightNode)
-			? new ConstantNode(leftNode.value * rightNode.value)
-			: new MultiplyNode(leftNode, rightNode)
-	const refs = new Set([...left[REFS], ...right[REFS]])
-	return CalcExpression._create(node, refs)
+		isConstant(left.node) && isConstant(right.node)
+			? new ConstantNode(left.node.value * right.node.value)
+			: new MultiplyNode(left.node, right.node)
+	return new CalcExpression(node, mergeRefs(left, right))
 }
 
 /**
@@ -97,14 +102,11 @@ export function divide<A extends string, B extends string>(
 	left: CalcExpression<A>,
 	right: CalcExpression<B>,
 ): CalcExpression<A | B> {
-	const leftNode = left[NODE]
-	const rightNode = right[NODE]
 	const node =
-		ConstantNode.is(leftNode) && ConstantNode.is(rightNode)
-			? new ConstantNode(leftNode.value / rightNode.value)
-			: new DivideNode(leftNode, rightNode)
-	const refs = new Set([...left[REFS], ...right[REFS]])
-	return CalcExpression._create(node, refs)
+		isConstant(left.node) && isConstant(right.node)
+			? new ConstantNode(left.node.value / right.node.value)
+			: new DivideNode(left.node, right.node)
+	return new CalcExpression(node, mergeRefs(left, right))
 }
 
 /**
@@ -114,47 +116,41 @@ export function power<A extends string, B extends string>(
 	base: CalcExpression<A>,
 	exponent: CalcExpression<B>,
 ): CalcExpression<A | B> {
-	const baseNode = base[NODE]
-	const expNode = exponent[NODE]
 	const node =
-		ConstantNode.is(baseNode) && ConstantNode.is(expNode)
-			? new ConstantNode(baseNode.value ** expNode.value)
-			: new PowerNode(baseNode, expNode)
-	const refs = new Set([...base[REFS], ...exponent[REFS]])
-	return CalcExpression._create(node, refs)
+		isConstant(base.node) && isConstant(exponent.node)
+			? new ConstantNode(base.node.value ** exponent.node.value)
+			: new PowerNode(base.node, exponent.node)
+	return new CalcExpression(node, mergeRefs(base, exponent))
 }
 
 /**
  * Compute sine of an expression.
  */
 export function sin<Refs extends string>(arg: CalcExpression<Refs>): CalcExpression<Refs> {
-	const argNode = arg[NODE]
-	const node = ConstantNode.is(argNode)
-		? new ConstantNode(Math.sin(argNode.value))
-		: new SinNode(argNode)
-	return CalcExpression._create(node, new Set(arg[REFS]))
+	const node = isConstant(arg.node)
+		? new ConstantNode(Math.sin(arg.node.value))
+		: new SinNode(arg.node)
+	return new CalcExpression(node, new Set(arg.refs))
 }
 
 /**
  * Compute absolute value of an expression.
  */
 export function abs<Refs extends string>(arg: CalcExpression<Refs>): CalcExpression<Refs> {
-	const argNode = arg[NODE]
-	const node = ConstantNode.is(argNode)
-		? new ConstantNode(Math.abs(argNode.value))
-		: new AbsNode(argNode)
-	return CalcExpression._create(node, new Set(arg[REFS]))
+	const node = isConstant(arg.node)
+		? new ConstantNode(Math.abs(arg.node.value))
+		: new AbsNode(arg.node)
+	return new CalcExpression(node, new Set(arg.refs))
 }
 
 /**
  * Compute sign of an expression (-1, 0, or 1).
  */
 export function sign<Refs extends string>(arg: CalcExpression<Refs>): CalcExpression<Refs> {
-	const argNode = arg[NODE]
-	const node = ConstantNode.is(argNode)
-		? new ConstantNode(Math.sign(argNode.value))
-		: new SignNode(argNode)
-	return CalcExpression._create(node, new Set(arg[REFS]))
+	const node = isConstant(arg.node)
+		? new ConstantNode(Math.sign(arg.node.value))
+		: new SignNode(arg.node)
+	return new CalcExpression(node, new Set(arg.refs))
 }
 
 /**
@@ -164,14 +160,11 @@ export function max<A extends string, B extends string>(
 	left: CalcExpression<A>,
 	right: CalcExpression<B>,
 ): CalcExpression<A | B> {
-	const leftNode = left[NODE]
-	const rightNode = right[NODE]
 	const node =
-		ConstantNode.is(leftNode) && ConstantNode.is(rightNode)
-			? new ConstantNode(Math.max(leftNode.value, rightNode.value))
-			: new MaxNode(leftNode, rightNode)
-	const refs = new Set([...left[REFS], ...right[REFS]])
-	return CalcExpression._create(node, refs)
+		isConstant(left.node) && isConstant(right.node)
+			? new ConstantNode(Math.max(left.node.value, right.node.value))
+			: new MaxNode(left.node, right.node)
+	return new CalcExpression(node, mergeRefs(left, right))
 }
 
 /**
@@ -181,14 +174,11 @@ export function min<A extends string, B extends string>(
 	left: CalcExpression<A>,
 	right: CalcExpression<B>,
 ): CalcExpression<A | B> {
-	const leftNode = left[NODE]
-	const rightNode = right[NODE]
 	const node =
-		ConstantNode.is(leftNode) && ConstantNode.is(rightNode)
-			? new ConstantNode(Math.min(leftNode.value, rightNode.value))
-			: new MinNode(leftNode, rightNode)
-	const refs = new Set([...left[REFS], ...right[REFS]])
-	return CalcExpression._create(node, refs)
+		isConstant(left.node) && isConstant(right.node)
+			? new ConstantNode(Math.min(left.node.value, right.node.value))
+			: new MinNode(left.node, right.node)
+	return new CalcExpression(node, mergeRefs(left, right))
 }
 
 /**
@@ -199,13 +189,11 @@ export function clamp<A extends string, B extends string, C extends string>(
 	value: CalcExpression<B>,
 	maximum: CalcExpression<C>,
 ): CalcExpression<A | B | C> {
-	const minNode = minimum[NODE]
-	const valNode = value[NODE]
-	const maxNode = maximum[NODE]
 	const node =
-		ConstantNode.is(minNode) && ConstantNode.is(valNode) && ConstantNode.is(maxNode)
-			? new ConstantNode(Math.max(minNode.value, Math.min(valNode.value, maxNode.value)))
-			: new ClampNode(minNode, valNode, maxNode)
-	const refs = new Set([...minimum[REFS], ...value[REFS], ...maximum[REFS]])
-	return CalcExpression._create(node, refs)
+		isConstant(minimum.node) && isConstant(value.node) && isConstant(maximum.node)
+			? new ConstantNode(
+					Math.max(minimum.node.value, Math.min(value.node.value, maximum.node.value)),
+				)
+			: new ClampNode(minimum.node, value.node, maximum.node)
+	return new CalcExpression(node, mergeRefs(minimum, value, maximum))
 }

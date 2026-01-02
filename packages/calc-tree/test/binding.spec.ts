@@ -111,7 +111,7 @@ describe('binding', () => {
 			const bound = expr.bind('x', constant(10))
 
 			const result = bound.evaluate({ y: reference('runtime') })
-			expect(result.css.expression).toBe('10 + var(--runtime)')
+			expect(result.css.expression).toBe('calc(10 + var(--runtime))')
 		})
 
 		it('produces correct CSS when binding to expression', () => {
@@ -119,7 +119,7 @@ describe('binding', () => {
 			const bound = expr.bind('x', multiply(reference('y'), constant(2)))
 
 			const result = bound.evaluate({ y: reference('runtime') })
-			expect(result.css.expression).toBe('var(--runtime) * 2 + 5')
+			expect(result.css.expression).toBe('calc(var(--runtime) * 2 + 5)')
 		})
 	})
 })

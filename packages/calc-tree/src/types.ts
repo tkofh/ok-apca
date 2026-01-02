@@ -38,4 +38,10 @@ export interface CalcNode {
 	 * Serialize this node to CSS, collecting property declarations
 	 */
 	serialize(declarations: Record<string, string>): string
+
+	/**
+	 * Whether this node requires calc() wrapping when used as a CSS value.
+	 * True for arithmetic operations (+, -, *, /), false for literals, var(), and function calls.
+	 */
+	needsCalcWrap(): boolean
 }

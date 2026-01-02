@@ -2,34 +2,16 @@ import { PropertyNode } from './nodes.ts'
 import type { CalcNode, CSSResult, EvaluationResult } from './types.ts'
 
 /**
- * Symbol for accessing private node - used by constructors
- */
-export const NODE = Symbol('node')
-
-/**
- * Symbol for accessing private refs - used by constructors
- */
-export const REFS = Symbol('refs')
-
-/**
  * A mathematical expression that can be evaluated or serialized to CSS.
  * Generic over `Refs` - a union of string literal reference names required by this expression.
  */
 export class CalcExpression<Refs extends string = never> {
-	readonly [NODE]: CalcNode
-	readonly [REFS]: Set<string>
+	readonly node: CalcNode
+	readonly refs: ReadonlySet<string>
 
-	private constructor(node: CalcNode, refs: Set<string>) {
-		this[NODE] = node
-		this[REFS] = refs
-	}
-
-	/**
-	 * Create a CalcExpression from a node and refs set.
-	 * Internal factory - use constructors from constructors.ts instead.
-	 */
-	static _create<R extends string>(node: CalcNode, refs: Set<string>): CalcExpression<R> {
-		return new CalcExpression(node, refs) as CalcExpression<R>
+	constructor(node: CalcNode, refs: ReadonlySet<string> = new Set()) {
+		this.node = node
+		this.refs = refs
 	}
 
 	/**
@@ -41,20 +23,15 @@ export class CalcExpression<Refs extends string = never> {
 		key: K,
 		expr: CalcExpression<R>,
 	): CalcExpression<Exclude<Refs, K> | R> {
-		// Substitute the reference in the tree
-		const nodeBindings: Record<string, CalcNode> = { [key]: expr[NODE] }
-		const newNode = this[NODE].substitute(nodeBindings)
+		const newNode = this.node.substitute({ [key]: expr.node })
 
-		// Update reference set
-		const newRefs = new Set(this[REFS])
+		const newRefs = new Set(this.refs)
 		newRefs.delete(key)
-
-		// Add references from the bound expression
-		for (const ref of expr[REFS]) {
+		for (const ref of expr.refs) {
 			newRefs.add(ref)
 		}
 
-		return CalcExpression._create(newNode, newRefs)
+		return new CalcExpression(newNode, newRefs)
 	}
 
 	/**
@@ -62,8 +39,7 @@ export class CalcExpression<Refs extends string = never> {
 	 * The expression value will be assigned to the property and var(--name) used in its place.
 	 */
 	asProperty(name: string): CalcExpression<Refs> {
-		const propertyNode = new PropertyNode(name, this[NODE])
-		return CalcExpression._create(propertyNode, new Set(this[REFS]))
+		return new CalcExpression(new PropertyNode(name, this.node), new Set(this.refs))
 	}
 
 	/**
@@ -72,35 +48,28 @@ export class CalcExpression<Refs extends string = never> {
 	 * Otherwise returns an expression result with CSS output.
 	 */
 	evaluate(
-		...[bindings]: [Refs] extends [never]
-			? [bindings?: Record<string, CalcExpression<never>>]
-			: [bindings: Record<Refs, CalcExpression<never>>]
+		bindings: [Refs] extends [never]
+			? Record<string, never> | undefined
+			: Record<Refs, CalcExpression<never>> = {} as Record<string, never>,
 	): EvaluationResult {
-		// Extract nodes from bound expressions
 		const nodeBindings: Record<string, CalcNode> = {}
 		if (bindings) {
-			for (const key of Object.keys(bindings)) {
-				const expr = (bindings as Record<string, CalcExpression<never>>)[key]
-				if (expr) {
-					nodeBindings[key] = expr[NODE]
-				}
+			for (const [key, expr] of Object.entries(bindings) as [string, CalcExpression<never>][]) {
+				nodeBindings[key] = expr.node
 			}
 		}
 
-		// Substitute all bound references
-		const substituted = this[NODE].substitute(nodeBindings)
+		const substituted = this.node.substitute(nodeBindings)
 
-		// Check if result is fully constant
+		const declarations: Record<string, string> = {}
+		const rawExpression = substituted.serialize(declarations)
+		const expression = substituted.needsCalcWrap() ? `calc(${rawExpression})` : rawExpression
+
 		if (substituted.isConstant()) {
 			const value = substituted.evaluateConstant()
-			const declarations: Record<string, string> = {}
-			const expression = substituted.serialize(declarations)
 			return { type: 'number', value, css: { expression, declarations } }
 		}
 
-		// Has unbound references - return expression result
-		const declarations: Record<string, string> = {}
-		const expression = substituted.serialize(declarations)
 		return { type: 'expression', css: { expression, declarations } }
 	}
 
@@ -110,7 +79,8 @@ export class CalcExpression<Refs extends string = never> {
 	 */
 	toCss(): CSSResult {
 		const declarations: Record<string, string> = {}
-		const expression = this[NODE].serialize(declarations)
+		const rawExpression = this.node.serialize(declarations)
+		const expression = this.node.needsCalcWrap() ? `calc(${rawExpression})` : rawExpression
 		return { expression, declarations }
 	}
 }

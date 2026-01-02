@@ -1,5 +1,3 @@
-// Types
-
 // Constructors
 export {
 	abs,
@@ -19,4 +17,6 @@ export {
 
 // CalcExpression class
 export { CalcExpression } from './expression.ts'
+
+// Types
 export type { CSSResult, EvaluationResult } from './types.ts'

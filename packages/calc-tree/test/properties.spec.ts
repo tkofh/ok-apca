@@ -20,7 +20,7 @@ describe('property wrapping', () => {
 
 			expect(result.css.expression).toBe('var(--doubled)')
 			expect(result.css.declarations).toHaveProperty('--doubled')
-			expect(result.css.declarations['--doubled']).toBe('var(--runtime) * 2')
+			expect(result.css.declarations['--doubled']).toBe('calc(var(--runtime) * 2)')
 		})
 
 		it('preserves references through property wrapping', () => {
@@ -47,8 +47,8 @@ describe('property wrapping', () => {
 			expect(result.css.expression).toBe('var(--result)')
 			expect(result.css.declarations).toHaveProperty('--doubled')
 			expect(result.css.declarations).toHaveProperty('--result')
-			expect(result.css.declarations['--doubled']).toBe('var(--runtime) * 2')
-			expect(result.css.declarations['--result']).toBe('var(--doubled) + 5')
+			expect(result.css.declarations['--doubled']).toBe('calc(var(--runtime) * 2)')
+			expect(result.css.declarations['--result']).toBe('calc(var(--doubled) + 5)')
 		})
 
 		it('handles deeply nested properties', () => {
@@ -77,8 +77,8 @@ describe('property wrapping', () => {
 
 			// All three properties should be declared
 			expect(result.css.declarations['--a']).toBe('var(--input)')
-			expect(result.css.declarations['--b']).toBe('var(--a) + 1')
-			expect(result.css.declarations['--c']).toBe('var(--b) * 2')
+			expect(result.css.declarations['--b']).toBe('calc(var(--a) + 1)')
+			expect(result.css.declarations['--c']).toBe('calc(var(--b) * 2)')
 		})
 	})
 
@@ -99,7 +99,7 @@ describe('property wrapping', () => {
 
 			const result = expr.evaluate({ x: reference('runtime') })
 
-			expect(result.css.expression).toBe('var(--shared) + var(--shared)')
+			expect(result.css.expression).toBe('calc(var(--shared) + var(--shared))')
 			expect(result.css.declarations['--shared']).toBe('var(--runtime)')
 		})
 
@@ -109,7 +109,7 @@ describe('property wrapping', () => {
 
 			const result = expr.evaluate()
 
-			expect(result.css.expression).toBe('var(--shared) + var(--shared)')
+			expect(result.css.expression).toBe('calc(var(--shared) + var(--shared))')
 			expect(result.css.declarations['--shared']).toBe('42')
 		})
 	})
@@ -136,7 +136,7 @@ describe('property wrapping', () => {
 			const bound = expr.bind('x', constant(5))
 			const result = bound.evaluate({ y: reference('runtime') })
 
-			expect(result.css.declarations['--sum']).toBe('5 + var(--runtime)')
+			expect(result.css.declarations['--sum']).toBe('calc(5 + var(--runtime))')
 		})
 	})
 
@@ -157,9 +157,9 @@ describe('property wrapping', () => {
 
 			expect(result.css.expression).toBe('var(--quadratic)')
 			expect(result.css.declarations['--x2']).toBe('pow(var(--input), 2)')
-			expect(result.css.declarations['--ax2']).toBe('1 * var(--x2)')
-			expect(result.css.declarations['--bx']).toBe('-3 * var(--input)')
-			expect(result.css.declarations['--quadratic']).toBe('var(--ax2) + var(--bx) + 2')
+			expect(result.css.declarations['--ax2']).toBe('calc(1 * var(--x2))')
+			expect(result.css.declarations['--bx']).toBe('calc(-3 * var(--input))')
+			expect(result.css.declarations['--quadratic']).toBe('calc(var(--ax2) + var(--bx) + 2)')
 		})
 	})
 })
