@@ -1,9 +1,11 @@
 // Constructors
+
+// Types
+export type { ExpressionInput } from './constructors.ts'
 export {
 	abs,
 	add,
 	clamp,
-	constant,
 	divide,
 	max,
 	min,
@@ -13,10 +15,8 @@ export {
 	sign,
 	sin,
 	subtract,
+	toExpression,
 } from './constructors.ts'
-
 // CalcExpression class
 export { CalcExpression } from './expression.ts'
-
-// Types
 export type { CSSResult, EvaluationResult } from './types.ts'

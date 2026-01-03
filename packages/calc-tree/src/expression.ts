@@ -1,4 +1,5 @@
-import { PropertyNode } from './nodes.ts'
+import { type ExpressionInput, toExpression } from './constructors.ts'
+import { ConstantNode, PropertyNode } from './nodes.ts'
 import type { CalcNode, CSSResult, EvaluationResult } from './types.ts'
 
 /**
@@ -15,14 +16,15 @@ export class CalcExpression<Refs extends string = never> {
 	}
 
 	/**
-	 * Bind a single reference to an expression.
+	 * Bind a single reference to an expression or number.
 	 * Returns a new expression with the reference removed and any references
 	 * from the bound expression added.
 	 */
 	bind<K extends Refs, R extends string>(
 		key: K,
-		expr: CalcExpression<R>,
+		value: ExpressionInput<R>,
 	): CalcExpression<Exclude<Refs, K> | R> {
+		const expr = toExpression(value)
 		const newNode = this.node.substitute({ [key]: expr.node })
 
 		const newRefs = new Set(this.refs)
@@ -44,18 +46,24 @@ export class CalcExpression<Refs extends string = never> {
 
 	/**
 	 * Evaluate this expression with the given bindings.
+	 * Bindings can be CalcExpressions or plain numbers.
 	 * If all references resolve to constants, returns a number result.
 	 * Otherwise returns an expression result with CSS output.
 	 */
 	evaluate(
 		bindings: [Refs] extends [never]
 			? Record<string, never> | undefined
-			: Record<Refs, CalcExpression<never>> = {} as Record<string, never>,
+			: Record<Refs, ExpressionInput<never>> = {} as Record<string, never>,
 	): EvaluationResult {
 		const nodeBindings: Record<string, CalcNode> = {}
 		if (bindings) {
-			for (const [key, expr] of Object.entries(bindings) as [string, CalcExpression<never>][]) {
-				nodeBindings[key] = expr.node
+			for (const [key, value] of Object.entries(bindings) as [string, ExpressionInput<never>][]) {
+				// Handle numbers directly without going through toExpression
+				if (typeof value === 'number') {
+					nodeBindings[key] = new ConstantNode(value)
+				} else {
+					nodeBindings[key] = value.node
+				}
 			}
 		}
 

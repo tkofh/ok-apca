@@ -3,7 +3,6 @@ import {
 	abs,
 	add,
 	clamp,
-	constant,
 	divide,
 	max,
 	min,
@@ -13,41 +12,42 @@ import {
 	sign,
 	sin,
 	subtract,
+	toExpression,
 } from '../src/index.ts'
 
 describe('serialization', () => {
 	describe('constants', () => {
 		it('serializes integer constants', () => {
-			const result = constant(42).evaluate({})
+			const result = toExpression(42).evaluate()
 			expect(result.css.expression).toBe('42')
 			expect(result.css.declarations).toEqual({})
 		})
 
 		it('serializes decimal constants', () => {
-			const result = constant(1.5).evaluate({})
+			const result = toExpression(1.5).evaluate()
 			expect(result.css.expression).toBe('1.5')
 		})
 
 		it('serializes pi constant', () => {
-			const result = constant(Math.PI).evaluate({})
+			const result = toExpression(Math.PI).evaluate()
 			expect(result.css.expression).toBe('pi')
 		})
 
 		it('formats numbers without trailing zeros', () => {
-			const result1 = constant(1.5).evaluate({})
+			const result1 = toExpression(1.5).evaluate()
 			expect(result1.css.expression).toBe('1.5')
 
-			const result2 = constant(2.0).evaluate({})
+			const result2 = toExpression(2.0).evaluate()
 			expect(result2.css.expression).toBe('2')
 		})
 
 		it('formats negative numbers', () => {
-			const result = constant(-42).evaluate({})
+			const result = toExpression(-42).evaluate()
 			expect(result.css.expression).toBe('-42')
 		})
 
 		it('formats zero', () => {
-			const result = constant(0).evaluate({})
+			const result = toExpression(0).evaluate()
 			expect(result.css.expression).toBe('0')
 		})
 	})
@@ -68,43 +68,43 @@ describe('serialization', () => {
 
 	describe('binary operations', () => {
 		it('serializes addition', () => {
-			const expr = add(reference('x'), constant(5))
+			const expr = add(reference('x'), 5)
 			const result = expr.evaluate({ x: reference('x') })
 			expect(result.css.expression).toBe('calc(var(--x) + 5)')
 		})
 
 		it('serializes subtraction', () => {
-			const expr = subtract(reference('x'), constant(5))
+			const expr = subtract(reference('x'), 5)
 			const result = expr.evaluate({ x: reference('x') })
 			expect(result.css.expression).toBe('calc(var(--x) - 5)')
 		})
 
 		it('serializes multiplication', () => {
-			const expr = multiply(reference('x'), constant(2))
+			const expr = multiply(reference('x'), 2)
 			const result = expr.evaluate({ x: reference('x') })
 			expect(result.css.expression).toBe('calc(var(--x) * 2)')
 		})
 
 		it('serializes division', () => {
-			const expr = divide(reference('x'), constant(2))
+			const expr = divide(reference('x'), 2)
 			const result = expr.evaluate({ x: reference('x') })
 			expect(result.css.expression).toBe('calc(var(--x) / 2)')
 		})
 
 		it('serializes power', () => {
-			const expr = power(reference('x'), constant(2))
+			const expr = power(reference('x'), 2)
 			const result = expr.evaluate({ x: reference('x') })
 			expect(result.css.expression).toBe('pow(var(--x), 2)')
 		})
 
 		it('serializes max', () => {
-			const expr = max(reference('x'), constant(0))
+			const expr = max(reference('x'), 0)
 			const result = expr.evaluate({ x: reference('x') })
 			expect(result.css.expression).toBe('max(var(--x), 0)')
 		})
 
 		it('serializes min', () => {
-			const expr = min(reference('x'), constant(100))
+			const expr = min(reference('x'), 100)
 			const result = expr.evaluate({ x: reference('x') })
 			expect(result.css.expression).toBe('min(var(--x), 100)')
 		})
@@ -132,7 +132,7 @@ describe('serialization', () => {
 
 	describe('clamp', () => {
 		it('serializes clamp', () => {
-			const expr = clamp(constant(0), reference('x'), constant(100))
+			const expr = clamp(0, reference('x'), 100)
 			const result = expr.evaluate({ x: reference('x') })
 			expect(result.css.expression).toBe('clamp(0, var(--x), 100)')
 		})
@@ -140,7 +140,7 @@ describe('serialization', () => {
 
 	describe('parenthesization', () => {
 		it('does not add parens around function arguments', () => {
-			const expr = sin(add(reference('x'), constant(1)))
+			const expr = sin(add(reference('x'), 1))
 			const result = expr.evaluate({ x: reference('x') })
 			expect(result.css.expression).toBe('sin(var(--x) + 1)')
 		})
@@ -194,7 +194,7 @@ describe('serialization', () => {
 	describe('complex expressions', () => {
 		it('serializes quadratic formula components', () => {
 			// ax^2
-			const expr = multiply(reference('a'), power(reference('x'), constant(2)))
+			const expr = multiply(reference('a'), power(reference('x'), 2))
 			const result = expr.evaluate({
 				a: reference('a'),
 				x: reference('x'),
@@ -204,10 +204,7 @@ describe('serialization', () => {
 
 		it('serializes distance formula', () => {
 			// sqrt(x^2 + y^2)
-			const expr = power(
-				add(power(reference('x'), constant(2)), power(reference('y'), constant(2))),
-				constant(0.5),
-			)
+			const expr = power(add(power(reference('x'), 2), power(reference('y'), 2)), 0.5)
 			const result = expr.evaluate({
 				x: reference('x'),
 				y: reference('y'),

@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { add, constant, multiply, power, reference } from '../src/index.ts'
+import { add, multiply, power, reference, toExpression } from '../src/index.ts'
 
 describe('property wrapping', () => {
 	describe('basic wrapping', () => {
 		it('wraps expression as property', () => {
-			const expr = multiply(reference('x'), constant(2))
+			const expr = multiply(reference('x'), 2)
 			const wrapped = expr.asProperty('--doubled')
 
 			// Can still evaluate normally
-			const result = wrapped.evaluate({ x: constant(5) })
+			const result = wrapped.evaluate({ x: 5 })
 			expect.assert(result.type === 'number')
 			expect(result.value).toBe(10)
 		})
 
 		it('includes property declaration in CSS output', () => {
-			const expr = multiply(reference('x'), constant(2)).asProperty('--doubled')
+			const expr = multiply(reference('x'), 2).asProperty('--doubled')
 
 			const result = expr.evaluate({ x: reference('runtime') })
 
@@ -28,8 +28,8 @@ describe('property wrapping', () => {
 
 			// Should still require both x and y
 			const result = expr.evaluate({
-				x: constant(5),
-				y: constant(10),
+				x: 5,
+				y: 10,
 			})
 
 			expect.assert(result.type === 'number')
@@ -39,8 +39,8 @@ describe('property wrapping', () => {
 
 	describe('nested properties', () => {
 		it('handles nested properties', () => {
-			const inner = multiply(reference('x'), constant(2)).asProperty('--doubled')
-			const outer = add(inner, constant(5)).asProperty('--result')
+			const inner = multiply(reference('x'), 2).asProperty('--doubled')
+			const outer = add(inner, 5).asProperty('--result')
 
 			const result = outer.evaluate({ x: reference('runtime') })
 
@@ -52,9 +52,9 @@ describe('property wrapping', () => {
 		})
 
 		it('handles deeply nested properties', () => {
-			const xSquared = power(reference('x'), constant(2)).asProperty('--x-squared')
-			const ySquared = power(reference('y'), constant(2)).asProperty('--y-squared')
-			const distance = power(add(xSquared, ySquared), constant(0.5)).asProperty('--distance')
+			const xSquared = power(reference('x'), 2).asProperty('--x-squared')
+			const ySquared = power(reference('y'), 2).asProperty('--y-squared')
+			const distance = power(add(xSquared, ySquared), 0.5).asProperty('--distance')
 
 			const result = distance.evaluate({
 				x: reference('x'),
@@ -70,8 +70,8 @@ describe('property wrapping', () => {
 
 		it('collects declarations in correct order', () => {
 			const a = reference('x').asProperty('--a')
-			const b = add(a, constant(1)).asProperty('--b')
-			const c = multiply(b, constant(2)).asProperty('--c')
+			const b = add(a, 1).asProperty('--b')
+			const c = multiply(b, 2).asProperty('--c')
 
 			const result = c.evaluate({ x: reference('input') })
 
@@ -104,7 +104,7 @@ describe('property wrapping', () => {
 		})
 
 		it('allows same property when resolved to same constant', () => {
-			const shared = constant(42).asProperty('--shared')
+			const shared = toExpression(42).asProperty('--shared')
 			const expr = add(shared, shared)
 
 			const result = expr.evaluate()
@@ -119,10 +119,10 @@ describe('property wrapping', () => {
 			const inner = add(reference('x'), reference('y')).asProperty('--sum')
 			const expr = multiply(inner, reference('z'))
 
-			const bound = expr.bind('x', constant(5))
+			const bound = expr.bind('x', 5)
 			const result = bound.evaluate({
-				y: constant(10),
-				z: constant(2),
+				y: 10,
+				z: 2,
 			})
 
 			expect.assert(result.type === 'number')
@@ -131,9 +131,9 @@ describe('property wrapping', () => {
 
 		it('binding updates property declarations', () => {
 			const inner = add(reference('x'), reference('y')).asProperty('--sum')
-			const expr = multiply(inner, constant(2))
+			const expr = multiply(inner, 2)
 
-			const bound = expr.bind('x', constant(5))
+			const bound = expr.bind('x', 5)
 			const result = bound.evaluate({ y: reference('runtime') })
 
 			expect(result.css.declarations['--sum']).toBe('calc(5 + var(--runtime))')
@@ -143,15 +143,15 @@ describe('property wrapping', () => {
 	describe('integration', () => {
 		it('generates CSS with complex nested properties', () => {
 			// Build a quadratic: ax^2 + bx + c
-			const xSquared = power(reference('x'), constant(2)).asProperty('--x2')
+			const xSquared = power(reference('x'), 2).asProperty('--x2')
 			const axSquared = multiply(reference('a'), xSquared).asProperty('--ax2')
 			const bx = multiply(reference('b'), reference('x')).asProperty('--bx')
 			const quadratic = add(add(axSquared, bx), reference('c')).asProperty('--quadratic')
 
 			const result = quadratic.evaluate({
-				a: constant(1),
-				b: constant(-3),
-				c: constant(2),
+				a: 1,
+				b: -3,
+				c: 2,
 				x: reference('input'),
 			})
 

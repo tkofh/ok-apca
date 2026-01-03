@@ -1,4 +1,4 @@
-import { constant, reference } from '@ok-apca/calc-tree'
+import { reference } from '@ok-apca/calc-tree'
 import { findGamutSlice } from './color.ts'
 import {
 	createContrastSolver,
@@ -65,9 +65,9 @@ function generatePropertyRules(
  */
 function cssMaxChroma(lightnessRef: string, slice: GamutSlice): string {
 	const result = createMaxChromaExpr()
-		.bind('apexL', constant(slice.apex.lightness))
-		.bind('apexChroma', constant(slice.apex.chroma))
-		.bind('curvature', constant(slice.curvature))
+		.bind('apexL', slice.apex.lightness)
+		.bind('apexChroma', slice.apex.chroma)
+		.bind('curvature', slice.curvature)
 		.evaluate({
 			lightness: reference(lightnessRef),
 		})
@@ -119,7 +119,7 @@ function cssYFromLightness(lightnessRef: string): string {
  */
 function cssContrastSolver(yBgRef: string, signedContrastRef: string, scale: number): string {
 	const result = createContrastSolver()
-		.bind('contrastScale', constant(scale))
+		.bind('contrastScale', scale)
 		.evaluate({
 			yBg: reference(yBgRef),
 			signedContrast: reference(signedContrastRef),

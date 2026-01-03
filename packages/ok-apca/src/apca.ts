@@ -1,4 +1,3 @@
-import { constant } from '@ok-apca/calc-tree'
 import {
 	createContrastSolver,
 	createNormalPolaritySolver,
@@ -17,8 +16,8 @@ interface ApcaSolution {
  */
 function solveApcaNormal(Y: number, x: number): ApcaSolution {
 	const result = createNormalPolaritySolver().evaluate({
-		yBg: constant(Y),
-		x: constant(x),
+		yBg: Y,
+		x,
 	})
 
 	if (result.type !== 'number') {
@@ -38,8 +37,8 @@ function solveApcaNormal(Y: number, x: number): ApcaSolution {
  */
 function solveApcaReverse(Y: number, x: number): ApcaSolution {
 	const result = createReversePolaritySolver().evaluate({
-		yBg: constant(Y),
-		x: constant(x),
+		yBg: Y,
+		x,
 	})
 
 	if (result.type !== 'number') {
@@ -64,9 +63,9 @@ function solveApcaReverse(Y: number, x: number): ApcaSolution {
 export function solveTargetY(Y: number, signedContrast: number): number {
 	// Use the combined solver expression
 	const result = createContrastSolver().evaluate({
-		yBg: constant(Y),
-		signedContrast: constant(signedContrast),
-		contrastScale: constant(100),
+		yBg: Y,
+		signedContrast,
+		contrastScale: 100,
 	})
 
 	if (result.type !== 'number') {

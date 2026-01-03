@@ -3,7 +3,6 @@
  * Uses simplified Y = L³ approximation to match CSS generator behavior.
  */
 
-import { constant } from '@ok-apca/calc-tree'
 import { solveTargetY } from './apca.ts'
 import { createColor, findGamutSlice, gamutMap } from './color.ts'
 import { createMaxChromaExpr } from './expressions.ts'
@@ -27,10 +26,10 @@ function computeMaxChroma(L: number, slice: GamutSlice): number {
 	}
 
 	const result = createMaxChromaExpr().evaluate({
-		lightness: constant(L),
-		apexL: constant(apex.lightness),
-		apexChroma: constant(apex.chroma),
-		curvature: constant(curvature),
+		lightness: L,
+		apexL: apex.lightness,
+		apexChroma: apex.chroma,
+		curvature,
 	})
 
 	if (result.type !== 'number') {

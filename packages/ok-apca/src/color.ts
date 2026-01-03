@@ -2,7 +2,6 @@
  * OKLCH color representation and Display P3 gamut mapping.
  */
 
-import { constant } from '@ok-apca/calc-tree'
 import _Color from 'colorjs.io'
 import { GAMUT_SINE_CURVATURE_EXPONENT } from './constants.ts'
 import { createMaxChromaExpr } from './expressions.ts'
@@ -136,10 +135,10 @@ function computeMaxChromaInternal(L: number, slice: GamutSlice): number {
 	}
 
 	const result = createMaxChromaExpr().evaluate({
-		lightness: constant(L),
-		apexL: constant(apex.lightness),
-		apexChroma: constant(apex.chroma),
-		curvature: constant(curvature),
+		lightness: L,
+		apexL: apex.lightness,
+		apexChroma: apex.chroma,
+		curvature,
 	})
 
 	if (result.type !== 'number') {

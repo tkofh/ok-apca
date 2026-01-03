@@ -16,6 +16,28 @@ import {
 } from './nodes.ts'
 
 /**
+ * Input type that accepts either a CalcExpression or a plain number.
+ * Numbers are automatically wrapped in constant() internally.
+ */
+export type ExpressionInput<Refs extends string = never> = CalcExpression<Refs> | number
+
+/**
+ * Normalize an input to a CalcExpression.
+ * Numbers are wrapped in constant(), expressions pass through unchanged.
+ */
+export function toExpression<Refs extends string>(
+	input: ExpressionInput<Refs>,
+): CalcExpression<Refs> {
+	if (typeof input === 'number') {
+		if (!Number.isFinite(input)) {
+			throw new TypeError('Constant value must be a finite number')
+		}
+		return new CalcExpression(new ConstantNode(input)) as CalcExpression<Refs>
+	}
+	return input
+}
+
+/**
  * Create a constant numeric expression.
  * Accepts numbers or numeric strings.
  */
@@ -57,143 +79,157 @@ function isConstant(node: unknown): node is ConstantNode {
  * Add two expressions.
  */
 export function add<A extends string, B extends string>(
-	left: CalcExpression<A>,
-	right: CalcExpression<B>,
+	left: ExpressionInput<A>,
+	right: ExpressionInput<B>,
 ): CalcExpression<A | B> {
+	const l = toExpression(left)
+	const r = toExpression(right)
 	const node =
-		isConstant(left.node) && isConstant(right.node)
-			? new ConstantNode(left.node.value + right.node.value)
-			: new AddNode(left.node, right.node)
-	return new CalcExpression(node, mergeRefs(left, right))
+		isConstant(l.node) && isConstant(r.node)
+			? new ConstantNode(l.node.value + r.node.value)
+			: new AddNode(l.node, r.node)
+	return new CalcExpression(node, mergeRefs(l, r))
 }
 
 /**
  * Subtract right expression from left.
  */
 export function subtract<A extends string, B extends string>(
-	left: CalcExpression<A>,
-	right: CalcExpression<B>,
+	left: ExpressionInput<A>,
+	right: ExpressionInput<B>,
 ): CalcExpression<A | B> {
+	const l = toExpression(left)
+	const r = toExpression(right)
 	const node =
-		isConstant(left.node) && isConstant(right.node)
-			? new ConstantNode(left.node.value - right.node.value)
-			: new SubtractNode(left.node, right.node)
-	return new CalcExpression(node, mergeRefs(left, right))
+		isConstant(l.node) && isConstant(r.node)
+			? new ConstantNode(l.node.value - r.node.value)
+			: new SubtractNode(l.node, r.node)
+	return new CalcExpression(node, mergeRefs(l, r))
 }
 
 /**
  * Multiply two expressions.
  */
 export function multiply<A extends string, B extends string>(
-	left: CalcExpression<A>,
-	right: CalcExpression<B>,
+	left: ExpressionInput<A>,
+	right: ExpressionInput<B>,
 ): CalcExpression<A | B> {
+	const l = toExpression(left)
+	const r = toExpression(right)
 	const node =
-		isConstant(left.node) && isConstant(right.node)
-			? new ConstantNode(left.node.value * right.node.value)
-			: new MultiplyNode(left.node, right.node)
-	return new CalcExpression(node, mergeRefs(left, right))
+		isConstant(l.node) && isConstant(r.node)
+			? new ConstantNode(l.node.value * r.node.value)
+			: new MultiplyNode(l.node, r.node)
+	return new CalcExpression(node, mergeRefs(l, r))
 }
 
 /**
  * Divide left expression by right.
  */
 export function divide<A extends string, B extends string>(
-	left: CalcExpression<A>,
-	right: CalcExpression<B>,
+	left: ExpressionInput<A>,
+	right: ExpressionInput<B>,
 ): CalcExpression<A | B> {
+	const l = toExpression(left)
+	const r = toExpression(right)
 	const node =
-		isConstant(left.node) && isConstant(right.node)
-			? new ConstantNode(left.node.value / right.node.value)
-			: new DivideNode(left.node, right.node)
-	return new CalcExpression(node, mergeRefs(left, right))
+		isConstant(l.node) && isConstant(r.node)
+			? new ConstantNode(l.node.value / r.node.value)
+			: new DivideNode(l.node, r.node)
+	return new CalcExpression(node, mergeRefs(l, r))
 }
 
 /**
  * Raise base to exponent power.
  */
 export function power<A extends string, B extends string>(
-	base: CalcExpression<A>,
-	exponent: CalcExpression<B>,
+	base: ExpressionInput<A>,
+	exponent: ExpressionInput<B>,
 ): CalcExpression<A | B> {
+	const b = toExpression(base)
+	const e = toExpression(exponent)
 	const node =
-		isConstant(base.node) && isConstant(exponent.node)
-			? new ConstantNode(base.node.value ** exponent.node.value)
-			: new PowerNode(base.node, exponent.node)
-	return new CalcExpression(node, mergeRefs(base, exponent))
+		isConstant(b.node) && isConstant(e.node)
+			? new ConstantNode(b.node.value ** e.node.value)
+			: new PowerNode(b.node, e.node)
+	return new CalcExpression(node, mergeRefs(b, e))
 }
 
 /**
  * Compute sine of an expression.
  */
-export function sin<Refs extends string>(arg: CalcExpression<Refs>): CalcExpression<Refs> {
-	const node = isConstant(arg.node)
-		? new ConstantNode(Math.sin(arg.node.value))
-		: new SinNode(arg.node)
-	return new CalcExpression(node, new Set(arg.refs))
+export function sin<Refs extends string>(arg: ExpressionInput<Refs>): CalcExpression<Refs> {
+	const a = toExpression(arg)
+	const node = isConstant(a.node) ? new ConstantNode(Math.sin(a.node.value)) : new SinNode(a.node)
+	return new CalcExpression(node, new Set(a.refs))
 }
 
 /**
  * Compute absolute value of an expression.
  */
-export function abs<Refs extends string>(arg: CalcExpression<Refs>): CalcExpression<Refs> {
-	const node = isConstant(arg.node)
-		? new ConstantNode(Math.abs(arg.node.value))
-		: new AbsNode(arg.node)
-	return new CalcExpression(node, new Set(arg.refs))
+export function abs<Refs extends string>(arg: ExpressionInput<Refs>): CalcExpression<Refs> {
+	const a = toExpression(arg)
+	const node = isConstant(a.node) ? new ConstantNode(Math.abs(a.node.value)) : new AbsNode(a.node)
+	return new CalcExpression(node, new Set(a.refs))
 }
 
 /**
  * Compute sign of an expression (-1, 0, or 1).
  */
-export function sign<Refs extends string>(arg: CalcExpression<Refs>): CalcExpression<Refs> {
-	const node = isConstant(arg.node)
-		? new ConstantNode(Math.sign(arg.node.value))
-		: new SignNode(arg.node)
-	return new CalcExpression(node, new Set(arg.refs))
+export function sign<Refs extends string>(arg: ExpressionInput<Refs>): CalcExpression<Refs> {
+	const a = toExpression(arg)
+	const node = isConstant(a.node) ? new ConstantNode(Math.sign(a.node.value)) : new SignNode(a.node)
+	return new CalcExpression(node, new Set(a.refs))
 }
 
 /**
  * Return the maximum of two expressions.
  */
 export function max<A extends string, B extends string>(
-	left: CalcExpression<A>,
-	right: CalcExpression<B>,
+	left: ExpressionInput<A>,
+	right: ExpressionInput<B>,
 ): CalcExpression<A | B> {
+	const l = toExpression(left)
+	const r = toExpression(right)
 	const node =
-		isConstant(left.node) && isConstant(right.node)
-			? new ConstantNode(Math.max(left.node.value, right.node.value))
-			: new MaxNode(left.node, right.node)
-	return new CalcExpression(node, mergeRefs(left, right))
+		isConstant(l.node) && isConstant(r.node)
+			? new ConstantNode(Math.max(l.node.value, r.node.value))
+			: new MaxNode(l.node, r.node)
+	return new CalcExpression(node, mergeRefs(l, r))
 }
 
 /**
  * Return the minimum of two expressions.
  */
 export function min<A extends string, B extends string>(
-	left: CalcExpression<A>,
-	right: CalcExpression<B>,
+	left: ExpressionInput<A>,
+	right: ExpressionInput<B>,
 ): CalcExpression<A | B> {
+	const l = toExpression(left)
+	const r = toExpression(right)
 	const node =
-		isConstant(left.node) && isConstant(right.node)
-			? new ConstantNode(Math.min(left.node.value, right.node.value))
-			: new MinNode(left.node, right.node)
-	return new CalcExpression(node, mergeRefs(left, right))
+		isConstant(l.node) && isConstant(r.node)
+			? new ConstantNode(Math.min(l.node.value, r.node.value))
+			: new MinNode(l.node, r.node)
+	return new CalcExpression(node, mergeRefs(l, r))
 }
 
 /**
  * Clamp a value between minimum and maximum.
  */
 export function clamp<A extends string, B extends string, C extends string>(
-	minimum: CalcExpression<A>,
-	value: CalcExpression<B>,
-	maximum: CalcExpression<C>,
+	minimum: ExpressionInput<A>,
+	value: ExpressionInput<B>,
+	maximum: ExpressionInput<C>,
 ): CalcExpression<A | B | C> {
+	const minExpr = toExpression(minimum)
+	const valExpr = toExpression(value)
+	const maxExpr = toExpression(maximum)
 	const node =
-		isConstant(minimum.node) && isConstant(value.node) && isConstant(maximum.node)
+		isConstant(minExpr.node) && isConstant(valExpr.node) && isConstant(maxExpr.node)
 			? new ConstantNode(
-					Math.max(minimum.node.value, Math.min(value.node.value, maximum.node.value)),
+					Math.max(minExpr.node.value, Math.min(valExpr.node.value, maxExpr.node.value)),
 				)
-			: new ClampNode(minimum.node, value.node, maximum.node)
-	return new CalcExpression(node, mergeRefs(minimum, value, maximum))
+			: new ClampNode(minExpr.node, valExpr.node, maxExpr.node)
+	return new CalcExpression(node, mergeRefs(minExpr, valExpr, maxExpr))
 }
