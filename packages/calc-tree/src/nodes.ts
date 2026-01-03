@@ -1,9 +1,5 @@
 import type { CalcNode } from './types.ts'
 
-/**
- * Format a number for CSS output.
- * Uses toFixed(5) to limit to 5 decimal places, matching ok-apca's cssNumber.
- */
 function formatNumber(n: number): string {
 	if (Math.abs(n - Math.PI) < 1e-10) {
 		return 'pi'
@@ -12,9 +8,6 @@ function formatNumber(n: number): string {
 	return formatted.replace(/\.?0+$/, '') || '0'
 }
 
-/**
- * Constant numeric value node
- */
 export class ConstantNode implements CalcNode {
 	readonly kind = 'constant'
 	readonly value: number
@@ -48,9 +41,6 @@ export class ConstantNode implements CalcNode {
 	}
 }
 
-/**
- * Reference to a variable node
- */
 export class ReferenceNode implements CalcNode {
 	readonly kind = 'reference'
 	readonly name: string
@@ -80,9 +70,6 @@ export class ReferenceNode implements CalcNode {
 	}
 }
 
-/**
- * Base class for unary operation nodes (function calls - don't need calc wrap)
- */
 abstract class UnaryNode implements CalcNode {
 	abstract readonly kind: string
 	readonly arg: CalcNode
@@ -141,9 +128,6 @@ export class SignNode extends UnaryNode {
 	protected create = (arg: CalcNode) => new SignNode(arg)
 }
 
-/**
- * Base class for binary operation nodes
- */
 abstract class BinaryNode implements CalcNode {
 	abstract readonly kind: string
 	readonly left: CalcNode
@@ -185,9 +169,6 @@ abstract class BinaryNode implements CalcNode {
 	}
 }
 
-/**
- * Base class for arithmetic binary operations (+, -, *, /) that need calc() wrapping
- */
 abstract class ArithmeticNode extends BinaryNode {
 	override needsCalcWrap(): boolean {
 		return true
@@ -208,15 +189,8 @@ export class SubtractNode extends ArithmeticNode {
 	protected create = (left: CalcNode, right: CalcNode) => new SubtractNode(left, right)
 }
 
-/**
- * Check if a node needs parentheses when used as operand to multiply/divide
- */
-function needsParensForMultiply(node: CalcNode): boolean {
-	return node.kind === 'add' || node.kind === 'subtract'
-}
-
 function wrapIfNeeded(node: CalcNode, serialized: string): string {
-	return needsParensForMultiply(node) ? `(${serialized})` : serialized
+	return node.kind === 'add' || node.kind === 'subtract' ? `(${serialized})` : serialized
 }
 
 export class MultiplyNode extends ArithmeticNode {
@@ -268,9 +242,6 @@ export class MinNode extends BinaryNode {
 	protected create = (left: CalcNode, right: CalcNode) => new MinNode(left, right)
 }
 
-/**
- * Clamp node
- */
 export class ClampNode implements CalcNode {
 	readonly kind = 'clamp'
 	readonly minimum: CalcNode
@@ -316,9 +287,6 @@ export class ClampNode implements CalcNode {
 	}
 }
 
-/**
- * CSS custom property wrapper node
- */
 export class PropertyNode implements CalcNode {
 	readonly kind = 'property'
 	readonly name: string
@@ -367,6 +335,6 @@ export class PropertyNode implements CalcNode {
 	}
 
 	needsCalcWrap(): boolean {
-		return false // var() reference doesn't need calc wrap
+		return false
 	}
 }
