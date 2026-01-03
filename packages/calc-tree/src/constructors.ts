@@ -17,24 +17,21 @@ import {
 
 export type ExpressionInput<Refs extends string = never> = CalcExpression<Refs> | number
 
-export function toExpression<Refs extends string>(
-	input: ExpressionInput<Refs>,
-): CalcExpression<Refs> {
-	if (typeof input === 'number') {
-		if (!Number.isFinite(input)) {
-			throw new TypeError('Constant value must be a finite number')
-		}
-		return new CalcExpression(new ConstantNode(input)) as CalcExpression<Refs>
-	}
-	return input
-}
-
 export function constant(value: number | string): CalcExpression<never> {
 	const num = typeof value === 'string' ? Number(value) : value
 	if (!Number.isFinite(num)) {
 		throw new TypeError('Constant value must be a finite number')
 	}
 	return new CalcExpression(new ConstantNode(num))
+}
+
+export function toExpression<Refs extends string>(
+	input: ExpressionInput<Refs>,
+): CalcExpression<Refs> {
+	if (typeof input === 'number') {
+		return constant(input) as CalcExpression<Refs>
+	}
+	return input
 }
 
 export function reference<Name extends string>(name: Name): CalcExpression<Name> {
