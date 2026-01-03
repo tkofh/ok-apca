@@ -17,6 +17,6 @@ export {
 	subtract,
 	toExpression,
 } from './constructors.ts'
-// CalcExpression class
-export { CalcExpression } from './expression.ts'
+// CalcExpression type (use constructor functions to create instances)
+export type { CalcExpression } from './expression.ts'
 export type { CSSResult, EvaluationResult } from './types.ts'
