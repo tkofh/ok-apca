@@ -21,7 +21,7 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
-  packages/expression-tree:
+  packages/calc-tree:
     devDependencies:
       fast-check:
         specifier: ^4.5.3
@@ -35,6 +35,9 @@ importers:
 
   packages/ok-apca:
     dependencies:
+      '@ok-apca/calc-tree':
+        specifier: workspace:*
+        version: link:../calc-tree
       colorjs.io:
         specifier: ^0.6.0
         version: 0.6.0

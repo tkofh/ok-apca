@@ -2,8 +2,10 @@
  * OKLCH color representation and Display P3 gamut mapping.
  */
 
+import { constant } from '@ok-apca/calc-tree'
 import _Color from 'colorjs.io'
 import { GAMUT_SINE_CURVATURE_EXPONENT } from './constants.ts'
+import { createMaxChromaExpr } from './expressions.ts'
 import type { Color, GamutApex, GamutSlice } from './types.ts'
 import { clamp } from './util.ts'
 
@@ -118,10 +120,14 @@ export function findGamutSlice(hue: number): GamutSlice {
 /**
  * Compute the maximum chroma at a given lightness using the tent function
  * with sine-based curvature correction on the right half.
+ *
+ * Uses the shared expression tree from expressions.ts to ensure parity
+ * with CSS generation.
  */
 function computeMaxChromaInternal(L: number, slice: GamutSlice): number {
 	const { apex, curvature } = slice
 
+	// Edge cases not handled by the expression (division by zero)
 	if (L <= 0 || L >= 1) {
 		return 0
 	}
@@ -129,18 +135,18 @@ function computeMaxChromaInternal(L: number, slice: GamutSlice): number {
 		return 0
 	}
 
-	if (L <= apex.lightness) {
-		// Left half: linear from origin to apex
-		return (apex.chroma * L) / apex.lightness
+	const result = createMaxChromaExpr().evaluate({
+		lightness: constant(L),
+		apexL: constant(apex.lightness),
+		apexChroma: constant(apex.chroma),
+		curvature: constant(curvature),
+	})
+
+	if (result.type !== 'number') {
+		throw new Error('Expected numeric result from constant expression')
 	}
 
-	// Right half: linear with sine-based curvature correction
-	const linearChroma = (apex.chroma * (1 - L)) / (1 - apex.lightness)
-	const t = (L - apex.lightness) / (1 - apex.lightness)
-	const correction =
-		curvature * Math.sin(t * Math.PI) ** GAMUT_SINE_CURVATURE_EXPONENT * apex.chroma
-
-	return linearChroma + correction
+	return result.value
 }
 
 /**

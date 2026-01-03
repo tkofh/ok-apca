@@ -26,6 +26,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@ok-apca/calc-tree": "workspace:*",
 		"colorjs.io": "^0.6.0"
 	},
 	"devDependencies": {

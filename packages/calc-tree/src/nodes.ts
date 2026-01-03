@@ -1,13 +1,14 @@
 import type { CalcNode } from './types.ts'
 
 /**
- * Format a number for CSS output
+ * Format a number for CSS output.
+ * Uses toFixed(5) to limit to 5 decimal places, matching ok-apca's cssNumber.
  */
 function formatNumber(n: number): string {
 	if (Math.abs(n - Math.PI) < 1e-10) {
 		return 'pi'
 	}
-	const formatted = n.toPrecision(5)
+	const formatted = n.toFixed(5)
 	return formatted.replace(/\.?0+$/, '') || '0'
 }
 
