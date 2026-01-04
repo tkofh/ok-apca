@@ -8,6 +8,7 @@ import {
 	MaxNode,
 	MinNode,
 	MultiplyNode,
+	OklchNode,
 	PowerNode,
 	ReferenceNode,
 	SignNode,
@@ -179,4 +180,15 @@ export function clamp<A extends string, B extends string, C extends string>(
 				)
 			: new ClampNode(minExpr.node, valExpr.node, maxExpr.node)
 	return new CalcExpression(node, mergeRefs(minExpr, valExpr, maxExpr))
+}
+
+export function oklch<L extends string, C extends string, H extends string>(
+	lightness: ExpressionInput<L>,
+	chroma: ExpressionInput<C>,
+	hue: ExpressionInput<H>,
+): CalcExpression<L | C | H> {
+	const l = toExpression(lightness)
+	const c = toExpression(chroma)
+	const h = toExpression(hue)
+	return new CalcExpression(new OklchNode(l.node, c.node, h.node), mergeRefs(l, c, h))
 }

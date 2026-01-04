@@ -30,20 +30,19 @@ import {
 	APCA_SMOOTH_THRESHOLD_OFFSET,
 	GAMUT_SINE_CURVATURE_EXPONENT,
 } from './constants.ts'
+import type { GamutSlice } from './types.ts'
 
 /**
  * Max in-gamut chroma using tent function with sine-based curvature correction.
  * Left half (L ≤ apex): linear from origin to apex
  * Right half (L > apex): linear with sine correction from apex to white
  */
-export function createMaxChromaExpr(): CalcExpression<
-	'lightness' | 'apexL' | 'apexChroma' | 'curvature'
-> {
+export function createMaxChromaExpr(slice: GamutSlice): CalcExpression<'lightness'> {
 	const L = reference('lightness')
-	const apexL = reference('apexL')
-	const apexC = reference('apexChroma')
-	const curv = reference('curvature')
-	const oneMinusApexL = subtract(1, apexL)
+	const apexL = slice.apex.lightness
+	const apexC = slice.apex.chroma
+	const curv = slice.curvature
+	const oneMinusApexL = 1 - apexL
 
 	const leftHalf = divide(multiply(apexC, L), apexL)
 

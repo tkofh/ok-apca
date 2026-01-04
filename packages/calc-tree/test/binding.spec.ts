@@ -114,4 +114,43 @@ describe('binding', () => {
 			expect(css.expression).toBe('calc(var(--runtime) * 2 + 5)')
 		})
 	})
+
+	describe('record binding', () => {
+		it('binds multiple values at once', () => {
+			const expr = add(reference('x'), reference('y'))
+			const bound = expr.bind({ x: 10, y: 20 })
+			const result = bound.toNumber()
+
+			expect(result).toBe(30)
+		})
+
+		it('removes all bound references from required refs', () => {
+			const expr = add(add(reference('a'), reference('b')), reference('c'))
+			const bound = expr.bind({ a: 1, b: 2 })
+
+			// Only needs 'c' now
+			const result = bound.toNumber({ c: 3 })
+			expect(result).toBe(6)
+		})
+
+		it('binds to expressions and merges refs', () => {
+			const expr = add(reference('x'), reference('y'))
+			const bound = expr.bind({
+				x: multiply(reference('a'), 2),
+				y: reference('b'),
+			})
+
+			// Now requires a and b instead of x and y
+			const result = bound.toNumber({ a: 3, b: 4 })
+			expect(result).toBe(10) // (3 * 2) + 4 = 10
+		})
+
+		it('produces correct CSS', () => {
+			const expr = add(multiply(reference('x'), reference('y')), reference('z'))
+			const bound = expr.bind({ x: 2, y: 3 })
+
+			const css = bound.toCss({ z: reference('runtime') })
+			expect(css.expression).toBe('calc(6 + var(--runtime))')
+		})
+	})
 })

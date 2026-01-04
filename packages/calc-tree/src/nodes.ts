@@ -287,6 +287,52 @@ export class ClampNode implements CalcNode {
 	}
 }
 
+export class OklchNode implements CalcNode {
+	readonly kind = 'oklch'
+	readonly lightness: CalcNode
+	readonly chroma: CalcNode
+	readonly hue: CalcNode
+
+	constructor(lightness: CalcNode, chroma: CalcNode, hue: CalcNode) {
+		this.lightness = lightness
+		this.chroma = chroma
+		this.hue = hue
+	}
+
+	substitute(bindings: Record<string, CalcNode>): CalcNode {
+		return new OklchNode(
+			this.lightness.substitute(bindings),
+			this.chroma.substitute(bindings),
+			this.hue.substitute(bindings),
+		)
+	}
+
+	isConstant(): boolean {
+		return this.lightness.isConstant() && this.chroma.isConstant() && this.hue.isConstant()
+	}
+
+	evaluateConstant(): number {
+		throw new Error('Cannot evaluate oklch color as a number')
+	}
+
+	serialize(declarations: Record<string, string>): string {
+		const l = this.lightness.serialize(declarations)
+		const c = this.chroma.serialize(declarations)
+		const h = this.hue.serialize(declarations)
+
+		// Wrap in calc() if needed
+		const lExpr = this.lightness.needsCalcWrap() ? `calc(${l})` : l
+		const cExpr = this.chroma.needsCalcWrap() ? `calc(${c})` : c
+		const hExpr = this.hue.needsCalcWrap() ? `calc(${h})` : h
+
+		return `oklch(${lExpr} ${cExpr} ${hExpr})`
+	}
+
+	needsCalcWrap(): boolean {
+		return false
+	}
+}
+
 export class PropertyNode implements CalcNode {
 	readonly kind = 'property'
 	readonly name: string

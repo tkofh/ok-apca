@@ -1,4 +1,4 @@
-import { reference } from '@ok-apca/calc-tree'
+import { type CalcExpression, clamp, divide, multiply, oklch, reference } from '@ok-apca/calc-tree'
 import { findGamutSlice } from './color.ts'
 import {
 	createContrastSolver,
@@ -9,10 +9,25 @@ import {
 import type { GamutSlice, HueDefinition, InputMode } from './types.ts'
 import { outdent } from './util.ts'
 
-const cssNumber = (n: number): string => n.toFixed(5).replace(/\.?0+$/, '') || '0'
+const vars = {
+	lightness: 'lightness',
+	chroma: 'chroma',
+	lumNorm: '_lum-norm',
+	chrPct: '_chr-pct',
+	yBg: '_Y-bg',
 
-const cssVar = (name: string, fallback?: string): string =>
-	`var(--${name}${fallback ? `, ${fallback}` : ''})`
+	lumNormFor: (mode: InputMode) => (mode === 'percentage' ? vars.lumNorm : vars.lightness),
+	chrPctFor: (mode: InputMode) => (mode === 'percentage' ? vars.chrPct : vars.chroma),
+	contrastScaleFor: (mode: InputMode) => (mode === 'percentage' ? 100 : 1),
+
+	contrastInput: (label: string) => `contrast-${label}`,
+	contrastSigned: (label: string) => `_contrast-signed-${label}`,
+	yTarget: (label: string) => `_Y-target-${label}`,
+	conLum: (label: string) => `_con-lum-${label}`,
+
+	output: (name: string) => name,
+	outputContrast: (name: string, label: string) => `${name}-${label}`,
+}
 
 function generatePropertyRules(
 	output: string,
@@ -34,136 +49,106 @@ function generatePropertyRules(
 		}
 	`
 
-	const properties: string[] = [numeric('lightness', true), numeric('chroma', true)]
+	const properties: string[] = [numeric(vars.lightness, true), numeric(vars.chroma, true)]
 
 	if (inputMode === 'percentage') {
-		properties.push(numeric('_lum-norm'), numeric('_chr-pct'))
+		properties.push(numeric(vars.lumNorm), numeric(vars.chrPct))
 	}
 
-	properties.push(color(output, true))
+	properties.push(color(vars.output(output), true))
 
 	if (labels.length > 0) {
-		properties.push(numeric('_Y-bg'))
+		properties.push(numeric(vars.yBg))
 	}
 
 	for (const label of labels) {
 		properties.push(
-			numeric(`contrast-${label}`, true),
-			numeric(`_contrast-signed-${label}`),
-			numeric(`_lc-norm-${label}`),
-			numeric(`_Y-target-${label}`),
-			color(`${output}-${label}`, true),
+			numeric(vars.contrastInput(label), true),
+			numeric(vars.contrastSigned(label)),
+			numeric(vars.conLum(label)),
+			numeric(vars.yTarget(label)),
+			color(vars.outputContrast(output, label), true),
 		)
 	}
 
 	return properties.join('\n')
 }
 
-/**
- * Generate CSS expression for max chroma using the expression tree.
- * Binds the gamut slice constants and leaves lightness as a reference.
- */
-function cssMaxChroma(lightnessRef: string, slice: GamutSlice): string {
-	return createMaxChromaExpr()
-		.bind('apexL', slice.apex.lightness)
-		.bind('apexChroma', slice.apex.chroma)
-		.bind('curvature', slice.curvature)
-		.toCss({
-			lightness: reference(lightnessRef),
-		}).expression
-}
-
-function getLumNormVar(inputMode: InputMode): string {
-	return inputMode === 'percentage' ? cssVar('_lum-norm') : cssVar('lightness')
-}
-
-function getChrPctVar(inputMode: InputMode): string {
-	return inputMode === 'percentage' ? cssVar('_chr-pct') : cssVar('chroma')
-}
-
-function generateBaseColorCss(
+function buildBaseColorExpr(
 	hue: number,
 	slice: GamutSlice,
 	output: string,
 	inputMode: InputMode,
-) {
-	const lumNormRef = inputMode === 'percentage' ? '_lum-norm' : 'lightness'
-	const chromaExpr = `(${cssMaxChroma(lumNormRef, slice)}) * ${getChrPctVar(inputMode)}`
+): CalcExpression<string> {
+	const isPercentage = inputMode === 'percentage'
 
-	if (inputMode === 'percentage') {
-		return outdent`
-			--_lum-norm: clamp(0, ${cssVar('lightness')} / 100, 1);
-			--_chr-pct: clamp(0, ${cssVar('chroma')} / 100, 1);
-			--${output}: oklch(${getLumNormVar(inputMode)} calc(${chromaExpr}) ${cssNumber(hue)});
-		`
-	}
+	const lumNorm = isPercentage
+		? clamp(0, divide(reference(vars.lightness), 100), 1).asProperty(`--${vars.lumNorm}`)
+		: reference(vars.lightness)
 
-	return `--${output}: oklch(${getLumNormVar(inputMode)} calc(${chromaExpr}) ${cssNumber(hue)});`
+	const chrPct = isPercentage
+		? clamp(0, divide(reference(vars.chroma), 100), 1).asProperty(`--${vars.chrPct}`)
+		: reference(vars.chroma)
+
+	const maxChroma = createMaxChromaExpr(slice).bind('lightness', lumNorm)
+
+	// Final chroma = maxChroma * chromaPercentage
+	const chroma = multiply(maxChroma, chrPct)
+
+	// Build the color
+	return oklch(lumNorm, chroma, hue).asProperty(`--${vars.output(output)}`)
 }
 
 /**
- * Generate CSS expression for Y from lightness using the expression tree.
+ * Build expression for Y background (shared across contrast colors).
  */
-function cssYFromLightness(lightnessRef: string): string {
-	return createYFromLightness().toCss({
-		lightness: reference(lightnessRef),
-	}).expression
+function buildYBackgroundExpr(inputMode: InputMode): CalcExpression<string> {
+	return createYFromLightness()
+		.bind('lightness', reference(vars.lumNormFor(inputMode)))
+		.asProperty(`--${vars.yBg}`)
 }
 
 /**
- * Generate CSS expression for contrast solver using the expression tree.
- * The solver determines target Y based on background Y and signed contrast.
+ * Build contrast color expression tree for a single label.
  */
-function cssContrastSolver(yBgRef: string, signedContrastRef: string, scale: number): string {
-	return createContrastSolver()
-		.bind('contrastScale', scale)
-		.toCss({
-			yBg: reference(yBgRef),
-			signedContrast: reference(signedContrastRef),
-		}).expression
-}
-
-/**
- * Generate CSS expression for lightness from Y using the expression tree.
- */
-function cssLightnessFromY(yRef: string): string {
-	return createLightnessFromY().toCss({
-		y: reference(yRef),
-	}).expression
-}
-
-function generateContrastColorCss(
+function buildContrastColorExpr(
 	label: string,
 	hue: number,
 	slice: GamutSlice,
 	output: string,
 	inputMode: InputMode,
-): string {
-	const vChrPct = getChrPctVar(inputMode)
-	const V_CON_LUM = cssVar(`_con-lum-${label}`)
-	const yTargetRef = `_Y-target-${label}`
-
-	// Contrast solver: compute target Y from background Y and signed contrast
-	const scale = inputMode === 'percentage' ? 100 : 1
-	const yTargetExpr = cssContrastSolver('_Y-bg', `_contrast-signed-${label}`, scale)
-
-	// Convert Y to lightness: L = Y^(1/3)
-	const conLumExpr = cssLightnessFromY(yTargetRef)
-
-	// Max chroma at the contrast lightness
-	const conChrExpr = `(${cssMaxChroma(`_con-lum-${label}`, slice)}) * ${vChrPct}`
-
+): CalcExpression<string> {
 	const isPercentage = inputMode === 'percentage'
-	const contrastSignedExpr = isPercentage
-		? `clamp(-108, ${cssVar(`contrast-${label}`, '0')}, 108)`
-		: cssVar(`contrast-${label}`, '0')
 
-	return outdent`
-		--_contrast-signed-${label}: ${contrastSignedExpr};
-		--_Y-target-${label}: ${yTargetExpr};
-		--_con-lum-${label}: ${conLumExpr};
-		--${output}-${label}: oklch(${V_CON_LUM} calc(${conChrExpr}) ${cssNumber(hue)});
-	`
+	// Signed contrast: clamp if percentage mode, otherwise direct
+	const signedContrastExpr = isPercentage
+		? clamp(-108, reference(vars.contrastInput(label)), 108).asProperty(
+				`--${vars.contrastSigned(label)}`,
+			)
+		: reference(vars.contrastInput(label)).asProperty(`--${vars.contrastSigned(label)}`)
+
+	// Target Y from contrast solver
+	const yTargetExpr = createContrastSolver()
+		.bind({
+			contrastScale: vars.contrastScaleFor(inputMode),
+			yBg: reference(vars.yBg),
+			signedContrast: signedContrastExpr,
+		})
+		.asProperty(`--${vars.yTarget(label)}`)
+
+	// Convert Y to lightness
+	const conLumExpr = createLightnessFromY()
+		.bind('y', yTargetExpr)
+		.asProperty(`--${vars.conLum(label)}`)
+
+	// Max chroma at contrast lightness
+	const maxChroma = createMaxChromaExpr(slice).bind('lightness', conLumExpr)
+
+	// Final chroma
+	const chroma = multiply(maxChroma, reference(vars.chrPctFor(inputMode)))
+
+	// Build the contrast color
+	return oklch(conLumExpr, chroma, hue).asProperty(`--${vars.outputContrast(output, label)}`)
 }
 
 /**
@@ -189,15 +174,20 @@ export function generateHueCss(definition: HueDefinition): string {
 
 	const propertyRules = generatePropertyRules(output, labels, inputMode)
 
-	const baseColorCss = generateBaseColorCss(hue, slice, output, inputMode)
+	// Build base color expression
+	const baseColorExpr = buildBaseColorExpr(hue, slice, output, inputMode)
+	const baseColorCss = baseColorExpr.toCss().toDeclarationBlock()
 
-	const lumNormRef = inputMode === 'percentage' ? '_lum-norm' : 'lightness'
-	const sharedYBackground =
-		contrastColors.length > 0 ? `--_Y-bg: ${cssYFromLightness(lumNormRef)};` : ''
+	// Build Y background if we have contrast colors
+	const yBackgroundCss =
+		contrastColors.length > 0 ? buildYBackgroundExpr(inputMode).toCss().toDeclarationBlock() : ''
 
+	// Build contrast color expressions
 	const contrastColorsCss = contrastColors
-		.map(({ label }) => generateContrastColorCss(label, hue, slice, output, inputMode))
-		.join('\n\n')
+		.map(({ label }) =>
+			buildContrastColorExpr(label, hue, slice, output, inputMode).toCss().toDeclarationBlock(),
+		)
+		.join('\n')
 
 	return outdent`
 		${propertyRules}
@@ -205,7 +195,7 @@ export function generateHueCss(definition: HueDefinition): string {
 		${selector} {
 			${baseColorCss}
 
-			${sharedYBackground}
+			${yBackgroundCss}
 
 			${contrastColorsCss}
 		}

@@ -7,6 +7,7 @@ export {
 	max,
 	min,
 	multiply,
+	oklch,
 	power,
 	reference,
 	sign,

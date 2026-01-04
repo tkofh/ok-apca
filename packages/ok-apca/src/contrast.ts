@@ -14,7 +14,7 @@ import type { Color, GamutSlice } from './types.ts'
  * with CSS generation.
  */
 function computeMaxChroma(L: number, slice: GamutSlice): number {
-	const { apex, curvature } = slice
+	const { apex } = slice
 
 	// Edge cases not handled by the expression (division by zero)
 	if (L <= 0 || L >= 1) {
@@ -24,12 +24,7 @@ function computeMaxChroma(L: number, slice: GamutSlice): number {
 		return 0
 	}
 
-	return createMaxChromaExpr().toNumber({
-		lightness: L,
-		apexL: apex.lightness,
-		apexChroma: apex.chroma,
-		curvature,
-	})
+	return createMaxChromaExpr(slice).toNumber({ lightness: L })
 }
 
 /**
