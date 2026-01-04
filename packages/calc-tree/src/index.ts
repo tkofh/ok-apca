@@ -16,4 +16,4 @@ export {
 } from './constructors.ts'
 
 export type { CalcExpression } from './expression.ts'
-export type { CSSResult, EvaluationResult } from './types.ts'
+export type { CSSResult } from './types.ts'

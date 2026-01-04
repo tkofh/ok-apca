@@ -5,9 +5,8 @@
 
 import { solveTargetY } from './apca.ts'
 import { createColor, findGamutSlice, gamutMap } from './color.ts'
-import { createMaxChromaExpr } from './expressions.ts'
+import { clampNumeric, createMaxChromaExpr } from './expressions.ts'
 import type { Color, GamutSlice } from './types.ts'
-import { clamp } from './util.ts'
 
 /**
  * Compute the maximum chroma at a given lightness.
@@ -25,18 +24,12 @@ function computeMaxChroma(L: number, slice: GamutSlice): number {
 		return 0
 	}
 
-	const result = createMaxChromaExpr().evaluate({
+	return createMaxChromaExpr().toNumber({
 		lightness: L,
 		apexL: apex.lightness,
 		apexChroma: apex.chroma,
 		curvature,
 	})
-
-	if (result.type !== 'number') {
-		throw new Error('Expected numeric result from constant expression')
-	}
-
-	return result.value
 }
 
 /**
@@ -46,7 +39,7 @@ function computeMaxChroma(L: number, slice: GamutSlice): number {
 export function applyContrast(color: Color, signedContrast: number) {
 	const { hue } = color
 
-	const clampedContrast = clamp(-108, signedContrast, 108)
+	const clampedContrast = clampNumeric(-108, signedContrast, 108)
 
 	const baseColor = gamutMap(color)
 	const L = baseColor.lightness
@@ -55,13 +48,13 @@ export function applyContrast(color: Color, signedContrast: number) {
 	const Y = L ** 3
 
 	const targetY = solveTargetY(Y, clampedContrast)
-	const contrastL = clamp(0, targetY ** (1 / 3), 1)
+	const contrastL = clampNumeric(0, targetY ** (1 / 3), 1)
 
 	// Preserve chroma percentage from base lightness to contrast lightness
 	// Use gamut-mapped chroma to compute percentage (matching CSS behavior)
 	const slice = findGamutSlice(hue)
 	const maxChromaAtBase = computeMaxChroma(L, slice)
-	const chromaPct = maxChromaAtBase > 0 ? clamp(0, baseColor.chroma / maxChromaAtBase, 1) : 0
+	const chromaPct = maxChromaAtBase > 0 ? clampNumeric(0, baseColor.chroma / maxChromaAtBase, 1) : 0
 	const maxChromaAtContrast = computeMaxChroma(contrastL, slice)
 	const contrastC = maxChromaAtContrast * chromaPct
 

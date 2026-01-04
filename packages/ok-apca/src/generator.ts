@@ -64,15 +64,13 @@ function generatePropertyRules(
  * Binds the gamut slice constants and leaves lightness as a reference.
  */
 function cssMaxChroma(lightnessRef: string, slice: GamutSlice): string {
-	const result = createMaxChromaExpr()
+	return createMaxChromaExpr()
 		.bind('apexL', slice.apex.lightness)
 		.bind('apexChroma', slice.apex.chroma)
 		.bind('curvature', slice.curvature)
-		.evaluate({
+		.toCss({
 			lightness: reference(lightnessRef),
-		})
-
-	return result.css.expression
+		}).expression
 }
 
 function getLumNormVar(inputMode: InputMode): string {
@@ -107,10 +105,9 @@ function generateBaseColorCss(
  * Generate CSS expression for Y from lightness using the expression tree.
  */
 function cssYFromLightness(lightnessRef: string): string {
-	const result = createYFromLightness().evaluate({
+	return createYFromLightness().toCss({
 		lightness: reference(lightnessRef),
-	})
-	return result.css.expression
+	}).expression
 }
 
 /**
@@ -118,23 +115,21 @@ function cssYFromLightness(lightnessRef: string): string {
  * The solver determines target Y based on background Y and signed contrast.
  */
 function cssContrastSolver(yBgRef: string, signedContrastRef: string, scale: number): string {
-	const result = createContrastSolver()
+	return createContrastSolver()
 		.bind('contrastScale', scale)
-		.evaluate({
+		.toCss({
 			yBg: reference(yBgRef),
 			signedContrast: reference(signedContrastRef),
-		})
-	return result.css.expression
+		}).expression
 }
 
 /**
  * Generate CSS expression for lightness from Y using the expression tree.
  */
 function cssLightnessFromY(yRef: string): string {
-	const result = createLightnessFromY().evaluate({
+	return createLightnessFromY().toCss({
 		y: reference(yRef),
-	})
-	return result.css.expression
+	}).expression
 }
 
 function generateContrastColorCss(

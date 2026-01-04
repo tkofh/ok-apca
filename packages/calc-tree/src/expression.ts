@@ -1,6 +1,24 @@
 import { type ExpressionInput, toExpression } from './constructors.ts'
 import { ConstantNode, PropertyNode } from './nodes.ts'
-import type { CalcNode, CSSResult, EvaluationResult } from './types.ts'
+import type { CalcNode, CSSResult } from './types.ts'
+
+function applyBindings(
+	node: CalcNode,
+	bindings: Record<string, ExpressionInput<never>> | undefined,
+): CalcNode {
+	if (!bindings) {
+		return node
+	}
+	const nodeBindings: Record<string, CalcNode> = {}
+	for (const [key, value] of Object.entries(bindings) as [string, ExpressionInput<never>][]) {
+		if (typeof value === 'number') {
+			nodeBindings[key] = new ConstantNode(value)
+		} else {
+			nodeBindings[key] = value.node
+		}
+	}
+	return node.substitute(nodeBindings)
+}
 
 export class CalcExpression<Refs extends string = never> {
 	readonly node: CalcNode
@@ -31,40 +49,33 @@ export class CalcExpression<Refs extends string = never> {
 		return new CalcExpression(new PropertyNode(name, this.node), new Set(this.refs))
 	}
 
-	evaluate(
-		bindings: [Refs] extends [never]
-			? Record<string, never> | undefined
-			: Record<Refs, ExpressionInput<never>> = {} as Record<string, never>,
-	): EvaluationResult {
-		const nodeBindings: Record<string, CalcNode> = {}
-		if (bindings) {
-			for (const [key, value] of Object.entries(bindings) as [string, ExpressionInput<never>][]) {
-				if (typeof value === 'number') {
-					nodeBindings[key] = new ConstantNode(value)
-				} else {
-					nodeBindings[key] = value.node
-				}
-			}
-		}
-
-		const substituted = this.node.substitute(nodeBindings)
-
+	/**
+	 * Generate CSS from the expression.
+	 * Optionally accepts bindings to substitute before serialization.
+	 */
+	toCss(bindings?: Partial<Record<Refs, ExpressionInput<never>>>): CSSResult {
+		const substituted = applyBindings(this.node, bindings as Record<string, ExpressionInput<never>>)
 		const declarations: Record<string, string> = {}
 		const rawExpression = substituted.serialize(declarations)
 		const expression = substituted.needsCalcWrap() ? `calc(${rawExpression})` : rawExpression
-
-		if (substituted.isConstant()) {
-			const value = substituted.evaluateConstant()
-			return { type: 'number', value, css: { expression, declarations } }
-		}
-
-		return { type: 'expression', css: { expression, declarations } }
+		return { expression, declarations }
 	}
 
-	toCss(): CSSResult {
-		const declarations: Record<string, string> = {}
-		const rawExpression = this.node.serialize(declarations)
-		const expression = this.node.needsCalcWrap() ? `calc(${rawExpression})` : rawExpression
-		return { expression, declarations }
+	/**
+	 * Evaluate the expression to a numeric value.
+	 * Throws if the expression contains unbound references after applying bindings.
+	 */
+	toNumber(
+		bindings: [Refs] extends [never]
+			? Record<string, never> | undefined
+			: Record<Refs, ExpressionInput<never>> = {} as Record<string, never>,
+	): number {
+		const substituted = applyBindings(this.node, bindings as Record<string, ExpressionInput<never>>)
+
+		if (!substituted.isConstant()) {
+			throw new Error('Cannot convert expression to number: unbound references remain')
+		}
+
+		return substituted.evaluateConstant()
 	}
 }

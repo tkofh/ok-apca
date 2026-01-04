@@ -4,9 +4,8 @@
 
 import _Color from 'colorjs.io'
 import { GAMUT_SINE_CURVATURE_EXPONENT } from './constants.ts'
-import { createMaxChromaExpr } from './expressions.ts'
+import { clampNumeric, createMaxChromaExpr } from './expressions.ts'
 import type { Color, GamutApex, GamutSlice } from './types.ts'
-import { clamp } from './util.ts'
 
 class ColorImpl implements Color {
 	readonly hue: number
@@ -134,18 +133,12 @@ function computeMaxChromaInternal(L: number, slice: GamutSlice): number {
 		return 0
 	}
 
-	const result = createMaxChromaExpr().evaluate({
+	return createMaxChromaExpr().toNumber({
 		lightness: L,
 		apexL: apex.lightness,
 		apexChroma: apex.chroma,
 		curvature,
 	})
-
-	if (result.type !== 'number') {
-		throw new Error('Expected numeric result from constant expression')
-	}
-
-	return result.value
 }
 
 /**
@@ -165,9 +158,9 @@ export function gamutMap(color: Color): Color {
 	const { hue, chroma, lightness } = color
 	const slice = findGamutSlice(hue)
 
-	const L = clamp(0, lightness, 1)
+	const L = clampNumeric(0, lightness, 1)
 	const maxChroma = computeMaxChromaInternal(L, slice)
-	const clampedChroma = clamp(0, chroma, maxChroma)
+	const clampedChroma = clampNumeric(0, chroma, maxChroma)
 
 	return new ColorImpl(hue, clampedChroma, L)
 }

@@ -161,6 +161,14 @@ export function createYFromLightness(): CalcExpression<'lightness'> {
 }
 
 /** Convert luminance to OKLCH lightness: L = Y^(1/3) */
-export function createLightnessFromY(): CalcExpression<'y'> {
+export function createLightnessFromY() {
 	return power(reference('y'), 1 / 3)
+}
+
+/**
+ * Clamp a numeric value to a range.
+ * Uses calc-tree's clamp for consistency with CSS generation.
+ */
+export function clampNumeric(minimum: number, value: number, maximum: number): number {
+	return clamp(minimum, value, maximum).toNumber()
 }

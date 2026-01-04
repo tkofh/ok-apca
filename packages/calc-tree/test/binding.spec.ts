@@ -6,10 +6,9 @@ describe('binding', () => {
 		it('binds to constants', () => {
 			const expr = multiply(2, reference('x'))
 			const bound = expr.bind('x', 3)
-			const result = bound.evaluate()
+			const result = bound.toNumber()
 
-			expect.assert(result.type === 'number')
-			expect(result.value).toBe(6)
+			expect(result).toBe(6)
 		})
 
 		it('removes bound reference from required refs', () => {
@@ -17,18 +16,16 @@ describe('binding', () => {
 			const bound = expr.bind('x', 5)
 
 			// Only needs 'y' now
-			const result = bound.evaluate({ y: 10 })
-			expect.assert(result.type === 'number')
-			expect(result.value).toBe(15)
+			const result = bound.toNumber({ y: 10 })
+			expect(result).toBe(15)
 		})
 
 		it('can bind multiple references by chaining', () => {
 			const expr = add(reference('x'), reference('y'))
 			const bound = expr.bind('x', 10).bind('y', 20)
-			const result = bound.evaluate()
+			const result = bound.toNumber()
 
-			expect.assert(result.type === 'number')
-			expect(result.value).toBe(30)
+			expect(result).toBe(30)
 		})
 	})
 
@@ -39,9 +36,8 @@ describe('binding', () => {
 			const bound = expr.bind('x', yExpr)
 
 			// Now requires 'y' instead of 'x'
-			const result = bound.evaluate({ y: 3 })
-			expect.assert(result.type === 'number')
-			expect(result.value).toBe(11) // (y * 2) + 5 = (3 * 2) + 5 = 11
+			const result = bound.toNumber({ y: 3 })
+			expect(result).toBe(11) // (y * 2) + 5 = (3 * 2) + 5 = 11
 		})
 
 		it('merges references when binding to expressions', () => {
@@ -49,9 +45,8 @@ describe('binding', () => {
 			const withE = expr.bind('a', reference('e'))
 
 			// Now requires: b, e (a removed, e added)
-			const result = withE.evaluate({ b: 5, e: 10 })
-			expect.assert(result.type === 'number')
-			expect(result.value).toBe(15)
+			const result = withE.toNumber({ b: 5, e: 10 })
+			expect(result).toBe(15)
 		})
 
 		it('adds new references when binding', () => {
@@ -59,9 +54,8 @@ describe('binding', () => {
 			const bound = expr.bind('x', add(reference('a'), reference('b')))
 
 			// Now requires both a and b
-			const result = bound.evaluate({ a: 1, b: 2 })
-			expect.assert(result.type === 'number')
-			expect(result.value).toBe(3)
+			const result = bound.toNumber({ a: 1, b: 2 })
+			expect(result).toBe(3)
 		})
 	})
 
@@ -74,10 +68,9 @@ describe('binding', () => {
 			const step3 = step2.bind('a', 3)
 			const step4 = step3.bind('b', 4)
 
-			const result = step4.evaluate()
-			expect.assert(result.type === 'number')
+			const result = step4.toNumber()
 			// (3 + 1) * (4 + 2) = 4 * 6 = 24
-			expect(result.value).toBe(24)
+			expect(result).toBe(24)
 		})
 
 		it('binding triggers partial evaluation', () => {
@@ -85,9 +78,9 @@ describe('binding', () => {
 			const expr = add(reference('x'), multiply(2, 3))
 
 			// The 2*3 should already be folded to 6
-			const result = expr.evaluate({ x: reference('runtime') })
-			expect(result.css.expression).toContain('6')
-			expect(result.css.expression).not.toContain('2 *')
+			const css = expr.toCss({ x: reference('runtime') })
+			expect(css.expression).toContain('6')
+			expect(css.expression).not.toContain('2 *')
 		})
 	})
 
@@ -98,10 +91,9 @@ describe('binding', () => {
 			// x + (x * 2) = 3x
 
 			const bound = expr.bind('x', 5)
-			const result = bound.evaluate()
+			const result = bound.toNumber()
 
-			expect.assert(result.type === 'number')
-			expect(result.value).toBe(15) // 5 + (5 * 2) = 15
+			expect(result).toBe(15) // 5 + (5 * 2) = 15
 		})
 	})
 
@@ -110,16 +102,16 @@ describe('binding', () => {
 			const expr = add(reference('x'), reference('y'))
 			const bound = expr.bind('x', 10)
 
-			const result = bound.evaluate({ y: reference('runtime') })
-			expect(result.css.expression).toBe('calc(10 + var(--runtime))')
+			const css = bound.toCss({ y: reference('runtime') })
+			expect(css.expression).toBe('calc(10 + var(--runtime))')
 		})
 
 		it('produces correct CSS when binding to expression', () => {
 			const expr = add(reference('x'), 5)
 			const bound = expr.bind('x', multiply(reference('y'), 2))
 
-			const result = bound.evaluate({ y: reference('runtime') })
-			expect(result.css.expression).toBe('calc(var(--runtime) * 2 + 5)')
+			const css = bound.toCss({ y: reference('runtime') })
+			expect(css.expression).toBe('calc(var(--runtime) * 2 + 5)')
 		})
 	})
 })
