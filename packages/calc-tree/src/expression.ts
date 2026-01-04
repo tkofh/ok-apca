@@ -35,7 +35,11 @@ function applyBindings(
 // Extract the union of all refs from values in a binding record
 type BindingRefs<T> = T extends Record<string, ExpressionInput<infer R>> ? R : never
 
-export class CalcExpression<Refs extends string = never> {
+/**
+ * Abstract base class for expression trees.
+ * Provides shared functionality for binding, CSS generation, and property creation.
+ */
+export abstract class BaseExpression<Refs extends string = never> {
 	readonly node: CalcNode
 	readonly refs: ReadonlySet<string>
 
@@ -44,21 +48,30 @@ export class CalcExpression<Refs extends string = never> {
 		this.refs = refs
 	}
 
+	/**
+	 * Factory method for creating new instances of the same type.
+	 * Subclasses must implement this to return their own type.
+	 */
+	protected abstract create<R extends string>(
+		node: CalcNode,
+		refs: ReadonlySet<string>,
+	): BaseExpression<R>
+
 	// Single key-value binding
 	bind<K extends Refs, R extends string>(
 		key: K,
 		value: ExpressionInput<R>,
-	): CalcExpression<Exclude<Refs, K> | R>
+	): BaseExpression<Exclude<Refs, K> | R>
 
 	// Record binding - bind multiple keys at once (partial allowed)
 	bind<B extends Partial<Record<Refs, ExpressionInput<string>>>>(
 		bindings: B,
-	): CalcExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
+	): BaseExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
 
 	bind<K extends Refs>(
 		keyOrBindings: K | Record<K, ExpressionInput<string>>,
 		value?: ExpressionInput<string>,
-	): CalcExpression<string> {
+	): BaseExpression<string> {
 		// Single key-value case
 		if (typeof keyOrBindings === 'string') {
 			const expr = toExpression(value as ExpressionInput<string>)
@@ -70,7 +83,7 @@ export class CalcExpression<Refs extends string = never> {
 				newRefs.add(ref)
 			}
 
-			return new CalcExpression(newNode, newRefs)
+			return this.create(newNode, newRefs)
 		}
 
 		// Record case
@@ -88,11 +101,11 @@ export class CalcExpression<Refs extends string = never> {
 		}
 
 		const newNode = this.node.substitute(nodeBindings)
-		return new CalcExpression(newNode, newRefs)
+		return this.create(newNode, newRefs)
 	}
 
-	asProperty(name: string): CalcExpression<Refs> {
-		return new CalcExpression(new PropertyNode(name, this.node), new Set(this.refs))
+	asProperty(name: string): BaseExpression<Refs> {
+		return this.create(new PropertyNode(name, this.node), new Set(this.refs))
 	}
 
 	/**
@@ -105,6 +118,42 @@ export class CalcExpression<Refs extends string = never> {
 		const rawExpression = substituted.serialize(declarations)
 		const expression = substituted.needsCalcWrap() ? `calc(${rawExpression})` : rawExpression
 		return createCSSResult(expression, declarations)
+	}
+}
+
+/**
+ * Expression tree for numeric calculations.
+ * Can be evaluated to a number or serialized to CSS calc().
+ */
+export class CalcExpression<Refs extends string = never> extends BaseExpression<Refs> {
+	protected override create<R extends string>(
+		node: CalcNode,
+		refs: ReadonlySet<string>,
+	): CalcExpression<R> {
+		return new CalcExpression<R>(node, refs)
+	}
+
+	override bind<K extends Refs, R extends string>(
+		key: K,
+		value: ExpressionInput<R>,
+	): CalcExpression<Exclude<Refs, K> | R>
+
+	override bind<B extends Partial<Record<Refs, ExpressionInput<string>>>>(
+		bindings: B,
+	): CalcExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
+
+	override bind<K extends Refs>(
+		keyOrBindings: K | Record<K, ExpressionInput<string>>,
+		value?: ExpressionInput<string>,
+	): CalcExpression<string> {
+		return super.bind(
+			keyOrBindings as K,
+			value as ExpressionInput<string>,
+		) as CalcExpression<string>
+	}
+
+	override asProperty(name: string): CalcExpression<Refs> {
+		return super.asProperty(name) as CalcExpression<Refs>
 	}
 
 	/**
@@ -123,5 +172,42 @@ export class CalcExpression<Refs extends string = never> {
 		}
 
 		return substituted.evaluateConstant()
+	}
+}
+
+/**
+ * Expression tree for color values.
+ * Can be serialized to CSS but cannot be evaluated to a number.
+ * Cannot be used in arithmetic operations.
+ */
+export class ColorExpression<Refs extends string = never> extends BaseExpression<Refs> {
+	protected override create<R extends string>(
+		node: CalcNode,
+		refs: ReadonlySet<string>,
+	): ColorExpression<R> {
+		return new ColorExpression<R>(node, refs)
+	}
+
+	override bind<K extends Refs, R extends string>(
+		key: K,
+		value: ExpressionInput<R>,
+	): ColorExpression<Exclude<Refs, K> | R>
+
+	override bind<B extends Partial<Record<Refs, ExpressionInput<string>>>>(
+		bindings: B,
+	): ColorExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
+
+	override bind<K extends Refs>(
+		keyOrBindings: K | Record<K, ExpressionInput<string>>,
+		value?: ExpressionInput<string>,
+	): ColorExpression<string> {
+		return super.bind(
+			keyOrBindings as K,
+			value as ExpressionInput<string>,
+		) as ColorExpression<string>
+	}
+
+	override asProperty(name: string): ColorExpression<Refs> {
+		return super.asProperty(name) as ColorExpression<Refs>
 	}
 }

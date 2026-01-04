@@ -1,4 +1,12 @@
-import { type CalcExpression, clamp, divide, multiply, oklch, reference } from '@ok-apca/calc-tree'
+import {
+	type CalcExpression,
+	type ColorExpression,
+	clamp,
+	divide,
+	multiply,
+	oklch,
+	reference,
+} from '@ok-apca/calc-tree'
 import { findGamutSlice } from './color.ts'
 import {
 	createContrastSolver,
@@ -79,7 +87,7 @@ function buildBaseColorExpr(
 	slice: GamutSlice,
 	output: string,
 	inputMode: InputMode,
-): CalcExpression<string> {
+): ColorExpression<string> {
 	const isPercentage = inputMode === 'percentage'
 
 	const lumNorm = isPercentage
@@ -117,7 +125,7 @@ function buildContrastColorExpr(
 	slice: GamutSlice,
 	output: string,
 	inputMode: InputMode,
-): CalcExpression<string> {
+): ColorExpression<string> {
 	const isPercentage = inputMode === 'percentage'
 
 	// Signed contrast: clamp if percentage mode, otherwise direct

@@ -1,4 +1,4 @@
-import { CalcExpression } from './expression.ts'
+import { CalcExpression, ColorExpression } from './expression.ts'
 import {
 	AbsNode,
 	AddNode,
@@ -186,9 +186,9 @@ export function oklch<L extends string, C extends string, H extends string>(
 	lightness: ExpressionInput<L>,
 	chroma: ExpressionInput<C>,
 	hue: ExpressionInput<H>,
-): CalcExpression<L | C | H> {
+): ColorExpression<L | C | H> {
 	const l = toExpression(lightness)
 	const c = toExpression(chroma)
 	const h = toExpression(hue)
-	return new CalcExpression(new OklchNode(l.node, c.node, h.node), mergeRefs(l, c, h))
+	return new ColorExpression(new OklchNode(l.node, c.node, h.node), mergeRefs(l, c, h))
 }
