@@ -1,11 +1,3 @@
-export function signedPow(x: number, exp: number): number {
-	return Math.sign(x) * Math.abs(x) ** exp
-}
-
-export function clamp(min: number, value: number, max: number): number {
-	return Math.max(min, Math.min(max, value))
-}
-
 const hasFirstLineContentRe = /^[ \t]*\S/
 const leadingIndentRe = /^[ \t]+/
 const newlineWithIndentRe = /(?:\r\n|\r|\n)([ \t]*)(?:\S|$)/

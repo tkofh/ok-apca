@@ -1,35 +1,41 @@
+import {
+	type CalcExpression,
+	type ColorExpression,
+	clamp,
+	divide,
+	multiply,
+	oklch,
+	reference,
+} from '@ok-apca/calc-tree'
 import { findGamutSlice } from './color.ts'
 import {
-	APCA_BG_EXP_NORMAL,
-	APCA_BG_EXP_REVERSE,
-	APCA_NORMAL_INV_EXP,
-	APCA_OFFSET,
-	APCA_REVERSE_INV_EXP,
-	APCA_SCALE,
-	APCA_SMOOTH_POWER,
-	APCA_SMOOTH_THRESHOLD,
-	APCA_SMOOTH_THRESHOLD_OFFSET,
-	GAMUT_SINE_CURVATURE_EXPONENT,
-} from './constants.ts'
+	createContrastSolver,
+	createLightnessFromY,
+	createMaxChromaExpr,
+	createYFromLightness,
+} from './expressions.ts'
 import type { GamutSlice, HueDefinition, InputMode } from './types.ts'
 import { outdent } from './util.ts'
 
-const cssNumber = (n: number): string => n.toFixed(5).replace(/\.?0+$/, '') || '0'
+const vars = {
+	lightness: 'lightness',
+	chroma: 'chroma',
+	lumNorm: '_lum-norm',
+	chrPct: '_chr-pct',
+	yBg: '_Y-bg',
 
-const cssVar = (name: string, fallback?: string): string =>
-	`var(--${name}${fallback ? `, ${fallback}` : ''})`
+	lumNormFor: (mode: InputMode) => (mode === 'percentage' ? vars.lumNorm : vars.lightness),
+	chrPctFor: (mode: InputMode) => (mode === 'percentage' ? vars.chrPct : vars.chroma),
+	contrastScaleFor: (mode: InputMode) => (mode === 'percentage' ? 100 : 1),
 
-const CSS_SINE_CURVATURE_EXP = cssNumber(GAMUT_SINE_CURVATURE_EXPONENT)
-const CSS_SMOOTH_POWER = cssNumber(APCA_SMOOTH_POWER)
-const CSS_SMOOTH_THRESHOLD = cssNumber(APCA_SMOOTH_THRESHOLD)
-const CSS_SMOOTH_THRESHOLD_OFFSET = cssNumber(APCA_SMOOTH_THRESHOLD_OFFSET)
-const CSS_NORMAL_INV_EXP = cssNumber(APCA_NORMAL_INV_EXP)
-const CSS_REVERSE_INV_EXP = cssNumber(APCA_REVERSE_INV_EXP)
-const CSS_BG_EXP_NORMAL = cssNumber(APCA_BG_EXP_NORMAL)
-const CSS_BG_EXP_REVERSE = cssNumber(APCA_BG_EXP_REVERSE)
-const CSS_OFFSET = cssNumber(APCA_OFFSET)
-const CSS_SCALE = cssNumber(APCA_SCALE)
-const V_Y_BG = cssVar('_Y-bg')
+	contrastInput: (label: string) => `contrast-${label}`,
+	contrastSigned: (label: string) => `_contrast-signed-${label}`,
+	yTarget: (label: string) => `_Y-target-${label}`,
+	conLum: (label: string) => `_con-lum-${label}`,
+
+	output: (name: string) => name,
+	outputContrast: (name: string, label: string) => `${name}-${label}`,
+}
 
 function generatePropertyRules(
 	output: string,
@@ -51,166 +57,106 @@ function generatePropertyRules(
 		}
 	`
 
-	const properties: string[] = [numeric('lightness', true), numeric('chroma', true)]
+	const properties: string[] = [numeric(vars.lightness, true), numeric(vars.chroma, true)]
 
 	if (inputMode === 'percentage') {
-		properties.push(numeric('_lum-norm'), numeric('_chr-pct'))
+		properties.push(numeric(vars.lumNorm), numeric(vars.chrPct))
 	}
 
-	properties.push(color(output, true))
+	properties.push(color(vars.output(output), true))
 
 	if (labels.length > 0) {
-		properties.push(numeric('_Y-bg'))
+		properties.push(numeric(vars.yBg))
 	}
 
 	for (const label of labels) {
 		properties.push(
-			numeric(`contrast-${label}`, true),
-			numeric(`_contrast-signed-${label}`),
-			numeric(`_lc-norm-${label}`),
-			numeric(`_Y-dark-min-${label}`),
-			numeric(`_Y-light-min-${label}`),
-			numeric(`_con-lum-${label}`),
-			color(`${output}-${label}`, true),
+			numeric(vars.contrastInput(label), true),
+			numeric(vars.contrastSigned(label)),
+			numeric(vars.conLum(label)),
+			numeric(vars.yTarget(label)),
+			color(vars.outputContrast(output, label), true),
 		)
 	}
 
 	return properties.join('\n')
 }
 
-/** Max chroma with curvature correction: linear left of apex, sine-corrected right of apex. */
-function cssMaxChroma(lightness: string, slice: GamutSlice): string {
-	const { apex, curvature } = slice
-	const lMax = cssNumber(apex.lightness)
-	const tExpr = `max(0, (${lightness} - ${lMax}) / ${cssNumber(1 - apex.lightness)})`
-	const leftHalf = `${lightness} * ${cssNumber(apex.chroma / apex.lightness)}`
-	const rightHalf = `(1 - ${lightness}) * ${cssNumber(apex.chroma / (1 - apex.lightness))} + ${cssNumber(curvature * apex.chroma)} * pow(sin((${tExpr}) * pi), ${CSS_SINE_CURVATURE_EXP})`
-	const isRightHalf = `max(0, sign(${lightness} - ${lMax}))`
-
-	return outdent`
-		(1 - ${isRightHalf}) * (${leftHalf}) +
-		${isRightHalf} * (${rightHalf})
-	`
-}
-
-/** Sine-based smoothing: start + (end - start) * pow(sin(t * π/2), power). Clamps t to avoid NaN. */
-function cssSineInterpolation(startValue: string, endValue: string, tParameter: string): string {
-	return `${startValue} + (${endValue} - ${startValue}) * pow(sin(min(${tParameter}, 1) * 1.5708), ${CSS_SMOOTH_POWER})`
-}
-
-function getLumNormVar(inputMode: InputMode): string {
-	return inputMode === 'percentage' ? cssVar('_lum-norm') : cssVar('lightness')
-}
-
-function getChrPctVar(inputMode: InputMode): string {
-	return inputMode === 'percentage' ? cssVar('_chr-pct') : cssVar('chroma')
-}
-
-function generateBaseColorCss(
+function buildBaseColorExpr(
 	hue: number,
 	slice: GamutSlice,
 	output: string,
 	inputMode: InputMode,
-) {
-	const vLumNorm = getLumNormVar(inputMode)
-	const chromaExpr = `(${cssMaxChroma(vLumNorm, slice)}) * ${getChrPctVar(inputMode)}`
+): ColorExpression<string> {
+	const isPercentage = inputMode === 'percentage'
 
-	if (inputMode === 'percentage') {
-		return outdent`
-			--_lum-norm: clamp(0, ${cssVar('lightness')} / 100, 1);
-			--_chr-pct: clamp(0, ${cssVar('chroma')} / 100, 1);
-			--${output}: oklch(${vLumNorm} calc(${chromaExpr}) ${cssNumber(hue)});
-		`
-	}
+	const lumNorm = isPercentage
+		? clamp(0, divide(reference(vars.lightness), 100), 1).asProperty(`--${vars.lumNorm}`)
+		: reference(vars.lightness)
 
-	return `--${output}: oklch(${vLumNorm} calc(${chromaExpr}) ${cssNumber(hue)});`
+	const chrPct = isPercentage
+		? clamp(0, divide(reference(vars.chroma), 100), 1).asProperty(`--${vars.chrPct}`)
+		: reference(vars.chroma)
+
+	const maxChroma = createMaxChromaExpr(slice).bind('lightness', lumNorm)
+
+	// Final chroma = maxChroma * chromaPercentage
+	const chroma = multiply(maxChroma, chrPct)
+
+	// Build the color
+	return oklch(lumNorm, chroma, hue).asProperty(`--${vars.output(output)}`)
 }
 
-function buildYDarkExpr(label: string): string {
-	const V_LC_NORM = cssVar(`_lc-norm-${label}`)
-	const V_Y_DARK_MIN = cssVar(`_Y-dark-min-${label}`)
-	const apcaTermDynamic = `pow(${V_Y_BG}, ${CSS_BG_EXP_NORMAL}) - (${V_LC_NORM} + ${CSS_OFFSET}) / ${CSS_SCALE}`
-	const directSolution = `pow(abs(${apcaTermDynamic}), ${CSS_NORMAL_INV_EXP}) * sign(${apcaTermDynamic})`
-	const aboveThreshold = `min(1, sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1)`
-	const sineInterpolation = cssSineInterpolation(
-		V_Y_BG,
-		V_Y_DARK_MIN,
-		`${V_LC_NORM} / ${CSS_SMOOTH_THRESHOLD}`,
-	)
-
-	return outdent`
-		${aboveThreshold} * (${directSolution}) +
-		(1 - ${aboveThreshold}) * (${sineInterpolation})
-	`
+/**
+ * Build expression for Y background (shared across contrast colors).
+ */
+function buildYBackgroundExpr(inputMode: InputMode): CalcExpression<string> {
+	return createYFromLightness()
+		.bind('lightness', reference(vars.lumNormFor(inputMode)))
+		.asProperty(`--${vars.yBg}`)
 }
 
-function buildYLightExpr(label: string): string {
-	const V_LC_NORM = cssVar(`_lc-norm-${label}`)
-	const V_Y_LIGHT_MIN = cssVar(`_Y-light-min-${label}`)
-	const apcaTermDynamic = `pow(${V_Y_BG}, ${CSS_BG_EXP_REVERSE}) + (${V_LC_NORM} + ${CSS_OFFSET}) / ${CSS_SCALE}`
-	const directSolution = `pow(${apcaTermDynamic}, ${CSS_REVERSE_INV_EXP})`
-	const aboveThreshold = `min(1, sign(${V_LC_NORM} - ${CSS_SMOOTH_THRESHOLD}) + 1)`
-	const sineInterpolation = cssSineInterpolation(
-		V_Y_BG,
-		V_Y_LIGHT_MIN,
-		`${V_LC_NORM} / ${CSS_SMOOTH_THRESHOLD}`,
-	)
-
-	return outdent`
-		${aboveThreshold} * (${directSolution}) +
-		(1 - ${aboveThreshold}) * (${sineInterpolation})
-	`
-}
-
-function buildYFinalExpr(label: string): string {
-	const V_CONTRAST_SIGNED = cssVar(`_contrast-signed-${label}`)
-	const preferLightExpr = `max(0, sign(${V_CONTRAST_SIGNED} - 0.0001))`
-	const preferDarkExpr = `max(0, -1 * sign(${V_CONTRAST_SIGNED} - 0.0001))`
-
-	return outdent`
-		(${preferLightExpr}) * (${buildYLightExpr(label)}) +
-		(${preferDarkExpr}) * (${buildYDarkExpr(label)})
-	`
-}
-
-function generateNormalPolarityCss(label: string) {
-	const apcaTermThreshold = `pow(${V_Y_BG}, ${CSS_BG_EXP_NORMAL}) - ${CSS_SMOOTH_THRESHOLD_OFFSET}`
-	return `--_Y-dark-min-${label}: calc(pow(abs(${apcaTermThreshold}), ${CSS_NORMAL_INV_EXP}) * sign(${apcaTermThreshold}));`
-}
-
-function generateReversePolarityCss(label: string) {
-	const apcaTermThreshold = `pow(${V_Y_BG}, ${CSS_BG_EXP_REVERSE}) + ${CSS_SMOOTH_THRESHOLD_OFFSET}`
-	return `--_Y-light-min-${label}: calc(pow(abs(${apcaTermThreshold}), ${CSS_REVERSE_INV_EXP}) * sign(${apcaTermThreshold}));`
-}
-
-function generateContrastColorCss(
+/**
+ * Build contrast color expression tree for a single label.
+ */
+function buildContrastColorExpr(
 	label: string,
 	hue: number,
 	slice: GamutSlice,
 	output: string,
 	inputMode: InputMode,
-): string {
-	const vChrPct = getChrPctVar(inputMode)
-	const V_CON_LUM = cssVar(`_con-lum-${label}`)
-	const conLumExpr = `pow(clamp(0, ${buildYFinalExpr(label)}, 1), 1 / 3)`
-	const conChrExpr = `(${cssMaxChroma(V_CON_LUM, slice)}) * ${vChrPct}`
-
+): ColorExpression<string> {
 	const isPercentage = inputMode === 'percentage'
-	const contrastSignedExpr = isPercentage
-		? `clamp(-108, ${cssVar(`contrast-${label}`, '0')}, 108)`
-		: cssVar(`contrast-${label}`, '0')
-	const lcNormExpr = isPercentage
-		? `abs(${cssVar(`_contrast-signed-${label}`)}) / 100`
-		: `abs(${cssVar(`_contrast-signed-${label}`)})`
 
-	return outdent`
-		--_contrast-signed-${label}: ${contrastSignedExpr};
-		--_lc-norm-${label}: calc(${lcNormExpr});
-		${generateNormalPolarityCss(label)}
-		${generateReversePolarityCss(label)}
-		--_con-lum-${label}: clamp(0, ${conLumExpr}, 1);
-		--${output}-${label}: oklch(${V_CON_LUM} calc(${conChrExpr}) ${cssNumber(hue)});
-	`
+	// Signed contrast: clamp if percentage mode, otherwise direct
+	const signedContrastExpr = isPercentage
+		? clamp(-108, reference(vars.contrastInput(label)), 108).asProperty(
+				`--${vars.contrastSigned(label)}`,
+			)
+		: reference(vars.contrastInput(label)).asProperty(`--${vars.contrastSigned(label)}`)
+
+	// Target Y from contrast solver
+	const yTargetExpr = createContrastSolver()
+		.bind({
+			contrastScale: vars.contrastScaleFor(inputMode),
+			yBg: reference(vars.yBg),
+			signedContrast: signedContrastExpr,
+		})
+		.asProperty(`--${vars.yTarget(label)}`)
+
+	// Convert Y to lightness
+	const conLumExpr = createLightnessFromY()
+		.bind('y', yTargetExpr)
+		.asProperty(`--${vars.conLum(label)}`)
+
+	// Max chroma at contrast lightness
+	const maxChroma = createMaxChromaExpr(slice).bind('lightness', conLumExpr)
+
+	// Final chroma
+	const chroma = multiply(maxChroma, reference(vars.chrPctFor(inputMode)))
+
+	// Build the contrast color
+	return oklch(conLumExpr, chroma, hue).asProperty(`--${vars.outputContrast(output, label)}`)
 }
 
 /**
@@ -236,14 +182,20 @@ export function generateHueCss(definition: HueDefinition): string {
 
 	const propertyRules = generatePropertyRules(output, labels, inputMode)
 
-	const baseColorCss = generateBaseColorCss(hue, slice, output, inputMode)
+	// Build base color expression
+	const baseColorExpr = buildBaseColorExpr(hue, slice, output, inputMode)
+	const baseColorCss = baseColorExpr.toCss().toDeclarationBlock()
 
-	const vLumNorm = getLumNormVar(inputMode)
-	const sharedYBackground = contrastColors.length > 0 ? `--_Y-bg: pow(${vLumNorm}, 3);` : ''
+	// Build Y background if we have contrast colors
+	const yBackgroundCss =
+		contrastColors.length > 0 ? buildYBackgroundExpr(inputMode).toCss().toDeclarationBlock() : ''
 
+	// Build contrast color expressions
 	const contrastColorsCss = contrastColors
-		.map(({ label }) => generateContrastColorCss(label, hue, slice, output, inputMode))
-		.join('\n\n')
+		.map(({ label }) =>
+			buildContrastColorExpr(label, hue, slice, output, inputMode).toCss().toDeclarationBlock(),
+		)
+		.join('\n')
 
 	return outdent`
 		${propertyRules}
@@ -251,7 +203,7 @@ export function generateHueCss(definition: HueDefinition): string {
 		${selector} {
 			${baseColorCss}
 
-			${sharedYBackground}
+			${yBackgroundCss}
 
 			${contrastColorsCss}
 		}

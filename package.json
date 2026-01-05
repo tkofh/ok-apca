@@ -3,6 +3,9 @@
 	"private": true,
 	"scripts": {
 		"build": "turbo run build",
+		"changeset": "changeset",
+		"changeset:version": "changeset version",
+		"changeset:publish": "pnpm build && changeset publish",
 		"check": "biome check --write .",
 		"check:force": "biome check --write --unsafe .",
 		"check:report": "biome check  .",

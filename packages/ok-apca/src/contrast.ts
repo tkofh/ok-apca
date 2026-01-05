@@ -5,12 +5,18 @@
 
 import { solveTargetY } from './apca.ts'
 import { createColor, findGamutSlice, gamutMap } from './color.ts'
+import { clamp, createMaxChromaExpr } from './expressions.ts'
 import type { Color, GamutSlice } from './types.ts'
-import { clamp } from './util.ts'
 
+/**
+ * Compute the maximum chroma at a given lightness.
+ * Uses the shared expression tree from expressions.ts to ensure parity
+ * with CSS generation.
+ */
 function computeMaxChroma(L: number, slice: GamutSlice): number {
-	const { apex, curvature } = slice
+	const { apex } = slice
 
+	// Edge cases not handled by the expression (division by zero)
 	if (L <= 0 || L >= 1) {
 		return 0
 	}
@@ -18,22 +24,12 @@ function computeMaxChroma(L: number, slice: GamutSlice): number {
 		return 0
 	}
 
-	if (L <= apex.lightness) {
-		// Left half: linear from origin to apex
-		return (apex.chroma * L) / apex.lightness
-	}
-
-	// Right half: linear with quadratic curvature correction
-	const linearChroma = (apex.chroma * (1 - L)) / (1 - apex.lightness)
-	const t = (L - apex.lightness) / (1 - apex.lightness)
-	const correction = curvature * t * (1 - t) * apex.chroma
-
-	return linearChroma + correction
+	return createMaxChromaExpr(slice).toNumber({ lightness: L })
 }
 
 /**
  * Compute contrast color achieving target APCA Lc value.
- * Positive contrast = darker text, negative = lighter text.
+ * Positive contrast = lighter text, negative = darker text.
  */
 export function applyContrast(color: Color, signedContrast: number) {
 	const { hue } = color
@@ -43,6 +39,7 @@ export function applyContrast(color: Color, signedContrast: number) {
 	const baseColor = gamutMap(color)
 	const L = baseColor.lightness
 
+	// Simplified Y = L³ (matches CSS generator behavior)
 	const Y = L ** 3
 
 	const targetY = solveTargetY(Y, clampedContrast)
