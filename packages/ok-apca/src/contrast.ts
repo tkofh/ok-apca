@@ -5,7 +5,7 @@
 
 import { solveTargetY } from './apca.ts'
 import { createColor, findGamutSlice, gamutMap } from './color.ts'
-import { clampNumeric, createMaxChromaExpr } from './expressions.ts'
+import { clamp, createMaxChromaExpr } from './expressions.ts'
 import type { Color, GamutSlice } from './types.ts'
 
 /**
@@ -34,7 +34,7 @@ function computeMaxChroma(L: number, slice: GamutSlice): number {
 export function applyContrast(color: Color, signedContrast: number) {
 	const { hue } = color
 
-	const clampedContrast = clampNumeric(-108, signedContrast, 108)
+	const clampedContrast = clamp(-108, signedContrast, 108)
 
 	const baseColor = gamutMap(color)
 	const L = baseColor.lightness
@@ -43,13 +43,13 @@ export function applyContrast(color: Color, signedContrast: number) {
 	const Y = L ** 3
 
 	const targetY = solveTargetY(Y, clampedContrast)
-	const contrastL = clampNumeric(0, targetY ** (1 / 3), 1)
+	const contrastL = clamp(0, targetY ** (1 / 3), 1)
 
 	// Preserve chroma percentage from base lightness to contrast lightness
 	// Use gamut-mapped chroma to compute percentage (matching CSS behavior)
 	const slice = findGamutSlice(hue)
 	const maxChromaAtBase = computeMaxChroma(L, slice)
-	const chromaPct = maxChromaAtBase > 0 ? clampNumeric(0, baseColor.chroma / maxChromaAtBase, 1) : 0
+	const chromaPct = maxChromaAtBase > 0 ? clamp(0, baseColor.chroma / maxChromaAtBase, 1) : 0
 	const maxChromaAtContrast = computeMaxChroma(contrastL, slice)
 	const contrastC = maxChromaAtContrast * chromaPct
 

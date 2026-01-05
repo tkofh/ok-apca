@@ -3,21 +3,8 @@
  * Single source of truth for both JS evaluation and CSS generation.
  */
 
-import {
-	abs,
-	add,
-	type CalcExpression,
-	clamp,
-	divide,
-	max,
-	min,
-	multiply,
-	power,
-	reference,
-	sign,
-	sin,
-	subtract,
-} from '@ok-apca/calc-tree'
+import type { CalcExpression } from '@ok-apca/calc-tree'
+import * as ct from '@ok-apca/calc-tree'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
@@ -38,25 +25,25 @@ import type { GamutSlice } from './types.ts'
  * Right half (L > apex): linear with sine correction from apex to white
  */
 export function createMaxChromaExpr(slice: GamutSlice): CalcExpression<'lightness'> {
-	const L = reference('lightness')
+	const L = ct.reference('lightness')
 	const apexL = slice.apex.lightness
 	const apexC = slice.apex.chroma
 	const curv = slice.curvature
 	const oneMinusApexL = 1 - apexL
 
-	const leftHalf = divide(multiply(apexC, L), apexL)
+	const leftHalf = ct.divide(ct.multiply(apexC, L), apexL)
 
-	const t = max(0, divide(subtract(L, apexL), oneMinusApexL))
-	const linearChroma = divide(multiply(apexC, subtract(1, L)), oneMinusApexL)
-	const correction = multiply(
-		multiply(curv, power(sin(multiply(t, Math.PI)), GAMUT_SINE_CURVATURE_EXPONENT)),
+	const t = ct.max(0, ct.divide(ct.subtract(L, apexL), oneMinusApexL))
+	const linearChroma = ct.divide(ct.multiply(apexC, ct.subtract(1, L)), oneMinusApexL)
+	const correction = ct.multiply(
+		ct.multiply(curv, ct.power(ct.sin(ct.multiply(t, Math.PI)), GAMUT_SINE_CURVATURE_EXPONENT)),
 		apexC,
 	)
-	const rightHalf = add(linearChroma, correction)
+	const rightHalf = ct.add(linearChroma, correction)
 
 	// Select via sign: isRight = max(0, sign(L - apexL))
-	const isRight = max(0, sign(subtract(L, apexL)))
-	return add(multiply(subtract(1, isRight), leftHalf), multiply(isRight, rightHalf))
+	const isRight = ct.max(0, ct.sign(ct.subtract(L, apexL)))
+	return ct.add(ct.multiply(ct.subtract(1, isRight), leftHalf), ct.multiply(isRight, rightHalf))
 }
 
 /**
@@ -64,8 +51,11 @@ export function createMaxChromaExpr(slice: GamutSlice): CalcExpression<'lightnes
  * Formula: signedPow(Ybg^0.56 - thresholdOffset, 1/0.57)
  */
 function createYMinNormal(): CalcExpression<'yBg'> {
-	const term = subtract(power(reference('yBg'), APCA_BG_EXP_NORMAL), APCA_SMOOTH_THRESHOLD_OFFSET)
-	return multiply(power(abs(term), APCA_NORMAL_INV_EXP), sign(term))
+	const term = ct.subtract(
+		ct.power(ct.reference('yBg'), APCA_BG_EXP_NORMAL),
+		APCA_SMOOTH_THRESHOLD_OFFSET,
+	)
+	return ct.multiply(ct.power(ct.abs(term), APCA_NORMAL_INV_EXP), ct.sign(term))
 }
 
 /**
@@ -73,8 +63,11 @@ function createYMinNormal(): CalcExpression<'yBg'> {
  * Formula: (Ybg^0.65 + thresholdOffset)^(1/0.62)
  */
 function createYMinReverse(): CalcExpression<'yBg'> {
-	const term = add(power(reference('yBg'), APCA_BG_EXP_REVERSE), APCA_SMOOTH_THRESHOLD_OFFSET)
-	return power(term, APCA_REVERSE_INV_EXP)
+	const term = ct.add(
+		ct.power(ct.reference('yBg'), APCA_BG_EXP_REVERSE),
+		APCA_SMOOTH_THRESHOLD_OFFSET,
+	)
+	return ct.power(term, APCA_REVERSE_INV_EXP)
 }
 
 /**
@@ -82,22 +75,25 @@ function createYMinReverse(): CalcExpression<'yBg'> {
  * Uses sine-based smoothing for low contrast values.
  */
 export function createNormalPolaritySolver(): CalcExpression<'yBg' | 'x'> {
-	const yBg = reference('yBg')
-	const x = reference('x')
+	const yBg = ct.reference('yBg')
+	const x = ct.reference('x')
 
 	// Direct: Yfg = signedPow(Ybg^0.56 - (x + 0.027)/1.14, 1/0.57)
-	const term = subtract(power(yBg, APCA_BG_EXP_NORMAL), divide(add(x, APCA_OFFSET), APCA_SCALE))
-	const directSolution = multiply(power(abs(term), APCA_NORMAL_INV_EXP), sign(term))
+	const term = ct.subtract(
+		ct.power(yBg, APCA_BG_EXP_NORMAL),
+		ct.divide(ct.add(x, APCA_OFFSET), APCA_SCALE),
+	)
+	const directSolution = ct.multiply(ct.power(ct.abs(term), APCA_NORMAL_INV_EXP), ct.sign(term))
 
 	// Smooth: blend from yBg to yMin using sin(t * π/2)^2.46
-	const t = min(divide(x, APCA_SMOOTH_THRESHOLD), 1)
-	const blend = power(sin(multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
-	const smoothSolution = add(yBg, multiply(subtract(createYMinNormal(), yBg), blend))
+	const t = ct.min(ct.divide(x, APCA_SMOOTH_THRESHOLD), 1)
+	const blend = ct.power(ct.sin(ct.multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
+	const smoothSolution = ct.add(yBg, ct.multiply(ct.subtract(createYMinNormal(), yBg), blend))
 
-	const aboveThreshold = max(0, sign(subtract(x, APCA_SMOOTH_THRESHOLD)))
-	return add(
-		multiply(aboveThreshold, directSolution),
-		multiply(subtract(1, aboveThreshold), smoothSolution),
+	const aboveThreshold = ct.max(0, ct.sign(ct.subtract(x, APCA_SMOOTH_THRESHOLD)))
+	return ct.add(
+		ct.multiply(aboveThreshold, directSolution),
+		ct.multiply(ct.subtract(1, aboveThreshold), smoothSolution),
 	)
 }
 
@@ -106,22 +102,25 @@ export function createNormalPolaritySolver(): CalcExpression<'yBg' | 'x'> {
  * Uses sine-based smoothing for low contrast values.
  */
 export function createReversePolaritySolver(): CalcExpression<'yBg' | 'x'> {
-	const yBg = reference('yBg')
-	const x = reference('x')
+	const yBg = ct.reference('yBg')
+	const x = ct.reference('x')
 
 	// Direct: Yfg = (Ybg^0.65 + (x + 0.027)/1.14)^(1/0.62)
-	const term = add(power(yBg, APCA_BG_EXP_REVERSE), divide(add(x, APCA_OFFSET), APCA_SCALE))
-	const directSolution = power(term, APCA_REVERSE_INV_EXP)
+	const term = ct.add(
+		ct.power(yBg, APCA_BG_EXP_REVERSE),
+		ct.divide(ct.add(x, APCA_OFFSET), APCA_SCALE),
+	)
+	const directSolution = ct.power(term, APCA_REVERSE_INV_EXP)
 
 	// Smooth: blend from yBg to yMin
-	const t = min(divide(x, APCA_SMOOTH_THRESHOLD), 1)
-	const blend = power(sin(multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
-	const smoothSolution = add(yBg, multiply(subtract(createYMinReverse(), yBg), blend))
+	const t = ct.min(ct.divide(x, APCA_SMOOTH_THRESHOLD), 1)
+	const blend = ct.power(ct.sin(ct.multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
+	const smoothSolution = ct.add(yBg, ct.multiply(ct.subtract(createYMinReverse(), yBg), blend))
 
-	const aboveThreshold = max(0, sign(subtract(x, APCA_SMOOTH_THRESHOLD)))
-	return add(
-		multiply(aboveThreshold, directSolution),
-		multiply(subtract(1, aboveThreshold), smoothSolution),
+	const aboveThreshold = ct.max(0, ct.sign(ct.subtract(x, APCA_SMOOTH_THRESHOLD)))
+	return ct.add(
+		ct.multiply(aboveThreshold, directSolution),
+		ct.multiply(ct.subtract(1, aboveThreshold), smoothSolution),
 	)
 }
 
@@ -131,24 +130,24 @@ export function createReversePolaritySolver(): CalcExpression<'yBg' | 'x'> {
  * Result clamped to [0, 1].
  */
 export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast' | 'contrastScale'> {
-	const signedContrast = reference('signedContrast')
-	const yBg = reference('yBg')
-	const x = divide(abs(signedContrast), reference('contrastScale'))
+	const signedContrast = ct.reference('signedContrast')
+	const yBg = ct.reference('yBg')
+	const x = ct.divide(ct.abs(signedContrast), ct.reference('contrastScale'))
 
 	const normalExpr = createNormalPolaritySolver().bind('x', x)
 	const reverseExpr = createReversePolaritySolver().bind('x', x)
 
 	// Polarity selection: preferLight when > 0, preferDark when < 0, yBg when = 0
-	const signVal = sign(signedContrast)
-	const preferLight = max(0, signVal)
-	const preferDark = max(0, multiply(-1, signVal))
-	const isZero = subtract(1, max(preferLight, preferDark))
+	const signVal = ct.sign(signedContrast)
+	const preferLight = ct.max(0, signVal)
+	const preferDark = ct.max(0, ct.multiply(-1, signVal))
+	const isZero = ct.subtract(1, ct.max(preferLight, preferDark))
 
-	return clamp(
+	return ct.clamp(
 		0,
-		add(
-			add(multiply(preferLight, reverseExpr), multiply(preferDark, normalExpr)),
-			multiply(isZero, yBg),
+		ct.add(
+			ct.add(ct.multiply(preferLight, reverseExpr), ct.multiply(preferDark, normalExpr)),
+			ct.multiply(isZero, yBg),
 		),
 		1,
 	)
@@ -156,18 +155,17 @@ export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast' 
 
 /** Convert OKLCH lightness to luminance: Y = L³ */
 export function createYFromLightness(): CalcExpression<'lightness'> {
-	return power(reference('lightness'), 3)
+	return ct.power(ct.reference('lightness'), 3)
 }
 
 /** Convert luminance to OKLCH lightness: L = Y^(1/3) */
 export function createLightnessFromY() {
-	return power(reference('y'), 1 / 3)
+	return ct.power(ct.reference('y'), 1 / 3)
 }
 
 /**
  * Clamp a numeric value to a range.
- * Uses calc-tree's clamp for consistency with CSS generation.
  */
-export function clampNumeric(minimum: number, value: number, maximum: number): number {
-	return clamp(minimum, value, maximum).toNumber()
+export function clamp(minimum: number, value: number, maximum: number): number {
+	return ct.clamp(minimum, value, maximum).toNumber()
 }

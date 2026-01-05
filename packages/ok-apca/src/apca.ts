@@ -1,5 +1,5 @@
 import {
-	clampNumeric,
+	clamp,
 	createContrastSolver,
 	createNormalPolaritySolver,
 	createReversePolaritySolver,
@@ -17,7 +17,7 @@ interface ApcaSolution {
 function solveApcaNormal(Y: number, x: number): ApcaSolution {
 	const rawY = createNormalPolaritySolver().toNumber({ yBg: Y, x })
 
-	const targetY = clampNumeric(0, rawY, 1)
+	const targetY = clamp(0, rawY, 1)
 	const epsilon = 0.0001
 	const inGamut = rawY >= -epsilon && rawY <= 1 + epsilon
 
@@ -31,7 +31,7 @@ function solveApcaNormal(Y: number, x: number): ApcaSolution {
 function solveApcaReverse(Y: number, x: number): ApcaSolution {
 	const rawY = createReversePolaritySolver().toNumber({ yBg: Y, x })
 
-	const targetY = clampNumeric(0, rawY, 1)
+	const targetY = clamp(0, rawY, 1)
 	const epsilon = 0.0001
 	const inGamut = rawY >= -epsilon && rawY <= 1 + epsilon
 

@@ -4,7 +4,7 @@
 
 import _Color from 'colorjs.io'
 import { GAMUT_SINE_CURVATURE_EXPONENT } from './constants.ts'
-import { clampNumeric, createMaxChromaExpr } from './expressions.ts'
+import { clamp, createMaxChromaExpr } from './expressions.ts'
 import type { Color, GamutApex, GamutSlice } from './types.ts'
 
 class ColorImpl implements Color {
@@ -153,9 +153,9 @@ export function gamutMap(color: Color): Color {
 	const { hue, chroma, lightness } = color
 	const slice = findGamutSlice(hue)
 
-	const L = clampNumeric(0, lightness, 1)
+	const L = clamp(0, lightness, 1)
 	const maxChroma = computeMaxChromaInternal(L, slice)
-	const clampedChroma = clampNumeric(0, chroma, maxChroma)
+	const clampedChroma = clamp(0, chroma, maxChroma)
 
 	return new ColorImpl(hue, clampedChroma, L)
 }
