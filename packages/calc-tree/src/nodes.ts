@@ -339,12 +339,12 @@ export class PropertyNode implements CalcNode {
 	readonly expr: CalcNode
 
 	constructor(name: string, expr: CalcNode) {
-		this.name = name
+		this.name = `--${name}`
 		this.expr = expr
 	}
 
 	substitute(bindings: Record<string, CalcNode>): CalcNode {
-		return new PropertyNode(this.name, this.expr.substitute(bindings))
+		return new PropertyNode(this.name.slice(2), this.expr.substitute(bindings))
 	}
 
 	isConstant(): boolean {

@@ -79,11 +79,11 @@ function buildBaseColorExpr(
 	const isPercentage = inputMode === 'percentage'
 
 	const lumNorm = isPercentage
-		? ct.clamp(0, ct.divide(ct.reference(vars.lightness), 100), 1).asProperty(`--${vars.lumNorm}`)
+		? ct.clamp(0, ct.divide(ct.reference(vars.lightness), 100), 1).asProperty(vars.lumNorm)
 		: ct.reference(vars.lightness)
 
 	const chrPct = isPercentage
-		? ct.clamp(0, ct.divide(ct.reference(vars.chroma), 100), 1).asProperty(`--${vars.chrPct}`)
+		? ct.clamp(0, ct.divide(ct.reference(vars.chroma), 100), 1).asProperty(vars.chrPct)
 		: ct.reference(vars.chroma)
 
 	const maxChroma = createMaxChromaExpr(slice).bind('lightness', lumNorm)
@@ -92,16 +92,14 @@ function buildBaseColorExpr(
 	const chroma = ct.multiply(maxChroma, chrPct)
 
 	// Build the color
-	return ct.oklch(lumNorm, chroma, hue).asProperty(`--${vars.output(output)}`)
+	return ct.oklch(lumNorm, chroma, hue).asProperty(vars.output(output))
 }
 
 /**
  * Build expression for Y background (shared across contrast colors).
  */
 function buildYBackgroundExpr(inputMode: InputMode): CalcExpression<string> {
-	return ct
-		.power(ct.reference(vars.lumNormFor(inputMode)), 3)
-		.asProperty(`--${vars.yBg}`)
+	return ct.power(ct.reference(vars.lumNormFor(inputMode)), 3).asProperty(vars.yBg)
 }
 
 /**
@@ -120,8 +118,8 @@ function buildContrastColorExpr(
 	const signedContrastExpr = isPercentage
 		? ct
 				.clamp(-108, ct.reference(vars.contrastInput(label)), 108)
-				.asProperty(`--${vars.contrastSigned(label)}`)
-		: ct.reference(vars.contrastInput(label)).asProperty(`--${vars.contrastSigned(label)}`)
+				.asProperty(vars.contrastSigned(label))
+		: ct.reference(vars.contrastInput(label)).asProperty(vars.contrastSigned(label))
 
 	// Target Y from contrast solver
 	const yTargetExpr = createContrastSolver()
@@ -130,10 +128,10 @@ function buildContrastColorExpr(
 			yBg: ct.reference(vars.yBg),
 			signedContrast: signedContrastExpr,
 		})
-		.asProperty(`--${vars.yTarget(label)}`)
+		.asProperty(vars.yTarget(label))
 
 	// Convert Y to lightness
-	const conLumExpr = ct.power(yTargetExpr, 1 / 3).asProperty(`--${vars.conLum(label)}`)
+	const conLumExpr = ct.power(yTargetExpr, 1 / 3).asProperty(vars.conLum(label))
 
 	// Max chroma at contrast lightness
 	const maxChroma = createMaxChromaExpr(slice).bind('lightness', conLumExpr)
@@ -142,7 +140,7 @@ function buildContrastColorExpr(
 	const chroma = ct.multiply(maxChroma, ct.reference(vars.chrPctFor(inputMode)))
 
 	// Build the contrast color
-	return ct.oklch(conLumExpr, chroma, hue).asProperty(`--${vars.outputContrast(output, label)}`)
+	return ct.oklch(conLumExpr, chroma, hue).asProperty(vars.outputContrast(output, label))
 }
 
 /**
