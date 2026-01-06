@@ -1,220 +1,195 @@
-import { findGamutBoundary } from './gamut.ts'
-import type { ColorGeneratorOptions, ContrastMode, GamutBoundary } from './types.ts'
+import type { CalcExpression, ColorExpression } from '@ok-apca/calc-tree'
+import * as ct from '@ok-apca/calc-tree'
+import { findGamutSlice } from './color.ts'
+import { createContrastSolver, createMaxChromaExpr } from './expressions.ts'
+import type { GamutSlice, HueDefinition, InputMode } from './types.ts'
 import { outdent } from './util.ts'
 
-function formatNumber(n: number, precision = 10) {
-	const formatted = n.toFixed(precision)
-	// Remove trailing zeros but keep at least one decimal place
-	return formatted.replace(/\.?0+$/, '') || '0'
+const vars = {
+	lightness: 'lightness',
+	chroma: 'chroma',
+	lumNorm: '_lum-norm',
+	chrPct: '_chr-pct',
+	yBg: '_Y-bg',
+
+	lumNormFor: (mode: InputMode) => (mode === 'percentage' ? vars.lumNorm : vars.lightness),
+	chrPctFor: (mode: InputMode) => (mode === 'percentage' ? vars.chrPct : vars.chroma),
+	contrastScaleFor: (mode: InputMode) => (mode === 'percentage' ? 100 : 1),
+
+	contrastInput: (label: string) => `contrast-${label}`,
+	contrastSigned: (label: string) => `_contrast-signed-${label}`,
+	yTarget: (label: string) => `_Y-target-${label}`,
+	conLum: (label: string) => `_con-lum-${label}`,
+
+	output: (name: string) => name,
+	outputContrast: (name: string, label: string) => `${name}-${label}`,
 }
 
-function generateBaseColorCss(selector: string, hue: number, boundary: GamutBoundary) {
-	const lMax = formatNumber(boundary.lMax)
-	const cPeak = formatNumber(boundary.cPeak)
+function generatePropertyRules(
+	output: string,
+	labels: readonly string[],
+	inputMode: InputMode,
+): string {
+	const numeric = (name: string, inherits = false) => outdent`
+		@property --${name} {
+			inherits: ${inherits ? 'true' : 'false'};
+			initial-value: 0;
+			syntax: '<number>';
+		}
+	`
+	const color = (name: string, inherits = false) => outdent`
+		@property --${name} {
+			inherits: ${inherits ? 'true' : 'false'};
+			initial-value: transparent;
+			syntax: '<color>';
+		}
+	`
 
-	return outdent`
-    ${selector} {
-      /* Runtime inputs: --lightness (0-100), --chroma (0-100) */
-      --_l: clamp(0, var(--lightness) / 100, 1);
-      --_c-req: clamp(0, var(--chroma) / 100, 1);
+	const properties: string[] = [numeric(vars.lightness, true), numeric(vars.chroma, true)]
 
-      /* Build-time constants for hue ${hue} */
-      --_L-MAX: ${lMax};
-      --_C-PEAK: ${cPeak};
-
-      /* Tent function: min(L/L_MAX, (1-L)/(1-L_MAX)) */
-      --_tent: min(
-        var(--_l) / var(--_L-MAX),
-        (1 - var(--_l)) / (1 - var(--_L-MAX))
-      );
-
-      /* Gamut-mapped chroma */
-      --_c: min(var(--_c-req), calc(var(--_C-PEAK) * var(--_tent)));
-
-      /* Output color */
-      --o-color: oklch(var(--_l) var(--_c) ${hue});
-    }
-  `
-}
-
-/**
- * Generate CSS for normal polarity APCA (darker contrast color).
- * Used for force-dark and prefer-dark modes.
- */
-function generateNormalPolarityCss() {
-	return outdent`
-    /* Normal polarity: solve for darker Y */
-    --_xn-min: calc(
-      pow(abs(pow(var(--_y), 0.56) - (var(--_apca-t) + 0.027) / 1.14), 1 / 0.57) *
-      sign(pow(var(--_y), 0.56) - (var(--_apca-t) + 0.027) / 1.14)
-    );
-    --_xn-v: calc(-1 * abs((pow(abs(var(--_xn-min)), 0.43) * var(--_apca-t)) / 0.6498));
-    --_xn: calc(
-      min(1, max(0, sign(var(--_x) - var(--_apca-t)) + 1)) *
-      pow(abs(pow(var(--_y), 0.56) - (var(--_x) + 0.027) / 1.14), 1 / 0.57) *
-      sign(pow(var(--_y), 0.56) - (var(--_x) + 0.027) / 1.14) +
-      (1 - min(1, max(0, sign(var(--_x) - var(--_apca-t)) + 1))) * (
-        var(--_y) +
-        (-3 * var(--_y) + 3 * var(--_xn-min) - var(--_xn-v)) * pow(var(--_x) / var(--_apca-t), 2) +
-        (2 * var(--_y) - 2 * var(--_xn-min) + var(--_xn-v)) * pow(var(--_x) / var(--_apca-t), 3)
-      )
-    );
-    --_xn-in-gamut: calc((sign(var(--_xn) + var(--_ep)) + sign(1 - var(--_ep) - var(--_xn))) / 2);
-  `
-}
-
-/**
- * Generate CSS for reverse polarity APCA (lighter contrast color).
- * Used for force-light and prefer-light modes.
- */
-function generateReversePolarityCss() {
-	return outdent`
-    /* Reverse polarity: solve for lighter Y */
-    --_xr-min: calc(
-      pow(abs(pow(var(--_y), 0.65) + (var(--_apca-t) + 0.027) / 1.14), 1 / 0.62) *
-      sign(pow(var(--_y), 0.65) + (var(--_apca-t) + 0.027) / 1.14)
-    );
-    --_xr-v: calc(-1 * abs((pow(abs(var(--_xr-min)), 0.38) * -1 * var(--_apca-t)) / 0.7068));
-    --_xr: calc(
-      min(1, max(0, sign(var(--_x) - var(--_apca-t)) + 1)) *
-      pow(pow(var(--_y), 0.65) - ((-1 * var(--_x)) - 0.027) / 1.14, 1 / 0.62) +
-      (1 - min(1, max(0, sign(var(--_x) - var(--_apca-t)) + 1))) * (
-        var(--_y) +
-        (-3 * var(--_y) + 3 * var(--_xr-min) - var(--_xr-v)) * pow(var(--_x) / var(--_apca-t), 2) +
-        (2 * var(--_y) - 2 * var(--_xr-min) + var(--_xr-v)) * pow(var(--_x) / var(--_apca-t), 3)
-      )
-    );
-    --_xr-in-gamut: calc((sign(var(--_xr) + var(--_ep)) + sign(1 - var(--_ep) - var(--_xr))) / 2);
-  `
-}
-
-/**
- * Generate CSS for target Y selection based on mode.
- */
-function generateTargetYCss(mode: ContrastMode) {
-	switch (mode) {
-		case 'force-light':
-			// Light contrast text = reverse polarity (higher Y)
-			return '--_target-y: clamp(0, var(--_xr), 1);'
-		case 'force-dark':
-			// Dark contrast text = normal polarity (lower Y)
-			return '--_target-y: clamp(0, var(--_xn), 1);'
-		case 'prefer-light':
-			// Prefer light: use reverse if in gamut, fall back to normal if in gamut,
-			// otherwise choose whichever is furthest from base Y
-			return outdent`
-        --_xr-dist: calc(abs(clamp(0, var(--_xr), 1) - var(--_y)));
-        --_xn-dist: calc(abs(clamp(0, var(--_xn), 1) - var(--_y)));
-        --_furthest: calc(
-          max(0, sign(var(--_xr-dist) - var(--_xn-dist) + 0.0001)) * clamp(0, var(--_xr), 1) +
-          max(0, sign(var(--_xn-dist) - var(--_xr-dist))) * clamp(0, var(--_xn), 1)
-        );
-        --_target-y: clamp(
-          0,
-          var(--_xr-in-gamut) * var(--_xr) +
-          (1 - var(--_xr-in-gamut)) * var(--_xn-in-gamut) * var(--_xn) +
-          (1 - var(--_xr-in-gamut)) * (1 - var(--_xn-in-gamut)) * var(--_furthest),
-          1
-        );
-      `
-		case 'prefer-dark':
-			// Prefer dark: use normal if in gamut, fall back to reverse if in gamut,
-			// otherwise choose whichever is furthest from base Y
-			return outdent`
-        --_xn-dist: calc(abs(clamp(0, var(--_xn), 1) - var(--_y)));
-        --_xr-dist: calc(abs(clamp(0, var(--_xr), 1) - var(--_y)));
-        --_furthest: calc(
-          max(0, sign(var(--_xn-dist) - var(--_xr-dist) + 0.0001)) * clamp(0, var(--_xn), 1) +
-          max(0, sign(var(--_xr-dist) - var(--_xn-dist))) * clamp(0, var(--_xr), 1)
-        );
-        --_target-y: clamp(
-          0,
-          var(--_xn-in-gamut) * var(--_xn) +
-          (1 - var(--_xn-in-gamut)) * var(--_xr-in-gamut) * var(--_xr) +
-          (1 - var(--_xn-in-gamut)) * (1 - var(--_xr-in-gamut)) * var(--_furthest),
-          1
-        );
-      `
+	if (inputMode === 'percentage') {
+		properties.push(numeric(vars.lumNorm), numeric(vars.chrPct))
 	}
+
+	properties.push(color(vars.output(output), true))
+
+	if (labels.length > 0) {
+		properties.push(numeric(vars.yBg))
+	}
+
+	for (const label of labels) {
+		properties.push(
+			numeric(vars.contrastInput(label), true),
+			numeric(vars.contrastSigned(label)),
+			numeric(vars.conLum(label)),
+			numeric(vars.yTarget(label)),
+			color(vars.outputContrast(output, label), true),
+		)
+	}
+
+	return properties.join('\n')
 }
 
-function generateContrastCss(
-	selector: string,
-	contrastSelector: string,
+function buildBaseColorExpr(
 	hue: number,
-	boundary: GamutBoundary,
-	mode: ContrastMode,
-) {
-	const lMax = formatNumber(boundary.lMax)
-	const cPeak = formatNumber(boundary.cPeak)
+	slice: GamutSlice,
+	output: string,
+	inputMode: InputMode,
+): ColorExpression<string> {
+	const isPercentage = inputMode === 'percentage'
 
-	// Determine which polarities we need based on mode
-	// force-dark needs normal (darker), force-light needs reverse (lighter)
-	// prefer modes need both for fallback
-	const needsNormal = mode === 'force-dark' || mode === 'prefer-light' || mode === 'prefer-dark'
-	const needsReverse = mode === 'force-light' || mode === 'prefer-light' || mode === 'prefer-dark'
+	const lumNorm = isPercentage
+		? ct.clamp(0, ct.divide(ct.reference(vars.lightness), 100), 1).asProperty(vars.lumNorm)
+		: ct.reference(vars.lightness)
 
-	// Build polarity-specific CSS (only include what's needed)
-	const polarityCss = [
-		needsNormal ? generateNormalPolarityCss() : '',
-		needsReverse ? generateReversePolarityCss() : '',
-	]
-		.filter(Boolean)
-		.join('\n\n    ')
+	const chrPct = isPercentage
+		? ct.clamp(0, ct.divide(ct.reference(vars.chroma), 100), 1).asProperty(vars.chrPct)
+		: ct.reference(vars.chroma)
 
-	return outdent`
-    ${selector}${contrastSelector} {
-      /* Runtime input: --contrast (0-108 APCA Lc) */
-      --_x: clamp(0, var(--contrast) / 100, 1.08);
+	const maxChroma = createMaxChromaExpr(slice).bind('lightness', lumNorm)
 
-      /* Simplified L to luminance Y (ignoring chroma contribution) */
-      --_y: pow(var(--_l), 3);
+	// Final chroma = maxChroma * chromaPercentage
+	const chroma = ct.multiply(maxChroma, chrPct)
 
-      /* APCA threshold for Bezier smoothing */
-      --_apca-t: 0.022;
-      --_ep: 0.0001;
-
-      ${polarityCss}
-
-      /* Target Y selection (mode: ${mode}) */
-      ${generateTargetYCss(mode)}
-
-      /* Contrast lightness from cube root (inverse of Y = L³) */
-      --_contrast-l: clamp(0, pow(var(--_target-y), 1 / 3), 1);
-
-      /* Gamut-map contrast color's chroma using simplified tent */
-      --_contrast-tent: min(
-        var(--_contrast-l) / ${lMax},
-        (1 - var(--_contrast-l)) / (1 - ${lMax})
-      );
-      --_contrast-c: min(
-        calc((var(--_c) + var(--_c-req)) / 2),
-        calc(${cPeak} * var(--_contrast-tent))
-      );
-
-      /* Output contrast color */
-      --o-color-contrast: oklch(var(--_contrast-l) var(--_contrast-c) ${hue});
-    }
-  `
+	// Build the color
+	return ct.oklch(lumNorm, chroma, hue).asProperty(vars.output(output))
 }
 
-export function generateColorCss(options: ColorGeneratorOptions) {
-	const hue = ((options.hue % 360) + 360) % 360
-	const boundary = findGamutBoundary(hue)
+/**
+ * Build expression for Y background (shared across contrast colors).
+ */
+function buildYBackgroundExpr(inputMode: InputMode): CalcExpression<string> {
+	return ct.power(ct.reference(vars.lumNormFor(inputMode)), 3).asProperty(vars.yBg)
+}
 
-	let css = generateBaseColorCss(options.selector, hue, boundary)
+/**
+ * Build contrast color expression tree for a single label.
+ */
+function buildContrastColorExpr(
+	label: string,
+	hue: number,
+	slice: GamutSlice,
+	output: string,
+	inputMode: InputMode,
+): ColorExpression<string> {
+	const isPercentage = inputMode === 'percentage'
 
-	if (options.contrast) {
-		const contrastSelector = options.contrast.selector ?? '&.contrast'
+	// Signed contrast: clamp if percentage mode, otherwise direct
+	const signedContrastExpr = isPercentage
+		? ct
+				.clamp(-108, ct.reference(vars.contrastInput(label)), 108)
+				.asProperty(vars.contrastSigned(label))
+		: ct.reference(vars.contrastInput(label)).asProperty(vars.contrastSigned(label))
 
-		css += `\n\n${generateContrastCss(
-			options.selector,
-			contrastSelector.startsWith('&') ? contrastSelector.slice(1) : ` ${contrastSelector}`,
-			hue,
-			boundary,
-			options.contrast.mode,
-		)}`
-	}
+	// Target Y from contrast solver
+	const yTargetExpr = createContrastSolver()
+		.bind({
+			contrastScale: vars.contrastScaleFor(inputMode),
+			yBg: ct.reference(vars.yBg),
+			signedContrast: signedContrastExpr,
+		})
+		.asProperty(vars.yTarget(label))
 
-	return css
+	// Convert Y to lightness
+	const conLumExpr = ct.power(yTargetExpr, 1 / 3).asProperty(vars.conLum(label))
+
+	// Max chroma at contrast lightness
+	const maxChroma = createMaxChromaExpr(slice).bind('lightness', conLumExpr)
+
+	// Final chroma
+	const chroma = ct.multiply(maxChroma, ct.reference(vars.chrPctFor(inputMode)))
+
+	// Build the contrast color
+	return ct.oklch(conLumExpr, chroma, hue).asProperty(vars.outputContrast(output, label))
+}
+
+/**
+ * Generate CSS for OKLCH color with optional APCA-based contrast colors.
+ *
+ * Accepts a pre-validated `HueDefinition` from `defineHue`.
+ *
+ * Runtime inputs:
+ * - `--lightness` (0-100), `--chroma` (0-100)
+ * - `--contrast-{label}` (-108 to 108)
+ *
+ * Outputs:
+ * - `--{output}` (e.g., `--color`)
+ * - `--{output}-{label}` (e.g., `--color-text`)
+ *
+ * The generated CSS includes `@property` declarations for all custom properties,
+ * enabling proper type checking, animation support, and initial values.
+ */
+export function generateHueCss(definition: HueDefinition): string {
+	const { hue, selector, output, contrastColors, inputMode } = definition
+	const slice = findGamutSlice(hue)
+	const labels = contrastColors.map((c) => c.label)
+
+	const propertyRules = generatePropertyRules(output, labels, inputMode)
+
+	// Build base color expression
+	const baseColorExpr = buildBaseColorExpr(hue, slice, output, inputMode)
+	const baseColorCss = baseColorExpr.toCss().toDeclarationBlock()
+
+	// Build Y background if we have contrast colors
+	const yBackgroundCss =
+		contrastColors.length > 0 ? buildYBackgroundExpr(inputMode).toCss().toDeclarationBlock() : ''
+
+	// Build contrast color expressions
+	const contrastColorsCss = contrastColors
+		.map(({ label }) =>
+			buildContrastColorExpr(label, hue, slice, output, inputMode).toCss().toDeclarationBlock(),
+		)
+		.join('\n')
+
+	return outdent`
+		${propertyRules}
+
+		${selector} {
+			${baseColorCss}
+
+			${yBackgroundCss}
+
+			${contrastColorsCss}
+		}
+	`
 }
