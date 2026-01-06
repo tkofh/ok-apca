@@ -1,19 +1,7 @@
-import {
-	type CalcExpression,
-	type ColorExpression,
-	clamp,
-	divide,
-	multiply,
-	oklch,
-	reference,
-} from '@ok-apca/calc-tree'
+import type { CalcExpression, ColorExpression } from '@ok-apca/calc-tree'
+import * as ct from '@ok-apca/calc-tree'
 import { findGamutSlice } from './color.ts'
-import {
-	createContrastSolver,
-	createLightnessFromY,
-	createMaxChromaExpr,
-	createYFromLightness,
-} from './expressions.ts'
+import { createContrastSolver, createMaxChromaExpr } from './expressions.ts'
 import type { GamutSlice, HueDefinition, InputMode } from './types.ts'
 import { outdent } from './util.ts'
 
@@ -91,28 +79,28 @@ function buildBaseColorExpr(
 	const isPercentage = inputMode === 'percentage'
 
 	const lumNorm = isPercentage
-		? clamp(0, divide(reference(vars.lightness), 100), 1).asProperty(`--${vars.lumNorm}`)
-		: reference(vars.lightness)
+		? ct.clamp(0, ct.divide(ct.reference(vars.lightness), 100), 1).asProperty(`--${vars.lumNorm}`)
+		: ct.reference(vars.lightness)
 
 	const chrPct = isPercentage
-		? clamp(0, divide(reference(vars.chroma), 100), 1).asProperty(`--${vars.chrPct}`)
-		: reference(vars.chroma)
+		? ct.clamp(0, ct.divide(ct.reference(vars.chroma), 100), 1).asProperty(`--${vars.chrPct}`)
+		: ct.reference(vars.chroma)
 
 	const maxChroma = createMaxChromaExpr(slice).bind('lightness', lumNorm)
 
 	// Final chroma = maxChroma * chromaPercentage
-	const chroma = multiply(maxChroma, chrPct)
+	const chroma = ct.multiply(maxChroma, chrPct)
 
 	// Build the color
-	return oklch(lumNorm, chroma, hue).asProperty(`--${vars.output(output)}`)
+	return ct.oklch(lumNorm, chroma, hue).asProperty(`--${vars.output(output)}`)
 }
 
 /**
  * Build expression for Y background (shared across contrast colors).
  */
 function buildYBackgroundExpr(inputMode: InputMode): CalcExpression<string> {
-	return createYFromLightness()
-		.bind('lightness', reference(vars.lumNormFor(inputMode)))
+	return ct
+		.power(ct.reference(vars.lumNormFor(inputMode)), 3)
 		.asProperty(`--${vars.yBg}`)
 }
 
@@ -130,33 +118,31 @@ function buildContrastColorExpr(
 
 	// Signed contrast: clamp if percentage mode, otherwise direct
 	const signedContrastExpr = isPercentage
-		? clamp(-108, reference(vars.contrastInput(label)), 108).asProperty(
-				`--${vars.contrastSigned(label)}`,
-			)
-		: reference(vars.contrastInput(label)).asProperty(`--${vars.contrastSigned(label)}`)
+		? ct
+				.clamp(-108, ct.reference(vars.contrastInput(label)), 108)
+				.asProperty(`--${vars.contrastSigned(label)}`)
+		: ct.reference(vars.contrastInput(label)).asProperty(`--${vars.contrastSigned(label)}`)
 
 	// Target Y from contrast solver
 	const yTargetExpr = createContrastSolver()
 		.bind({
 			contrastScale: vars.contrastScaleFor(inputMode),
-			yBg: reference(vars.yBg),
+			yBg: ct.reference(vars.yBg),
 			signedContrast: signedContrastExpr,
 		})
 		.asProperty(`--${vars.yTarget(label)}`)
 
 	// Convert Y to lightness
-	const conLumExpr = createLightnessFromY()
-		.bind('y', yTargetExpr)
-		.asProperty(`--${vars.conLum(label)}`)
+	const conLumExpr = ct.power(yTargetExpr, 1 / 3).asProperty(`--${vars.conLum(label)}`)
 
 	// Max chroma at contrast lightness
 	const maxChroma = createMaxChromaExpr(slice).bind('lightness', conLumExpr)
 
 	// Final chroma
-	const chroma = multiply(maxChroma, reference(vars.chrPctFor(inputMode)))
+	const chroma = ct.multiply(maxChroma, ct.reference(vars.chrPctFor(inputMode)))
 
 	// Build the contrast color
-	return oklch(conLumExpr, chroma, hue).asProperty(`--${vars.outputContrast(output, label)}`)
+	return ct.oklch(conLumExpr, chroma, hue).asProperty(`--${vars.outputContrast(output, label)}`)
 }
 
 /**
