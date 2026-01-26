@@ -27,13 +27,13 @@
 	},
 	"dependencies": {
 		"@ok-apca/calc-tree": "workspace:*",
-		"colorjs.io": "^0.6.0"
+		"colorjs.io": "^0.6.1"
 	},
 	"devDependencies": {
-		"@vitest/browser-playwright": "^4.0.16",
+		"@vitest/browser-playwright": "^4.0.18",
 		"fast-check": "^4.5.3",
-		"tsdown": "^0.18.3",
-		"vitest": "^4.0.16"
+		"tsdown": "0.20.1",
+		"vitest": "^4.0.18"
 	},
 	"publishConfig": {
 		"access": "public"
