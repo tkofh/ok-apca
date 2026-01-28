@@ -183,6 +183,15 @@ export function createContrastMeasurementNormal(): CalcExpression<'yBg' | 'yFg'>
 const INVERSION_THRESHOLD = 0.08 // ~8 Lc
 
 /**
+ * Epsilon for comparing achieved contrasts.
+ * If the difference between light and dark achieved contrast is within this
+ * epsilon, they are treated as equal (a tie) and user preference is used.
+ * This prevents floating-point precision issues from causing unexpected
+ * polarity flips at boundary conditions.
+ */
+const COMPARISON_EPSILON = 0.001 // ~0.1 Lc units
+
+/**
  * Contrast solver with automatic polarity inversion.
  *
  * Computes both polarity solutions, measures achieved contrast for each,
@@ -220,10 +229,21 @@ export function createContrastSolverWithInversion(): CalcExpression<
 	const bothBelowThreshold = ct.multiply(lightBelowThreshold, darkBelowThreshold) // 1 if both below threshold
 
 	// Compare achieved contrasts (only meaningful when at least one is above threshold)
+	// Use epsilon tolerance to avoid floating-point precision issues
 	const lcDiff = ct.subtract(lcLight, lcDark)
-	const lightWins = ct.max(0, ct.sign(lcDiff)) // 1 if light achieves more
-	const darkWins = ct.max(0, ct.sign(ct.multiply(-1, lcDiff))) // 1 if dark achieves more
-	const isTie = ct.subtract(1, ct.max(lightWins, darkWins)) // 1 if equal
+
+	// Check if difference is within epsilon (treat as tie)
+	// withinEpsilon = 1 if abs(lcDiff) < epsilon, 0 otherwise
+	const absDiff = ct.abs(lcDiff)
+	const withinEpsilon = ct.max(0, ct.sign(ct.subtract(COMPARISON_EPSILON, absDiff))) // 1 if absDiff < epsilon
+	const outsideEpsilon = ct.subtract(1, withinEpsilon)
+
+	// Only declare a winner if difference is outside epsilon
+	const lightWinsRaw = ct.max(0, ct.sign(lcDiff)) // 1 if light > dark
+	const darkWinsRaw = ct.max(0, ct.sign(ct.multiply(-1, lcDiff))) // 1 if dark > light
+	const lightWins = ct.multiply(outsideEpsilon, lightWinsRaw) // Only wins if outside epsilon
+	const darkWins = ct.multiply(outsideEpsilon, darkWinsRaw) // Only wins if outside epsilon
+	const isTie = ct.subtract(1, ct.max(lightWins, darkWins)) // 1 if within epsilon or equal
 
 	// Preference for tie-breaking (from signed contrast)
 	const signVal = ct.sign(signedContrast)

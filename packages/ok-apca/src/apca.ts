@@ -93,6 +93,15 @@ function solveTargetYSimple(Y: number, signedContrast: number): number {
 const INVERSION_THRESHOLD = 0.08 // ~8 Lc
 
 /**
+ * Epsilon for floating-point comparison when comparing achieved contrasts.
+ * If the difference between light and dark achieved contrast is within this
+ * epsilon, they are treated as equal (a tie) and user preference is used.
+ * This prevents floating-point precision issues from causing unexpected
+ * polarity flips at boundary conditions.
+ */
+const COMPARISON_EPSILON = 0.001 // ~0.1 Lc units
+
+/**
  * Solve for target Y with automatic polarity inversion.
  * Computes both polarity solutions, measures achieved contrast for each,
  * and selects the one that achieves higher absolute contrast.
@@ -127,18 +136,19 @@ function solveTargetYWithInversion(Y: number, signedContrast: number): number {
 	}
 
 	// Compare and select based on max contrast
+	// Use epsilon tolerance to avoid floating-point precision issues
 	const lcDiff = lcLight - lcDark
 
-	if (lcDiff > 0) {
-		// Light achieves more contrast
+	if (lcDiff > COMPARISON_EPSILON) {
+		// Light achieves meaningfully more contrast
 		return yLight
 	}
-	if (lcDiff < 0) {
-		// Dark achieves more contrast
+	if (lcDiff < -COMPARISON_EPSILON) {
+		// Dark achieves meaningfully more contrast
 		return yDark
 	}
 
-	// Tie: use preference from signed contrast
+	// Tie (within epsilon): use preference from signed contrast
 	if (signedContrast > 0) {
 		return yLight
 	}
