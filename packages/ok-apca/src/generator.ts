@@ -1,7 +1,15 @@
 import type { CalcExpression, ColorExpression } from '@ok-apca/calc-tree'
 import * as ct from '@ok-apca/calc-tree'
 import { findGamutSlice } from './color.ts'
-import { createContrastSolver, createMaxChromaExpr } from './expressions.ts'
+import {
+	createContrastMeasurementNormal,
+	createContrastMeasurementReverse,
+	createContrastSolver,
+	createContrastSolverWithInversion,
+	createMaxChromaExpr,
+	createNormalPolaritySolver,
+	createReversePolaritySolver,
+} from './expressions.ts'
 import type { GamutSlice, HueDefinition, InputMode } from './types.ts'
 import { outdent } from './util.ts'
 
@@ -21,6 +29,12 @@ const vars = {
 	yTarget: (label: string) => `_Y-target-${label}`,
 	conLum: (label: string) => `_con-lum-${label}`,
 
+	// Inversion-specific properties
+	yLight: (label: string) => `_Y-light-${label}`,
+	yDark: (label: string) => `_Y-dark-${label}`,
+	lcLight: (label: string) => `_Lc-light-${label}`,
+	lcDark: (label: string) => `_Lc-dark-${label}`,
+
 	output: (name: string) => name,
 	outputContrast: (name: string, label: string) => `${name}-${label}`,
 }
@@ -29,6 +43,7 @@ function generatePropertyRules(
 	output: string,
 	labels: readonly string[],
 	inputMode: InputMode,
+	noContrastInversion: boolean,
 ): string {
 	const numeric = (name: string, inherits = false) => outdent`
 		@property --${name} {
@@ -58,11 +73,21 @@ function generatePropertyRules(
 	}
 
 	for (const label of labels) {
+		properties.push(numeric(vars.contrastInput(label), true), numeric(vars.contrastSigned(label)))
+
+		// Inversion properties (only when inversion is enabled)
+		if (!noContrastInversion) {
+			properties.push(
+				numeric(vars.yLight(label)),
+				numeric(vars.yDark(label)),
+				numeric(vars.lcLight(label)),
+				numeric(vars.lcDark(label)),
+			)
+		}
+
 		properties.push(
-			numeric(vars.contrastInput(label), true),
-			numeric(vars.contrastSigned(label)),
-			numeric(vars.conLum(label)),
 			numeric(vars.yTarget(label)),
+			numeric(vars.conLum(label)),
 			color(vars.outputContrast(output, label), true),
 		)
 	}
@@ -103,9 +128,9 @@ function buildYBackgroundExpr(inputMode: InputMode): CalcExpression<string> {
 }
 
 /**
- * Build contrast color expression tree for a single label.
+ * Build contrast color expression tree for a single label (simple solver, no inversion).
  */
-function buildContrastColorExpr(
+function buildContrastColorExprSimple(
 	label: string,
 	hue: number,
 	slice: GamutSlice,
@@ -144,6 +169,94 @@ function buildContrastColorExpr(
 }
 
 /**
+ * Build contrast color expression tree with automatic polarity inversion.
+ *
+ * Computes both polarity solutions, measures achieved contrast for each,
+ * and selects the one that achieves higher absolute contrast.
+ */
+function buildContrastColorExprWithInversion(
+	label: string,
+	hue: number,
+	slice: GamutSlice,
+	output: string,
+	inputMode: InputMode,
+): ColorExpression<string> {
+	const isPercentage = inputMode === 'percentage'
+	const contrastScale = vars.contrastScaleFor(inputMode)
+	const yBgRef = ct.reference(vars.yBg)
+
+	// Signed contrast: clamp if percentage mode, otherwise direct
+	const signedContrastExpr = isPercentage
+		? ct
+				.clamp(-108, ct.reference(vars.contrastInput(label)), 108)
+				.asProperty(vars.contrastSigned(label))
+		: ct.reference(vars.contrastInput(label)).asProperty(vars.contrastSigned(label))
+
+	// Absolute contrast scaled
+	const x = ct.divide(ct.abs(signedContrastExpr), contrastScale)
+
+	// Compute both polarity solutions (unclamped)
+	const rawYLight = createReversePolaritySolver().bind({ yBg: yBgRef, x })
+	const rawYDark = createNormalPolaritySolver().bind({ yBg: yBgRef, x })
+
+	// Clamp both to valid Y range [0, 1]
+	const yLightExpr = ct.clamp(0, rawYLight, 1).asProperty(vars.yLight(label))
+	const yDarkExpr = ct.clamp(0, rawYDark, 1).asProperty(vars.yDark(label))
+
+	// Measure achieved contrast for each clamped solution
+	const lcLightExpr = createContrastMeasurementReverse()
+		.bind({ yBg: yBgRef, yFg: yLightExpr })
+		.asProperty(vars.lcLight(label))
+
+	const lcDarkExpr = createContrastMeasurementNormal()
+		.bind({ yBg: yBgRef, yFg: yDarkExpr })
+		.asProperty(vars.lcDark(label))
+
+	// Use the inversion solver to select the best Y
+	const yTargetExpr = createContrastSolverWithInversion()
+		.bind({
+			yBg: yBgRef,
+			signedContrast: signedContrastExpr,
+			contrastScale,
+			yLight: yLightExpr,
+			yDark: yDarkExpr,
+			lcLight: lcLightExpr,
+			lcDark: lcDarkExpr,
+		})
+		.asProperty(vars.yTarget(label))
+
+	// Convert Y to lightness
+	const conLumExpr = ct.power(yTargetExpr, 1 / 3).asProperty(vars.conLum(label))
+
+	// Max chroma at contrast lightness
+	const maxChroma = createMaxChromaExpr(slice).bind('lightness', conLumExpr)
+
+	// Final chroma
+	const chroma = ct.multiply(maxChroma, ct.reference(vars.chrPctFor(inputMode)))
+
+	// Build the contrast color
+	return ct.oklch(conLumExpr, chroma, hue).asProperty(vars.outputContrast(output, label))
+}
+
+/**
+ * Build contrast color expression tree for a single label.
+ * Uses inversion solver when noContrastInversion is false.
+ */
+function buildContrastColorExpr(
+	label: string,
+	hue: number,
+	slice: GamutSlice,
+	output: string,
+	inputMode: InputMode,
+	noContrastInversion: boolean,
+): ColorExpression<string> {
+	if (noContrastInversion) {
+		return buildContrastColorExprSimple(label, hue, slice, output, inputMode)
+	}
+	return buildContrastColorExprWithInversion(label, hue, slice, output, inputMode)
+}
+
+/**
  * Generate CSS for OKLCH color with optional APCA-based contrast colors.
  *
  * Accepts a pre-validated `HueDefinition` from `defineHue`.
@@ -160,11 +273,11 @@ function buildContrastColorExpr(
  * enabling proper type checking, animation support, and initial values.
  */
 export function generateHueCss(definition: HueDefinition): string {
-	const { hue, selector, output, contrastColors, inputMode } = definition
+	const { hue, selector, output, contrastColors, inputMode, noContrastInversion } = definition
 	const slice = findGamutSlice(hue)
 	const labels = contrastColors.map((c) => c.label)
 
-	const propertyRules = generatePropertyRules(output, labels, inputMode)
+	const propertyRules = generatePropertyRules(output, labels, inputMode, noContrastInversion)
 
 	// Build base color expression
 	const baseColorExpr = buildBaseColorExpr(hue, slice, output, inputMode)
@@ -177,7 +290,9 @@ export function generateHueCss(definition: HueDefinition): string {
 	// Build contrast color expressions
 	const contrastColorsCss = contrastColors
 		.map(({ label }) =>
-			buildContrastColorExpr(label, hue, slice, output, inputMode).toCss().toDeclarationBlock(),
+			buildContrastColorExpr(label, hue, slice, output, inputMode, noContrastInversion)
+				.toCss()
+				.toDeclarationBlock(),
 		)
 		.join('\n')
 

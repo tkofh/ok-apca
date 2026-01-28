@@ -30,8 +30,16 @@ function computeMaxChroma(L: number, slice: GamutSlice): number {
 /**
  * Compute contrast color achieving target APCA Lc value.
  * Positive contrast = lighter text, negative = darker text.
+ *
+ * @param color - The base color to compute contrast from
+ * @param signedContrast - Signed contrast value (-108 to 108)
+ * @param invert - Whether to enable automatic polarity inversion (default: true)
+ *
+ * When inversion is enabled (default), the solver computes both polarity solutions
+ * and selects the one that achieves higher absolute contrast. The signed contrast
+ * value acts as a preference that breaks ties when both directions achieve equal contrast.
  */
-export function applyContrast(color: Color, signedContrast: number) {
+export function applyContrast(color: Color, signedContrast: number, invert = true) {
 	const { hue } = color
 
 	const clampedContrast = clamp(-108, signedContrast, 108)
@@ -42,7 +50,7 @@ export function applyContrast(color: Color, signedContrast: number) {
 	// Simplified Y = L³ (matches CSS generator behavior)
 	const Y = L ** 3
 
-	const targetY = solveTargetY(Y, clampedContrast)
+	const targetY = solveTargetY(Y, clampedContrast, invert)
 	const contrastL = clamp(0, targetY ** (1 / 3), 1)
 
 	// Preserve chroma percentage from base lightness to contrast lightness

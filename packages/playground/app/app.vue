@@ -9,6 +9,7 @@ const state = reactive({
 	chroma: 50,
 	lightness: 50,
 	contrast: 60,
+	noContrastInversion: false,
 })
 
 // Apply query string values
@@ -32,6 +33,7 @@ const generatedCss = computed(() => defineHue({
 		selector: '.preview',
 		contrastColors: [{ label: 'text' }],
 		inputMode: 'normalized',
+		noContrastInversion: state.noContrastInversion,
 	}).css)
 
 useHead({
@@ -78,6 +80,12 @@ const previewStyle = computed(() => ({
 					<input v-model.number="state.contrast" type="number" min="-108" max="108" step="0.1" />
 					<input v-model.number="state.contrast" type="range" min="-108" max="108" step="0.1" />
 					<span class="hint">Positive = light text, Negative = dark text</span>
+				</label>
+
+				<label>
+					<input v-model="state.noContrastInversion" type="checkbox" />
+					Disable contrast inversion
+					<span class="hint">When checked, always follow requested polarity (may result in lower contrast)</span>
 				</label>
 			</div>
 		</div>
