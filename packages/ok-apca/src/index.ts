@@ -50,6 +50,7 @@ export function defineHue(options: HueOptions): Hue {
 	const contrastColors: readonly ContrastColor[] = options.contrastColors ?? []
 	const output = options.output ?? 'color'
 	const inputMode: InputMode = options.inputMode ?? 'percentage'
+	const noContrastInversion = options.noContrastInversion ?? false
 	const selector = options.selector
 
 	const labels = contrastColors.map((c) => c.label)
@@ -58,7 +59,14 @@ export function defineHue(options: HueOptions): Hue {
 	}
 	validateUniqueLabels(labels)
 
-	const css = generateHueCss({ hue, selector, output, contrastColors, inputMode })
+	const css = generateHueCss({
+		hue,
+		selector,
+		output,
+		contrastColors,
+		inputMode,
+		noContrastInversion,
+	})
 
 	return {
 		hue,

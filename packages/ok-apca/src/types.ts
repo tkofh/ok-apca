@@ -39,6 +39,17 @@ export interface HueOptions {
 	 * @default 'percentage'
 	 */
 	readonly inputMode?: InputMode
+	/**
+	 * Disables automatic contrast polarity inversion.
+	 *
+	 * By default, when the preferred polarity direction cannot achieve as much
+	 * contrast as the opposite direction, the system automatically inverts to
+	 * maximize contrast. Set this to `true` to always use the preferred polarity
+	 * direction, clamping to black/white if necessary.
+	 *
+	 * @default false
+	 */
+	readonly noContrastInversion?: boolean
 }
 
 /**
@@ -50,6 +61,7 @@ export interface HueDefinition {
 	readonly output: string
 	readonly contrastColors: readonly ContrastColor[]
 	readonly inputMode: InputMode
+	readonly noContrastInversion: boolean
 }
 
 /**
