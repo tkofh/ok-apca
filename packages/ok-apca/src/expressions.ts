@@ -3,6 +3,8 @@ import * as ct from '@ok-apca/calc-tree'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
+	APCA_FG_EXP_NORMAL,
+	APCA_FG_EXP_REVERSE,
 	APCA_NORMAL_INV_EXP,
 	APCA_OFFSET,
 	APCA_REVERSE_INV_EXP,
@@ -126,4 +128,164 @@ export function createLightnessFromY() {
 
 export function clamp(minimum: number, value: number, maximum: number): number {
 	return ct.clamp(minimum, value, maximum).toNumber()
+}
+
+/**
+ * Measure achieved contrast for reverse polarity (light text on dark background).
+ * Simplified APCA formula without low-contrast smoothing (only used for comparison).
+ *
+ * Formula: max(0, 1.14 * (Y_fg^0.62 - Y_bg^0.65) - 0.027)
+ */
+export function createContrastMeasurementReverse(): CalcExpression<'yBg' | 'yFg'> {
+	const yBg = ct.reference('yBg')
+	const yFg = ct.reference('yFg')
+
+	return ct.max(
+		0,
+		ct.subtract(
+			ct.multiply(
+				APCA_SCALE,
+				ct.subtract(ct.power(yFg, APCA_FG_EXP_REVERSE), ct.power(yBg, APCA_BG_EXP_REVERSE)),
+			),
+			APCA_OFFSET,
+		),
+	)
+}
+
+/**
+ * Measure achieved contrast for normal polarity (dark text on light background).
+ * Simplified APCA formula without low-contrast smoothing (only used for comparison).
+ *
+ * Formula: max(0, 1.14 * (Y_bg^0.56 - Y_fg^0.57) - 0.027)
+ */
+export function createContrastMeasurementNormal(): CalcExpression<'yBg' | 'yFg'> {
+	const yBg = ct.reference('yBg')
+	const yFg = ct.reference('yFg')
+
+	return ct.max(
+		0,
+		ct.subtract(
+			ct.multiply(
+				APCA_SCALE,
+				ct.subtract(ct.power(yBg, APCA_BG_EXP_NORMAL), ct.power(yFg, APCA_FG_EXP_NORMAL)),
+			),
+			APCA_OFFSET,
+		),
+	)
+}
+
+/**
+ * Minimum contrast threshold for inversion consideration.
+ * Below this threshold, we respect the user's polarity preference
+ * rather than trying to maximize contrast, because the APCA formula
+ * has inherent asymmetry that makes very low contrast comparisons unreliable.
+ */
+const INVERSION_THRESHOLD = 0.08 // ~8 Lc
+
+/**
+ * Epsilon for comparing achieved contrasts.
+ * If the difference between light and dark achieved contrast is within this
+ * epsilon, they are treated as equal (a tie) and user preference is used.
+ * This prevents floating-point precision issues from causing unexpected
+ * polarity flips at boundary conditions.
+ */
+const COMPARISON_EPSILON = 0.001 // ~0.1 Lc units
+
+/**
+ * Contrast solver with automatic polarity inversion.
+ *
+ * Computes both polarity solutions, measures achieved contrast for each,
+ * and selects the one that achieves higher absolute contrast.
+ * The signed contrast input acts as a preference that breaks ties.
+ *
+ * At low contrast values (both < INVERSION_THRESHOLD), preference is used
+ * directly because APCA formula asymmetry makes comparisons unreliable.
+ *
+ * Property chain:
+ * - Y_light: clamped reverse polarity result (lighter)
+ * - Y_dark: clamped normal polarity result (darker)
+ * - Lc_light: achieved contrast for light solution
+ * - Lc_dark: achieved contrast for dark solution
+ * - Selection based on max(Lc_light, Lc_dark) with preference tie-breaking
+ */
+export function createContrastSolverWithInversion(): CalcExpression<
+	'yBg' | 'signedContrast' | 'contrastScale' | 'yLight' | 'yDark' | 'lcLight' | 'lcDark'
+> {
+	const signedContrast = ct.reference('signedContrast')
+	const yBg = ct.reference('yBg')
+
+	// Pre-computed clamped Y values (passed as properties from generator)
+	const yLight = ct.reference('yLight')
+	const yDark = ct.reference('yDark')
+
+	// Pre-computed achieved contrasts (passed as properties from generator)
+	const lcLight = ct.reference('lcLight')
+	const lcDark = ct.reference('lcDark')
+
+	// Check if both contrasts are below threshold (low contrast regime)
+	// In this regime, APCA asymmetry makes comparison unreliable, so use preference
+	const lightBelowThreshold = ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, lcLight))) // 1 if lcLight < threshold
+	const darkBelowThreshold = ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, lcDark))) // 1 if lcDark < threshold
+	const bothBelowThreshold = ct.multiply(lightBelowThreshold, darkBelowThreshold) // 1 if both below threshold
+
+	// Compare achieved contrasts (only meaningful when at least one is above threshold)
+	// Use epsilon tolerance to avoid floating-point precision issues
+	const lcDiff = ct.subtract(lcLight, lcDark)
+
+	// Check if difference is within epsilon (treat as tie)
+	// withinEpsilon = 1 if abs(lcDiff) < epsilon, 0 otherwise
+	const absDiff = ct.abs(lcDiff)
+	const withinEpsilon = ct.max(0, ct.sign(ct.subtract(COMPARISON_EPSILON, absDiff))) // 1 if absDiff < epsilon
+	const outsideEpsilon = ct.subtract(1, withinEpsilon)
+
+	// Only declare a winner if difference is outside epsilon
+	const lightWinsRaw = ct.max(0, ct.sign(lcDiff)) // 1 if light > dark
+	const darkWinsRaw = ct.max(0, ct.sign(ct.multiply(-1, lcDiff))) // 1 if dark > light
+	const lightWins = ct.multiply(outsideEpsilon, lightWinsRaw) // Only wins if outside epsilon
+	const darkWins = ct.multiply(outsideEpsilon, darkWinsRaw) // Only wins if outside epsilon
+	const isTie = ct.subtract(1, ct.max(lightWins, darkWins)) // 1 if within epsilon or equal
+
+	// Preference for tie-breaking (from signed contrast)
+	const signVal = ct.sign(signedContrast)
+	const preferLight = ct.max(0, signVal)
+	const preferDark = ct.max(0, ct.multiply(-1, signVal))
+	const isZero = ct.subtract(1, ct.max(preferLight, preferDark))
+
+	// In low contrast regime, use preference directly
+	// Otherwise, winner takes all with ties using preference
+	const useLightNormal = ct.max(lightWins, ct.multiply(isTie, preferLight))
+	const useDarkNormal = ct.max(darkWins, ct.multiply(isTie, preferDark))
+
+	// Final selection: low contrast uses preference, normal uses comparison
+	const aboveThreshold = ct.subtract(1, bothBelowThreshold)
+	const useLight = ct.add(
+		ct.multiply(bothBelowThreshold, preferLight),
+		ct.multiply(aboveThreshold, useLightNormal),
+	)
+	const useDark = ct.add(
+		ct.multiply(bothBelowThreshold, preferDark),
+		ct.multiply(aboveThreshold, useDarkNormal),
+	)
+
+	// Result: selected Y + fallback to yBg for zero contrast
+	return ct.add(
+		ct.add(ct.multiply(useLight, yLight), ct.multiply(useDark, yDark)),
+		ct.multiply(isZero, yBg),
+	)
+}
+
+/**
+ * Create expression for the raw (unclamped) reverse polarity solution.
+ * Used to compute Y_light before clamping.
+ */
+export function createRawReverseSolution(): CalcExpression<'yBg' | 'x'> {
+	return createReversePolaritySolver()
+}
+
+/**
+ * Create expression for the raw (unclamped) normal polarity solution.
+ * Used to compute Y_dark before clamping.
+ */
+export function createRawNormalSolution(): CalcExpression<'yBg' | 'x'> {
+	return createNormalPolaritySolver()
 }
