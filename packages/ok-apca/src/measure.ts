@@ -3,7 +3,7 @@
  * Matches Chrome DevTools implementation.
  */
 
-import { getLuminance } from './color.ts'
+import { type ColorInput, toColor } from './color.ts'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
@@ -13,7 +13,6 @@ import {
 	APCA_SCALE,
 	APCA_SMOOTH_THRESHOLD,
 } from './constants.ts'
-import type { Color } from './types.ts'
 
 /**
  * APCA 0.0.98G constants (W3 version)
@@ -32,53 +31,42 @@ const DELTA_Y_MIN = 0.0005
 const LOW_CLIP = 0.1
 
 /**
- * Calculate APCA contrast from Y (luminance) values.
- * Based on APCA 0.1.9 W3 implementation.
- *
- * @param txtY - Text color Y luminance (0-1)
- * @param bgY - Background color Y luminance (0-1)
- * @returns Signed Lc contrast value (positive = dark on light, negative = light on dark)
+ * Measure APCA contrast between colors.
+ * Returns signed Lc value: positive = dark on light, negative = light on dark.
  */
-function calculateAPCAcontrast(txtY: number, bgY: number): number {
+export function measureContrast(baseColor: ColorInput, contrastColor: ColorInput): number {
+	let bgY = toColor(baseColor).luminance
+	let fgY = toColor(contrastColor).luminance
+
 	// Input validation
 	if (
-		!(Number.isFinite(txtY) && Number.isFinite(bgY)) ||
-		Math.min(txtY, bgY) < 0 ||
-		Math.max(txtY, bgY) > 1.1
+		!(Number.isFinite(fgY) && Number.isFinite(bgY)) ||
+		Math.min(fgY, bgY) < 0 ||
+		Math.max(fgY, bgY) > 1.1
 	) {
 		return 0
 	}
 
 	// Soft clamp black levels
-	txtY = txtY > APCA_SMOOTH_THRESHOLD ? txtY : txtY + (APCA_SMOOTH_THRESHOLD - txtY) ** BLACK_CLAMP
+	fgY = fgY > APCA_SMOOTH_THRESHOLD ? fgY : fgY + (APCA_SMOOTH_THRESHOLD - fgY) ** BLACK_CLAMP
 	bgY = bgY > APCA_SMOOTH_THRESHOLD ? bgY : bgY + (APCA_SMOOTH_THRESHOLD - bgY) ** BLACK_CLAMP
 
 	// Return 0 for extremely low delta Y
-	if (Math.abs(bgY - txtY) < DELTA_Y_MIN) {
+	if (Math.abs(bgY - fgY) < DELTA_Y_MIN) {
 		return 0
 	}
 
 	let outputContrast: number
 
-	if (bgY > txtY) {
+	if (bgY > fgY) {
 		// Normal polarity: dark text on light background (BoW)
-		const sapc = (bgY ** APCA_BG_EXP_NORMAL - txtY ** APCA_FG_EXP_NORMAL) * APCA_SCALE
+		const sapc = (bgY ** APCA_BG_EXP_NORMAL - fgY ** APCA_FG_EXP_NORMAL) * APCA_SCALE
 		outputContrast = sapc < LOW_CLIP ? 0 : sapc - APCA_OFFSET
 	} else {
 		// Reverse polarity: light text on dark background (WoB)
-		const sapc = (bgY ** APCA_BG_EXP_REVERSE - txtY ** APCA_FG_EXP_REVERSE) * APCA_SCALE
+		const sapc = (bgY ** APCA_BG_EXP_REVERSE - fgY ** APCA_FG_EXP_REVERSE) * APCA_SCALE
 		outputContrast = sapc > -LOW_CLIP ? 0 : sapc + APCA_OFFSET
 	}
 
 	return outputContrast * 100
-}
-
-/**
- * Measure APCA contrast between colors.
- * Returns signed Lc value: positive = dark on light, negative = light on dark.
- */
-export function measureContrast(baseColor: Color, contrastColor: Color): number {
-	const bgY = getLuminance(baseColor)
-	const fgY = getLuminance(contrastColor)
-	return calculateAPCAcontrast(fgY, bgY)
 }

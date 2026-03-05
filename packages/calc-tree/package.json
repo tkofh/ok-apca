@@ -23,7 +23,7 @@
 	},
 	"devDependencies": {
 		"fast-check": "^4.5.3",
-		"tsdown": "0.20.1",
+		"tsdown": "0.20.3",
 		"vitest": "^4.0.18"
 	},
 	"publishConfig": {

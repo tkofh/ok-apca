@@ -67,3 +67,20 @@ export const APCA_SMOOTH_THRESHOLD_OFFSET = (APCA_SMOOTH_THRESHOLD + APCA_OFFSET
  * Formula: pow(sin(t * π/2), APCA_SMOOTH_POWER)
  */
 export const APCA_SMOOTH_POWER = 2.46
+
+/**
+ * Epsilon for floating-point comparison when comparing achieved contrasts.
+ * If the difference between light and dark achieved contrast is within this
+ * epsilon, they are treated as equal (a tie) and user preference is used.
+ * This prevents floating-point precision issues from causing unexpected
+ * polarity flips at boundary conditions.
+ */
+export const COMPARISON_EPSILON = 0.001 // ~0.1 Lc units
+
+/**
+ * Minimum contrast threshold for inversion consideration.
+ * Below this threshold, we respect the user's polarity preference
+ * rather than trying to maximize contrast, because the APCA formula
+ * has inherent asymmetry that makes very low contrast comparisons unreliable.
+ */
+export const INVERSION_THRESHOLD = 0.08 // ~8 Lc

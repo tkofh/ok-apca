@@ -40,3 +40,7 @@ export function outdent(input: string | TemplateStringsArray, ...values: any[]) 
 
 	return result.replaceAll(edgeSpaceRe, '')
 }
+
+export function clampNumber(min: number, value: number, max: number): number {
+	return Math.min(Math.max(value, min), max)
+}

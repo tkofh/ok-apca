@@ -5,9 +5,9 @@
 import { generateHueCss } from './generator.ts'
 import type { ContrastColor, Hue, HueOptions, InputMode } from './types.ts'
 
-export { createColor, gamutMap, getMaxChroma } from './color.ts'
-export { applyContrast } from './contrast.ts'
-export type { Color, ContrastColor, Hue, HueOptions, InputMode } from './types.ts'
+export { type Color, gamutMap, getMaxChroma } from './color.ts'
+export { computeContrastColor } from './contrast.ts'
+export type { ContrastColor, Hue, HueOptions, InputMode } from './types.ts'
 
 const LABEL_REGEX = /^[a-z][a-z0-9_-]*$/i
 

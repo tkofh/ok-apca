@@ -13,7 +13,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest'
 import { getMaxChroma } from '../../src/color.ts'
-import { applyContrast } from '../../src/contrast.ts'
+import { computeContrastColor } from '../../src/contrast.ts'
 import { cleanupAll, createTestHarness } from './harness.ts'
 
 /**
@@ -101,7 +101,7 @@ describe('findGamutSlice parity with CSS gamut clamping', () => {
 	}
 })
 
-describe('applyContrast parity with CSS', () => {
+describe('computeContrastColor parity with CSS', () => {
 	afterEach(() => cleanupAll())
 
 	const testCases = [
@@ -123,7 +123,7 @@ describe('applyContrast parity with CSS', () => {
 			const baseColor = computeExpectedColor(hue, lightness, chroma)
 
 			// Then apply contrast using the TS function
-			const tsResult = applyContrast(baseColor, contrast)
+			const tsResult = computeContrastColor(baseColor, contrast)
 
 			// Get result from CSS in browser
 			const harness = createTestHarness({
@@ -143,7 +143,7 @@ describe('applyContrast parity with CSS', () => {
 			expect(tsResult.lightness).toBeCloseTo(cssLightness, 1)
 
 			// Compare chroma - CSS computes: maxChroma(contrastL) * chromaPct
-			// The TS applyContrast preserves chroma percentage, so we need to
+			// The TS computeContrastColor preserves chroma percentage, so we need to
 			// compute what the CSS would produce
 			const expectedContrastChroma = getMaxChroma(cssLightness, hue) * (chroma / 100)
 			expect(cssChroma).toBeCloseTo(expectedContrastChroma, 1)
@@ -164,7 +164,7 @@ describe('applyContrast parity with CSS', () => {
 			const baseColor = computeExpectedColor(hue, lightness, chroma)
 
 			// Apply contrast
-			const tsResult = applyContrast(baseColor, contrast)
+			const tsResult = computeContrastColor(baseColor, contrast)
 
 			const harness = createTestHarness({
 				hue,
@@ -244,7 +244,7 @@ describe('edge case parity', () => {
 
 		// Base color with zero chroma
 		const baseColor = computeExpectedColor(hue, lightness, chroma)
-		const tsResult = applyContrast(baseColor, contrast)
+		const tsResult = computeContrastColor(baseColor, contrast)
 
 		const harness = createTestHarness({
 			hue,
@@ -271,7 +271,7 @@ describe('edge case parity', () => {
 		const contrast = 0
 
 		const baseColor = computeExpectedColor(hue, lightness, chroma)
-		const tsResult = applyContrast(baseColor, contrast)
+		const tsResult = computeContrastColor(baseColor, contrast)
 
 		const harness = createTestHarness({
 			hue,

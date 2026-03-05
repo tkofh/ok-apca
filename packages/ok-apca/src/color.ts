@@ -1,29 +1,55 @@
-/**
- * OKLCH color representation and Display P3 gamut mapping.
- */
-
-import _Color from 'colorjs.io'
+import { getLuminance, inGamut, OKLCH, P3 } from 'colorjs.io/fn'
 import { GAMUT_SINE_CURVATURE_EXPONENT } from './constants.ts'
-import { clamp, createMaxChromaExpr } from './expressions.ts'
-import type { Color, GamutApex, GamutSlice } from './types.ts'
+import { createMaxChromaExpr } from './expressions.ts'
+import { clampNumber } from './util.ts'
 
-class ColorImpl implements Color {
+export interface GamutApex {
+	readonly lightness: number
+	readonly chroma: number
+}
+
+export interface GamutSlice {
+	readonly apex: GamutApex
+	/**
+	 * Quadratic curvature correction for the right half of the tent.
+	 * The actual gamut boundary curves inward from the linear tent approximation.
+	 * Applied as: correctedChroma = linearChroma + curvature * t * (1 - t) * apexChroma
+	 * where t = (L - apexL) / (1 - apexL) for the right half (L > apexL).
+	 * Always negative (actual boundary is inside linear approximation).
+	 */
+	readonly curvature: number
+}
+
+export interface ColorCoords {
 	readonly hue: number
 	readonly chroma: number
 	readonly lightness: number
+}
 
-	constructor(hue: number, chroma: number, lightness: number) {
+class Color implements ColorCoords {
+	readonly lightness: number
+	readonly chroma: number
+	readonly hue: number
+
+	get luminance(): number {
+		return getLuminance({ space: OKLCH, coords: [this.lightness, this.chroma, this.hue] })
+	}
+
+	constructor({ lightness, chroma, hue }: ColorCoords) {
+		this.lightness = clampNumber(0, lightness, 1)
+		this.chroma = clampNumber(0, chroma, 0.5)
 		this.hue = hue
-		this.chroma = chroma
-		this.lightness = lightness
 	}
 }
+
+export type { Color }
+export type ColorInput = Color | ColorCoords
 
 /**
  * Create a new Color instance.
  */
-export function createColor(hue: number, chroma: number, lightness: number): Color {
-	return new ColorImpl(hue, chroma, lightness)
+export function toColor(input: ColorInput): Color {
+	return input instanceof Color ? input : new Color(input)
 }
 
 const gamutSliceCache = new Map<number, GamutSlice>()
@@ -35,9 +61,7 @@ function findMaxChromaAtLightness(hue: number, lightness: number): number {
 
 	while (high - low > tolerance) {
 		const mid = (low + high) / 2
-		const color = new _Color('oklch', [lightness, mid, hue])
-
-		if (color.inGamut('p3')) {
+		if (inGamut({ space: OKLCH, coords: [lightness, mid, hue] }, P3)) {
 			low = mid
 		} else {
 			high = mid
@@ -122,7 +146,7 @@ export function findGamutSlice(hue: number): GamutSlice {
  * Uses the shared expression tree from expressions.ts to ensure parity
  * with CSS generation.
  */
-function computeMaxChromaInternal(L: number, slice: GamutSlice): number {
+export function computeMaxChroma(L: number, slice: GamutSlice): number {
 	const { apex } = slice
 
 	// Edge cases not handled by the expression (division by zero)
@@ -142,28 +166,19 @@ function computeMaxChromaInternal(L: number, slice: GamutSlice): number {
  */
 export function getMaxChroma(lightness: number, hue: number): number {
 	const slice = findGamutSlice(hue)
-	return computeMaxChromaInternal(lightness, slice)
+	return computeMaxChroma(lightness, slice)
 }
 
 /**
  * Clamp chroma to Display P3 gamut boundary using tent function
  * with curvature correction.
  */
-export function gamutMap(color: Color): Color {
-	const { hue, chroma, lightness } = color
-	const slice = findGamutSlice(hue)
+export function gamutMap(color: ColorInput): Color {
+	const { hue, chroma, lightness } = toColor(color)
 
-	const L = clamp(0, lightness, 1)
-	const maxChroma = computeMaxChromaInternal(L, slice)
-	const clampedChroma = clamp(0, chroma, maxChroma)
-
-	return new ColorImpl(hue, clampedChroma, L)
-}
-
-/**
- * Get the relative luminance (Y in XYZ-D65) of an OKLCH color.
- */
-export function getLuminance(color: Color): number {
-	const c = new _Color('oklch', [color.lightness, color.chroma, color.hue])
-	return c.luminance
+	return new Color({
+		hue,
+		chroma: clampNumber(0, chroma, computeMaxChroma(lightness, findGamutSlice(hue))),
+		lightness,
+	})
 }

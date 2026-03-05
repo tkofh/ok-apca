@@ -1,5 +1,6 @@
 import type { CalcExpression } from '@ok-apca/calc-tree'
 import * as ct from '@ok-apca/calc-tree'
+import type { GamutSlice } from './color.ts'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
@@ -12,9 +13,24 @@ import {
 	APCA_SMOOTH_POWER,
 	APCA_SMOOTH_THRESHOLD,
 	APCA_SMOOTH_THRESHOLD_OFFSET,
+	COMPARISON_EPSILON,
 	GAMUT_SINE_CURVATURE_EXPONENT,
+	INVERSION_THRESHOLD,
 } from './constants.ts'
-import type { GamutSlice } from './types.ts'
+
+const yMinNormalTerm = ct.subtract(
+	ct.power(ct.reference('yBg'), APCA_BG_EXP_NORMAL),
+	APCA_SMOOTH_THRESHOLD_OFFSET,
+)
+const yMinNormal = ct.multiply(
+	ct.power(ct.abs(yMinNormalTerm), APCA_NORMAL_INV_EXP),
+	ct.sign(yMinNormalTerm),
+)
+
+const yMinReverse = ct.power(ct.add(
+	ct.power(ct.reference('yBg'), APCA_BG_EXP_REVERSE),
+	APCA_SMOOTH_THRESHOLD_OFFSET,
+), APCA_REVERSE_INV_EXP)
 
 export function createMaxChromaExpr(slice: GamutSlice): CalcExpression<'lightness'> {
 	const L = ct.reference('lightness')
@@ -37,71 +53,74 @@ export function createMaxChromaExpr(slice: GamutSlice): CalcExpression<'lightnes
 	return ct.add(ct.multiply(ct.subtract(1, isRight), leftHalf), ct.multiply(isRight, rightHalf))
 }
 
-function createYMinNormal(): CalcExpression<'yBg'> {
-	const term = ct.subtract(
-		ct.power(ct.reference('yBg'), APCA_BG_EXP_NORMAL),
-		APCA_SMOOTH_THRESHOLD_OFFSET,
-	)
-	return ct.multiply(ct.power(ct.abs(term), APCA_NORMAL_INV_EXP), ct.sign(term))
-}
-
-function createYMinReverse(): CalcExpression<'yBg'> {
-	const term = ct.add(
-		ct.power(ct.reference('yBg'), APCA_BG_EXP_REVERSE),
-		APCA_SMOOTH_THRESHOLD_OFFSET,
-	)
-	return ct.power(term, APCA_REVERSE_INV_EXP)
-}
-
-export function createNormalPolaritySolver(): CalcExpression<'yBg' | 'x'> {
-	const yBg = ct.reference('yBg')
-	const x = ct.reference('x')
+export function solveNormalPolarity(yBg: number, x: number): number
+export function solveNormalPolarity(): CalcExpression<'yBg' | 'x'>
+export function solveNormalPolarity(
+	yBg?: number,
+	x?: number,
+): number | CalcExpression<'yBg' | 'x'> {
+	const yBgRef = ct.reference('yBg')
+	const xRef = ct.reference('x')
 
 	const term = ct.subtract(
-		ct.power(yBg, APCA_BG_EXP_NORMAL),
-		ct.divide(ct.add(x, APCA_OFFSET), APCA_SCALE),
+		ct.power(yBgRef, APCA_BG_EXP_NORMAL),
+		ct.divide(ct.add(xRef, APCA_OFFSET), APCA_SCALE),
 	)
 	const directSolution = ct.multiply(ct.power(ct.abs(term), APCA_NORMAL_INV_EXP), ct.sign(term))
 
-	const t = ct.min(ct.divide(x, APCA_SMOOTH_THRESHOLD), 1)
+	const t = ct.min(ct.divide(xRef, APCA_SMOOTH_THRESHOLD), 1)
 	const blend = ct.power(ct.sin(ct.multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
-	const smoothSolution = ct.add(yBg, ct.multiply(ct.subtract(createYMinNormal(), yBg), blend))
+	const smoothSolution = ct.add(yBgRef, ct.multiply(ct.subtract(yMinNormal, yBgRef), blend))
 
-	const aboveThreshold = ct.max(0, ct.sign(ct.subtract(x, APCA_SMOOTH_THRESHOLD)))
-	return ct.add(
+	const aboveThreshold = ct.max(0, ct.sign(ct.subtract(xRef, APCA_SMOOTH_THRESHOLD)))
+	const solver = ct.add(
 		ct.multiply(aboveThreshold, directSolution),
 		ct.multiply(ct.subtract(1, aboveThreshold), smoothSolution),
 	)
+
+	if (yBg === undefined || x === undefined) {
+		return solver
+	}
+
+	return solver.toNumber({ yBg, x })
 }
 
-export function createReversePolaritySolver(): CalcExpression<'yBg' | 'x'> {
-	const yBg = ct.reference('yBg')
-	const x = ct.reference('x')
+export function solveReversePolarity(yBg: number, x: number): number
+export function solveReversePolarity(): CalcExpression<'yBg' | 'x'>
+export function solveReversePolarity(
+	yBg?: number,
+	x?: number,
+): number | CalcExpression<'yBg' | 'x'> {
+	const yBgRef = ct.reference('yBg')
+	const xRef = ct.reference('x')
 
 	const term = ct.add(
-		ct.power(yBg, APCA_BG_EXP_REVERSE),
-		ct.divide(ct.add(x, APCA_OFFSET), APCA_SCALE),
+		ct.power(yBgRef, APCA_BG_EXP_REVERSE),
+		ct.divide(ct.add(xRef, APCA_OFFSET), APCA_SCALE),
 	)
 	const directSolution = ct.power(term, APCA_REVERSE_INV_EXP)
 
-	const t = ct.min(ct.divide(x, APCA_SMOOTH_THRESHOLD), 1)
+	const t = ct.min(ct.divide(xRef, APCA_SMOOTH_THRESHOLD), 1)
 	const blend = ct.power(ct.sin(ct.multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
-	const smoothSolution = ct.add(yBg, ct.multiply(ct.subtract(createYMinReverse(), yBg), blend))
+	const smoothSolution = ct.add(yBgRef, ct.multiply(ct.subtract(yMinReverse, yBgRef), blend))
 
-	const aboveThreshold = ct.max(0, ct.sign(ct.subtract(x, APCA_SMOOTH_THRESHOLD)))
-	return ct.add(
+	const aboveThreshold = ct.max(0, ct.sign(ct.subtract(xRef, APCA_SMOOTH_THRESHOLD)))
+	const solver = ct.add(
 		ct.multiply(aboveThreshold, directSolution),
 		ct.multiply(ct.subtract(1, aboveThreshold), smoothSolution),
 	)
+
+	if (yBg === undefined || x === undefined) {
+		return solver
+	}
+
+	return solver.toNumber({ yBg, x })
 }
 
 export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast' | 'contrastScale'> {
 	const signedContrast = ct.reference('signedContrast')
 	const yBg = ct.reference('yBg')
 	const x = ct.divide(ct.abs(signedContrast), ct.reference('contrastScale'))
-
-	const normalExpr = createNormalPolaritySolver().bind('x', x)
-	const reverseExpr = createReversePolaritySolver().bind('x', x)
 
 	const signVal = ct.sign(signedContrast)
 	const preferLight = ct.max(0, signVal)
@@ -111,23 +130,14 @@ export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast' 
 	return ct.clamp(
 		0,
 		ct.add(
-			ct.add(ct.multiply(preferLight, reverseExpr), ct.multiply(preferDark, normalExpr)),
+			ct.add(
+				ct.multiply(preferLight, solveReversePolarity().bind('x', x)),
+				ct.multiply(preferDark, solveNormalPolarity().bind('x', x)),
+			),
 			ct.multiply(isZero, yBg),
 		),
 		1,
 	)
-}
-
-export function createYFromLightness(): CalcExpression<'lightness'> {
-	return ct.power(ct.reference('lightness'), 3)
-}
-
-export function createLightnessFromY() {
-	return ct.power(ct.reference('y'), 1 / 3)
-}
-
-export function clamp(minimum: number, value: number, maximum: number): number {
-	return ct.clamp(minimum, value, maximum).toNumber()
 }
 
 /**
@@ -173,23 +183,6 @@ export function createContrastMeasurementNormal(): CalcExpression<'yBg' | 'yFg'>
 		),
 	)
 }
-
-/**
- * Minimum contrast threshold for inversion consideration.
- * Below this threshold, we respect the user's polarity preference
- * rather than trying to maximize contrast, because the APCA formula
- * has inherent asymmetry that makes very low contrast comparisons unreliable.
- */
-const INVERSION_THRESHOLD = 0.08 // ~8 Lc
-
-/**
- * Epsilon for comparing achieved contrasts.
- * If the difference between light and dark achieved contrast is within this
- * epsilon, they are treated as equal (a tie) and user preference is used.
- * This prevents floating-point precision issues from causing unexpected
- * polarity flips at boundary conditions.
- */
-const COMPARISON_EPSILON = 0.001 // ~0.1 Lc units
 
 /**
  * Contrast solver with automatic polarity inversion.
@@ -272,20 +265,4 @@ export function createContrastSolverWithInversion(): CalcExpression<
 		ct.add(ct.multiply(useLight, yLight), ct.multiply(useDark, yDark)),
 		ct.multiply(isZero, yBg),
 	)
-}
-
-/**
- * Create expression for the raw (unclamped) reverse polarity solution.
- * Used to compute Y_light before clamping.
- */
-export function createRawReverseSolution(): CalcExpression<'yBg' | 'x'> {
-	return createReversePolaritySolver()
-}
-
-/**
- * Create expression for the raw (unclamped) normal polarity solution.
- * Used to compute Y_dark before clamping.
- */
-export function createRawNormalSolution(): CalcExpression<'yBg' | 'x'> {
-	return createNormalPolaritySolver()
 }

@@ -1,7 +1,7 @@
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { gamutMap } from '../../src/color.ts'
-import { applyContrast } from '../../src/contrast.ts'
+import { computeContrastColor } from '../../src/contrast.ts'
 import { measureContrast } from '../../src/measure.ts'
 
 // Arbitraries for OKLCH color components
@@ -16,21 +16,21 @@ const oklchColorArb = fc.record({
 })
 
 // ============================================================================
-// applyContrast basic behavior tests
+// computeContrastColor basic behavior tests
 // ============================================================================
 
-describe('applyContrast', () => {
+describe('computeContrastColor', () => {
 	describe('basic behavior', () => {
 		it('returns a color with the same hue', () => {
 			const input = { hue: 30, chroma: 0.15, lightness: 0.5 }
-			const result = applyContrast(input, 60)
+			const result = computeContrastColor(input, 60)
 
 			expect(result.hue).toBe(30)
 		})
 
 		it('produces a valid color with changed lightness', () => {
 			const input = { hue: 264, chroma: 0.2, lightness: 0.4 }
-			const result = applyContrast(input, 60)
+			const result = computeContrastColor(input, 60)
 
 			// Result should have valid ranges
 			expect(result.lightness).toBeGreaterThanOrEqual(0)
@@ -41,7 +41,7 @@ describe('applyContrast', () => {
 
 		it('returns lighter color for positive contrast on mid-tone', () => {
 			const input = { hue: 30, chroma: 0.15, lightness: 0.5 }
-			const result = applyContrast(input, 60)
+			const result = computeContrastColor(input, 60)
 
 			// Positive contrast means lighter text
 			expect(result.lightness).toBeGreaterThan(input.lightness)
@@ -50,7 +50,7 @@ describe('applyContrast', () => {
 		it('returns darker color for negative contrast on light background', () => {
 			// Use L=0.7 where dark direction has more room than light
 			const input = { hue: 30, chroma: 0.15, lightness: 0.7 }
-			const result = applyContrast(input, -60)
+			const result = computeContrastColor(input, -60)
 
 			// Negative contrast from light background goes darker
 			expect(result.lightness).toBeLessThan(input.lightness)
@@ -58,7 +58,7 @@ describe('applyContrast', () => {
 
 		it('returns darker color for negative contrast on mid-tone (no inversion)', () => {
 			const input = { hue: 30, chroma: 0.15, lightness: 0.5 }
-			const result = applyContrast(input, -60, false)
+			const result = computeContrastColor(input, -60, false)
 
 			// Without inversion, negative contrast always tries to go darker
 			expect(result.lightness).toBeLessThan(input.lightness)
@@ -68,7 +68,7 @@ describe('applyContrast', () => {
 	describe('contrast range', () => {
 		it('clamps contrast below -108 to -108', () => {
 			const input = { hue: 30, chroma: 0.15, lightness: 0.5 }
-			const result = applyContrast(input, -200)
+			const result = computeContrastColor(input, -200)
 
 			// Should still produce valid result
 			expect(result.lightness).toBeGreaterThanOrEqual(0)
@@ -77,7 +77,7 @@ describe('applyContrast', () => {
 
 		it('clamps contrast above 108 to 108', () => {
 			const input = { hue: 30, chroma: 0.15, lightness: 0.5 }
-			const result = applyContrast(input, 150)
+			const result = computeContrastColor(input, 150)
 
 			// Should still produce valid result
 			expect(result.lightness).toBeGreaterThanOrEqual(0)
@@ -88,9 +88,9 @@ describe('applyContrast', () => {
 			// Use a dark color so there's room to go lighter for positive contrast
 			const input = { hue: 30, chroma: 0.15, lightness: 0.2 }
 
-			const low = applyContrast(input, 30)
-			const mid = applyContrast(input, 60)
-			const high = applyContrast(input, 90)
+			const low = computeContrastColor(input, 30)
+			const mid = computeContrastColor(input, 60)
+			const high = computeContrastColor(input, 90)
 
 			// Higher positive contrast should mean higher lightness (lighter text)
 			expect(low.lightness).toBeLessThan(mid.lightness)
@@ -99,7 +99,7 @@ describe('applyContrast', () => {
 
 		it('handles maximum contrast value (108)', () => {
 			const input = { hue: 30, chroma: 0.15, lightness: 0.5 }
-			const result = applyContrast(input, 108)
+			const result = computeContrastColor(input, 108)
 
 			expect(result.lightness).toBeGreaterThanOrEqual(0)
 			expect(result.lightness).toBeLessThanOrEqual(1)
@@ -107,7 +107,7 @@ describe('applyContrast', () => {
 
 		it('handles minimum contrast value (-108)', () => {
 			const input = { hue: 30, chroma: 0.15, lightness: 0.5 }
-			const result = applyContrast(input, -108)
+			const result = computeContrastColor(input, -108)
 
 			expect(result.lightness).toBeGreaterThanOrEqual(0)
 			expect(result.lightness).toBeLessThanOrEqual(1)
@@ -115,7 +115,7 @@ describe('applyContrast', () => {
 
 		it('handles zero contrast', () => {
 			const input = { hue: 30, chroma: 0.15, lightness: 0.5 }
-			const result = applyContrast(input, 0)
+			const result = computeContrastColor(input, 0)
 
 			// Zero contrast should result in similar lightness
 			expect(Math.abs(result.lightness - input.lightness)).toBeLessThan(0.1)
@@ -125,7 +125,7 @@ describe('applyContrast', () => {
 	describe('polarity behavior', () => {
 		it('positive contrast chooses lighter when possible', () => {
 			const input = { hue: 30, chroma: 0.1, lightness: 0.3 }
-			const result = applyContrast(input, 50)
+			const result = computeContrastColor(input, 50)
 
 			// From a dark color, positive contrast should go lighter
 			expect(result.lightness).toBeGreaterThan(input.lightness)
@@ -133,7 +133,7 @@ describe('applyContrast', () => {
 
 		it('negative contrast chooses darker when possible', () => {
 			const input = { hue: 30, chroma: 0.1, lightness: 0.7 }
-			const result = applyContrast(input, -50)
+			const result = computeContrastColor(input, -50)
 
 			// From a light color, negative contrast should go darker
 			expect(result.lightness).toBeLessThan(input.lightness)
@@ -141,7 +141,7 @@ describe('applyContrast', () => {
 
 		it('positive contrast inverts to darker when light direction has no room', () => {
 			const input = { hue: 30, chroma: 0.1, lightness: 0.8 }
-			const result = applyContrast(input, 50)
+			const result = computeContrastColor(input, 50)
 
 			// With inversion enabled, the solver will go darker since light direction
 			// has limited headroom (L=0.8 -> 1.0 is only 0.2 of room)
@@ -151,7 +151,7 @@ describe('applyContrast', () => {
 
 		it('negative contrast inverts to lighter when dark direction has no room', () => {
 			const input = { hue: 30, chroma: 0.1, lightness: 0.2 }
-			const result = applyContrast(input, -50)
+			const result = computeContrastColor(input, -50)
 
 			// With inversion enabled, the solver will go lighter since dark direction
 			// has limited headroom (L=0.2 -> 0 is only 0.2 of room)
@@ -161,7 +161,7 @@ describe('applyContrast', () => {
 
 		it('positive contrast always tries to go lighter (no inversion)', () => {
 			const input = { hue: 30, chroma: 0.1, lightness: 0.8 }
-			const result = applyContrast(input, 50, false)
+			const result = computeContrastColor(input, 50, false)
 
 			// Without inversion, positive contrast demands lighter (towards 1), clamped if needed
 			expect(result.lightness).toBeGreaterThanOrEqual(input.lightness)
@@ -169,7 +169,7 @@ describe('applyContrast', () => {
 
 		it('negative contrast always tries to go darker (no inversion)', () => {
 			const input = { hue: 30, chroma: 0.1, lightness: 0.2 }
-			const result = applyContrast(input, -50, false)
+			const result = computeContrastColor(input, -50, false)
 
 			// Without inversion, negative contrast demands darker (towards 0), clamped if needed
 			expect(result.lightness).toBeLessThanOrEqual(input.lightness)
@@ -180,7 +180,7 @@ describe('applyContrast', () => {
 		it('averages gamut-mapped and requested chroma', () => {
 			// Request high chroma that will be clamped
 			const input = { hue: 30, chroma: 0.35, lightness: 0.5 }
-			const result = applyContrast(input, 30)
+			const result = computeContrastColor(input, 30)
 
 			// The contrast color chroma should be between 0 and the requested
 			expect(result.chroma).toBeGreaterThanOrEqual(0)
@@ -191,7 +191,7 @@ describe('applyContrast', () => {
 	describe('edge cases', () => {
 		it('handles black input with positive contrast', () => {
 			const input = { hue: 30, chroma: 0, lightness: 0 }
-			const result = applyContrast(input, 60)
+			const result = computeContrastColor(input, 60)
 
 			// Positive contrast goes lighter
 			expect(result.lightness).toBeGreaterThan(0)
@@ -199,7 +199,7 @@ describe('applyContrast', () => {
 
 		it('handles white input with negative contrast', () => {
 			const input = { hue: 30, chroma: 0, lightness: 1 }
-			const result = applyContrast(input, -60)
+			const result = computeContrastColor(input, -60)
 
 			// Negative contrast goes darker
 			expect(result.lightness).toBeLessThan(1)
@@ -212,7 +212,7 @@ describe('applyContrast', () => {
 		it('always produces valid color ranges', () => {
 			fc.assert(
 				fc.property(oklchColorArb, contrastArb, (input, contrast) => {
-					const result = applyContrast(input, contrast)
+					const result = computeContrastColor(input, contrast)
 
 					expect(result.lightness).toBeGreaterThanOrEqual(0)
 					expect(result.lightness).toBeLessThanOrEqual(1)
@@ -225,7 +225,7 @@ describe('applyContrast', () => {
 		it('always preserves hue', () => {
 			fc.assert(
 				fc.property(oklchColorArb, contrastArb, (input, contrast) => {
-					const result = applyContrast(input, contrast)
+					const result = computeContrastColor(input, contrast)
 					expect(result.hue).toBe(input.hue)
 				}),
 				{ numRuns },
@@ -238,7 +238,7 @@ describe('applyContrast', () => {
 					oklchColorArb,
 					fc.double({ min: 0, max: 108, noNaN: true }),
 					(input, contrast) => {
-						const result = applyContrast(input, contrast, false)
+						const result = computeContrastColor(input, contrast, false)
 						// Without inversion, positive contrast should not make the color darker
 						expect(result.lightness).toBeGreaterThanOrEqual(input.lightness - 0.001)
 					},
@@ -253,7 +253,7 @@ describe('applyContrast', () => {
 					oklchColorArb,
 					fc.double({ min: -108, max: 0, noNaN: true }),
 					(input, contrast) => {
-						const result = applyContrast(input, contrast, false)
+						const result = computeContrastColor(input, contrast, false)
 						// Without inversion, negative contrast should not make the color lighter
 						expect(result.lightness).toBeLessThanOrEqual(input.lightness + 0.001)
 					},
@@ -275,8 +275,8 @@ describe('applyContrast', () => {
 						const baseColor = gamutMap(input)
 
 						// Test with positive contrast
-						const resultWithInversion = applyContrast(input, absContrast, true)
-						const resultWithoutInversion = applyContrast(input, absContrast, false)
+						const resultWithInversion = computeContrastColor(input, absContrast, true)
+						const resultWithoutInversion = computeContrastColor(input, absContrast, false)
 
 						const contrastWithInversion = Math.abs(measureContrast(baseColor, resultWithInversion))
 						const contrastWithoutInversion = Math.abs(
@@ -301,7 +301,7 @@ describe('applyContrast', () => {
 					}),
 					contrastArb,
 					(input, contrast) => {
-						const result = applyContrast(input, contrast)
+						const result = computeContrastColor(input, contrast)
 						// Output chroma should be approximately <= input chroma (within 5%)
 						const maxAllowedChroma = input.chroma * 1.05
 						expect(result.chroma).toBeLessThanOrEqual(maxAllowedChroma + 1e-6)
@@ -322,8 +322,8 @@ describe('applyContrast', () => {
 							return
 						}
 
-						const lowResult = applyContrast(input, baseContrast)
-						const highResult = applyContrast(input, baseContrast + 30)
+						const lowResult = computeContrastColor(input, baseContrast)
+						const highResult = computeContrastColor(input, baseContrast + 30)
 
 						// Higher positive contrast should produce higher or equal lightness
 						expect(highResult.lightness).toBeGreaterThanOrEqual(lowResult.lightness - 0.001)
@@ -336,10 +336,10 @@ describe('applyContrast', () => {
 })
 
 // ============================================================================
-// Integration tests: applyContrast + measureContrast
+// Integration tests: computeContrastColor + measureContrast
 // ============================================================================
 
-describe('applyContrast + measureContrast integration', () => {
+describe('computeContrastColor + measureContrast integration', () => {
 	const testConfigs = [{ polarity: 'light' as const }, { polarity: 'dark' as const }]
 	const testHues = [0, 30, 90, 180, 264]
 	const testLightness = [0.3, 0.5, 0.7]
@@ -353,7 +353,7 @@ describe('applyContrast + measureContrast integration', () => {
 				const input = { hue: 30, chroma: 0.1, lightness: 0.5 }
 
 				const baseColor = gamutMap(input)
-				const contrastColor = applyContrast(input, signedContrast)
+				const contrastColor = computeContrastColor(input, signedContrast)
 				const actualContrast = Math.abs(measureContrast(baseColor, contrastColor))
 
 				// Allow tolerance due to simplified CSS math and heuristic corrections
@@ -366,7 +366,7 @@ describe('applyContrast + measureContrast integration', () => {
 						const input = { hue, chroma: 0.1, lightness }
 
 						const baseColor = gamutMap(input)
-						const contrastColor = applyContrast(input, signedContrast)
+						const contrastColor = computeContrastColor(input, signedContrast)
 						const actualContrast = Math.abs(measureContrast(baseColor, contrastColor))
 
 						// Edge cases where contrast may be limited:
@@ -394,7 +394,7 @@ describe('applyContrast + measureContrast integration', () => {
 			const targetContrast = 30
 
 			const baseColor = gamutMap(input)
-			const contrastColor = applyContrast(input, targetContrast)
+			const contrastColor = computeContrastColor(input, targetContrast)
 			const actualContrast = Math.abs(measureContrast(baseColor, contrastColor))
 
 			expect(Math.abs(actualContrast - targetContrast)).toBeLessThan(8)
@@ -405,7 +405,7 @@ describe('applyContrast + measureContrast integration', () => {
 			const targetContrast = 60
 
 			const baseColor = gamutMap(input)
-			const contrastColor = applyContrast(input, targetContrast)
+			const contrastColor = computeContrastColor(input, targetContrast)
 			const actualContrast = Math.abs(measureContrast(baseColor, contrastColor))
 
 			// Wider tolerance without polarity inversion - contrast may be clamped
@@ -417,7 +417,7 @@ describe('applyContrast + measureContrast integration', () => {
 			const targetContrast = 90
 
 			const baseColor = gamutMap(input)
-			const contrastColor = applyContrast(input, targetContrast)
+			const contrastColor = computeContrastColor(input, targetContrast)
 			const actualContrast = Math.abs(measureContrast(baseColor, contrastColor))
 
 			// Wider tolerance without polarity inversion - contrast may be clamped
@@ -429,7 +429,7 @@ describe('applyContrast + measureContrast integration', () => {
 		it('positive contrast produces lighter color at mid-tone', () => {
 			const input = { hue: 30, chroma: 0.1, lightness: 0.5 }
 			const baseColor = gamutMap(input)
-			const contrastColor = applyContrast(input, 60)
+			const contrastColor = computeContrastColor(input, 60)
 
 			// At mid-tone, both directions have equal room, so preference is followed
 			expect(contrastColor.lightness).toBeGreaterThan(baseColor.lightness)
@@ -439,7 +439,7 @@ describe('applyContrast + measureContrast integration', () => {
 			// Use L=0.7 where dark direction has more achievable contrast
 			const input = { hue: 30, chroma: 0.1, lightness: 0.7 }
 			const baseColor = gamutMap(input)
-			const contrastColor = applyContrast(input, -60)
+			const contrastColor = computeContrastColor(input, -60)
 
 			// From light background, negative contrast has room to go darker
 			expect(contrastColor.lightness).toBeLessThan(baseColor.lightness)
@@ -448,7 +448,7 @@ describe('applyContrast + measureContrast integration', () => {
 		it('positive contrast produces lighter color (no inversion)', () => {
 			const input = { hue: 30, chroma: 0.1, lightness: 0.5 }
 			const baseColor = gamutMap(input)
-			const contrastColor = applyContrast(input, 60, false)
+			const contrastColor = computeContrastColor(input, 60, false)
 
 			expect(contrastColor.lightness).toBeGreaterThan(baseColor.lightness)
 		})
@@ -456,7 +456,7 @@ describe('applyContrast + measureContrast integration', () => {
 		it('negative contrast produces darker color (no inversion)', () => {
 			const input = { hue: 30, chroma: 0.1, lightness: 0.5 }
 			const baseColor = gamutMap(input)
-			const contrastColor = applyContrast(input, -60, false)
+			const contrastColor = computeContrastColor(input, -60, false)
 
 			expect(contrastColor.lightness).toBeLessThan(baseColor.lightness)
 		})
@@ -474,7 +474,7 @@ describe('applyContrast + measureContrast integration', () => {
 			for (const input of testCases) {
 				const configs = [{ contrast: 60 }, { contrast: -60 }]
 				for (const config of configs) {
-					const result = applyContrast(input, config.contrast)
+					const result = computeContrastColor(input, config.contrast)
 
 					// Result should be in valid ranges
 					expect(result.lightness).toBeGreaterThanOrEqual(0)

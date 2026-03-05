@@ -5,46 +5,11 @@ import {
 	APCA_FG_EXP_REVERSE,
 	APCA_OFFSET,
 	APCA_SCALE,
+	COMPARISON_EPSILON,
+	INVERSION_THRESHOLD,
 } from './constants.ts'
-import {
-	clamp,
-	createContrastSolver,
-	createNormalPolaritySolver,
-	createReversePolaritySolver,
-} from './expressions.ts'
-
-interface ApcaSolution {
-	readonly targetY: number
-	readonly inGamut: boolean
-}
-
-/**
- * Solve for normal polarity (darker contrast color).
- * Uses the shared expression tree from expressions.ts.
- */
-function solveApcaNormal(Y: number, x: number): ApcaSolution {
-	const rawY = createNormalPolaritySolver().toNumber({ yBg: Y, x })
-
-	const targetY = clamp(0, rawY, 1)
-	const epsilon = 0.0001
-	const inGamut = rawY >= -epsilon && rawY <= 1 + epsilon
-
-	return { targetY, inGamut }
-}
-
-/**
- * Solve for reverse polarity (lighter contrast color).
- * Uses the shared expression tree from expressions.ts.
- */
-function solveApcaReverse(Y: number, x: number): ApcaSolution {
-	const rawY = createReversePolaritySolver().toNumber({ yBg: Y, x })
-
-	const targetY = clamp(0, rawY, 1)
-	const epsilon = 0.0001
-	const inGamut = rawY >= -epsilon && rawY <= 1 + epsilon
-
-	return { targetY, inGamut }
-}
+import { createContrastSolver, solveNormalPolarity, solveReversePolarity } from './expressions.ts'
+import { clampNumber } from './util.ts'
 
 /**
  * Measure achieved contrast for reverse polarity (light text on dark background).
@@ -85,23 +50,6 @@ function solveTargetYSimple(Y: number, signedContrast: number): number {
 }
 
 /**
- * Minimum contrast threshold for inversion consideration.
- * Below this threshold, we respect the user's polarity preference
- * rather than trying to maximize contrast, because the APCA formula
- * has inherent asymmetry that makes very low contrast comparisons unreliable.
- */
-const INVERSION_THRESHOLD = 0.08 // ~8 Lc
-
-/**
- * Epsilon for floating-point comparison when comparing achieved contrasts.
- * If the difference between light and dark achieved contrast is within this
- * epsilon, they are treated as equal (a tie) and user preference is used.
- * This prevents floating-point precision issues from causing unexpected
- * polarity flips at boundary conditions.
- */
-const COMPARISON_EPSILON = 0.001 // ~0.1 Lc units
-
-/**
  * Solve for target Y with automatic polarity inversion.
  * Computes both polarity solutions, measures achieved contrast for each,
  * and selects the one that achieves higher absolute contrast.
@@ -116,8 +64,8 @@ function solveTargetYWithInversion(Y: number, signedContrast: number): number {
 	}
 
 	// Compute both polarity solutions
-	const yLight = clamp(0, createReversePolaritySolver().toNumber({ yBg: Y, x }), 1)
-	const yDark = clamp(0, createNormalPolaritySolver().toNumber({ yBg: Y, x }), 1)
+	const yLight = clampNumber(0, solveReversePolarity(Y, x), 1)
+	const yDark = clampNumber(0, solveNormalPolarity(Y, x), 1)
 
 	// Measure achieved contrast for each
 	const lcLight = measureReverseContrast(Y, yLight)
@@ -179,6 +127,3 @@ export function solveTargetY(Y: number, signedContrast: number, invert = true): 
 	}
 	return solveTargetYSimple(Y, signedContrast)
 }
-
-// Keep individual solvers available for testing/debugging
-export { solveApcaNormal, solveApcaReverse }

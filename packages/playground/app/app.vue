@@ -31,7 +31,7 @@ onMounted(() => {
 const generatedCss = computed(() => defineHue({
 		hue: state.hue,
 		selector: '.preview',
-		contrastColors: [{ label: 'text' }],
+		contrastColors: [{ label: 'text' }, { label: 'stroke' }],
 		inputMode: 'normalized',
 		noContrastInversion: state.noContrastInversion,
 	}).css)
@@ -50,6 +50,15 @@ const previewStyle = computed(() => ({
 	'--chroma': Math.max(0, Math.min(state.chroma, 100)) / 100,
 	'--contrast-text': Math.max(-108, Math.min(state.contrast, 108)) / 100,
 }))
+
+const copied = ref(false)
+async function copyCss() {
+	await navigator.clipboard.writeText(generatedCss.value)
+	copied.value = true
+	setTimeout(() => {
+		copied.value = false
+	}, 2000)
+}
 </script>
 
 <template>
@@ -87,6 +96,10 @@ const previewStyle = computed(() => ({
 					Disable contrast inversion
 					<span class="hint">When checked, always follow requested polarity (may result in lower contrast)</span>
 				</label>
+
+				<button class="copy-button" @click="copyCss" type="button">
+					{{ copied ? 'Copied!' : 'Copy CSS' }}
+				</button>
 			</div>
 		</div>
 
@@ -192,6 +205,28 @@ body {
 	color: #707070;
 	font-weight: 400;
 	margin-top: 0.125rem;
+}
+
+.copy-button {
+	padding: 0.75rem 1rem;
+	font-size: 0.875rem;
+	font-weight: 500;
+	background: #3a3a3a;
+	border: 1px solid #4a4a4a;
+	border-radius: 4px;
+	color: #f0f0f0;
+	cursor: pointer;
+	transition: background 0.15s, border-color 0.15s;
+	margin-top: 0.5rem;
+}
+
+.copy-button:hover {
+	background: #4a4a4a;
+	border-color: #5a5a5a;
+}
+
+.copy-button:active {
+	background: #5a5a5a;
 }
 
 .preview {
