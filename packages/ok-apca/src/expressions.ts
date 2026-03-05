@@ -117,7 +117,6 @@ export function solveReversePolarity(
 
 export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast' | 'contrastScale'> {
 	const signedContrast = ct.reference('signedContrast')
-	const yBg = ct.reference('yBg')
 	const x = ct.divide(ct.abs(signedContrast), ct.reference('contrastScale'))
 
 	const signVal = ct.sign(signedContrast)
@@ -129,10 +128,10 @@ export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast' 
 		0,
 		ct.add(
 			ct.add(
-				ct.multiply(preferLight, solveReversePolarity().bind('x', x)),
-				ct.multiply(preferDark, solveNormalPolarity().bind('x', x)),
+				ct.multiply(preferLight, solveReversePolarity().bind({ x })),
+				ct.multiply(preferDark, solveNormalPolarity().bind({ x })),
 			),
-			ct.multiply(isZero, yBg),
+			ct.multiply(isZero, ct.reference('yBg')),
 		),
 		1,
 	)

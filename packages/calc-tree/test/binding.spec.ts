@@ -5,7 +5,7 @@ describe('binding', () => {
 	describe('basic binding', () => {
 		it('binds to constants', () => {
 			const expr = multiply(2, reference('x'))
-			const bound = expr.bind('x', 3)
+			const bound = expr.bind({ x: 3 })
 			const result = bound.toNumber()
 
 			expect(result).toBe(6)
@@ -13,7 +13,7 @@ describe('binding', () => {
 
 		it('removes bound reference from required refs', () => {
 			const expr = add(reference('x'), reference('y'))
-			const bound = expr.bind('x', 5)
+			const bound = expr.bind({ x: 5 })
 
 			// Only needs 'y' now
 			const result = bound.toNumber({ y: 10 })
@@ -22,7 +22,7 @@ describe('binding', () => {
 
 		it('can bind multiple references by chaining', () => {
 			const expr = add(reference('x'), reference('y'))
-			const bound = expr.bind('x', 10).bind('y', 20)
+			const bound = expr.bind({ x: 10 }).bind({ y: 20 })
 			const result = bound.toNumber()
 
 			expect(result).toBe(30)
@@ -33,7 +33,7 @@ describe('binding', () => {
 		it('binds to other expressions', () => {
 			const expr = add(reference('x'), 5)
 			const yExpr = multiply(reference('y'), 2)
-			const bound = expr.bind('x', yExpr)
+			const bound = expr.bind({ x: yExpr })
 
 			// Now requires 'y' instead of 'x'
 			const result = bound.toNumber({ y: 3 })
@@ -42,7 +42,7 @@ describe('binding', () => {
 
 		it('merges references when binding to expressions', () => {
 			const expr = add(reference('a'), reference('b'))
-			const withE = expr.bind('a', reference('e'))
+			const withE = expr.bind({ a: reference('e') })
 
 			// Now requires: b, e (a removed, e added)
 			const result = withE.toNumber({ b: 5, e: 10 })
@@ -51,7 +51,7 @@ describe('binding', () => {
 
 		it('adds new references when binding', () => {
 			const expr = reference('x')
-			const bound = expr.bind('x', add(reference('a'), reference('b')))
+			const bound = expr.bind({ x: add(reference('a'), reference('b')) })
 
 			// Now requires both a and b
 			const result = bound.toNumber({ a: 1, b: 2 })
@@ -63,10 +63,10 @@ describe('binding', () => {
 		it('handles deeply nested binding', () => {
 			const expr = multiply(add(reference('x'), 1), add(reference('y'), 2))
 
-			const step1 = expr.bind('x', reference('a'))
-			const step2 = step1.bind('y', reference('b'))
-			const step3 = step2.bind('a', 3)
-			const step4 = step3.bind('b', 4)
+			const step1 = expr.bind({ x: reference('a') })
+			const step2 = step1.bind({ y: reference('b') })
+			const step3 = step2.bind({ a: 3 })
+			const step4 = step3.bind({ b: 4 })
 
 			const result = step4.toNumber()
 			// (3 + 1) * (4 + 2) = 4 * 6 = 24
@@ -90,7 +90,7 @@ describe('binding', () => {
 			const expr = add(x, multiply(x, 2))
 			// x + (x * 2) = 3x
 
-			const bound = expr.bind('x', 5)
+			const bound = expr.bind({ x: 5 })
 			const result = bound.toNumber()
 
 			expect(result).toBe(15) // 5 + (5 * 2) = 15
@@ -100,7 +100,7 @@ describe('binding', () => {
 	describe('CSS output after binding', () => {
 		it('produces correct CSS after binding', () => {
 			const expr = add(reference('x'), reference('y'))
-			const bound = expr.bind('x', 10)
+			const bound = expr.bind({ x: 10 })
 
 			const css = bound.toCss({ y: reference('runtime') })
 			expect(css.expression).toBe('calc(10 + var(--runtime))')
@@ -108,7 +108,7 @@ describe('binding', () => {
 
 		it('produces correct CSS when binding to expression', () => {
 			const expr = add(reference('x'), 5)
-			const bound = expr.bind('x', multiply(reference('y'), 2))
+			const bound = expr.bind({ x: multiply(reference('y'), 2) })
 
 			const css = bound.toCss({ y: reference('runtime') })
 			expect(css.expression).toBe('calc(var(--runtime) * 2 + 5)')

@@ -117,7 +117,7 @@ describe('property wrapping', () => {
 			const inner = add(reference('x'), reference('y')).asProperty('sum')
 			const expr = multiply(inner, reference('z'))
 
-			const bound = expr.bind('x', 5)
+			const bound = expr.bind({ x: 5 })
 			const result = bound.toNumber({
 				y: 10,
 				z: 2,
@@ -130,7 +130,7 @@ describe('property wrapping', () => {
 			const inner = add(reference('x'), reference('y')).asProperty('sum')
 			const expr = multiply(inner, 2)
 
-			const bound = expr.bind('x', 5)
+			const bound = expr.bind({ x: 5 })
 			const css = bound.toCss({ y: reference('runtime') })
 
 			expect(css.declarations['--sum']).toBe('calc(5 + var(--runtime))')

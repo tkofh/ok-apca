@@ -111,7 +111,7 @@ function buildBaseColorExpr(
 		? ct.clamp(0, ct.divide(ct.reference(vars.chroma), 100), 1).asProperty(vars.chrPct)
 		: ct.reference(vars.chroma)
 
-	const maxChroma = createMaxChromaExpr(slice).bind('lightness', lumNorm)
+	const maxChroma = createMaxChromaExpr(slice).bind({ lightness: lumNorm })
 
 	// Final chroma = maxChroma * chromaPercentage
 	const chroma = ct.multiply(maxChroma, chrPct)
@@ -159,7 +159,7 @@ function buildContrastColorExprSimple(
 	const conLumExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(vars.conLum(label))
 
 	// Max chroma at contrast lightness
-	const maxChroma = createMaxChromaExpr(slice).bind('lightness', conLumExpr)
+	const maxChroma = createMaxChromaExpr(slice).bind({ lightness: conLumExpr })
 
 	// Final chroma
 	const chroma = ct.multiply(maxChroma, ct.reference(vars.chrPctFor(inputMode)))
@@ -229,7 +229,7 @@ function buildContrastColorExprWithInversion(
 	const conLumExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(vars.conLum(label))
 
 	// Max chroma at contrast lightness
-	const maxChroma = createMaxChromaExpr(slice).bind('lightness', conLumExpr)
+	const maxChroma = createMaxChromaExpr(slice).bind({ lightness: conLumExpr })
 
 	// Final chroma
 	const chroma = ct.multiply(maxChroma, ct.reference(vars.chrPctFor(inputMode)))

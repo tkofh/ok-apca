@@ -57,37 +57,9 @@ export abstract class BaseExpression<Refs extends string = never> {
 		refs: ReadonlySet<string>,
 	): BaseExpression<R>
 
-	// Single key-value binding
-	bind<K extends Refs, R extends string>(
-		key: K,
-		value: ExpressionInput<R>,
-	): BaseExpression<Exclude<Refs, K> | R>
-
-	// Record binding - bind multiple keys at once (partial allowed)
 	bind<B extends Partial<Record<Refs, ExpressionInput<string>>>>(
 		bindings: B,
-	): BaseExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
-
-	bind<K extends Refs>(
-		keyOrBindings: K | Record<K, ExpressionInput<string>>,
-		value?: ExpressionInput<string>,
-	): BaseExpression<string> {
-		// Single key-value case
-		if (typeof keyOrBindings === 'string') {
-			const expr = toExpression(value as ExpressionInput<string>)
-			const newNode = this.node.substitute({ [keyOrBindings]: expr.node })
-
-			const newRefs = new Set(this.refs)
-			newRefs.delete(keyOrBindings)
-			for (const ref of expr.refs) {
-				newRefs.add(ref)
-			}
-
-			return this.create(newNode, newRefs)
-		}
-
-		// Record case
-		const bindings = keyOrBindings
+	): BaseExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>> {
 		const nodeBindings: Record<string, CalcNode> = {}
 		const newRefs = new Set(this.refs)
 
@@ -101,7 +73,9 @@ export abstract class BaseExpression<Refs extends string = never> {
 		}
 
 		const newNode = this.node.substitute(nodeBindings)
-		return this.create(newNode, newRefs)
+		return this.create(newNode, newRefs) as BaseExpression<
+			Exclude<Refs, keyof B & Refs> | BindingRefs<B>
+		>
 	}
 
 	asProperty(name: string): BaseExpression<Refs> {
@@ -133,23 +107,10 @@ export class CalcExpression<Refs extends string = never> extends BaseExpression<
 		return new CalcExpression<R>(node, refs)
 	}
 
-	override bind<K extends Refs, R extends string>(
-		key: K,
-		value: ExpressionInput<R>,
-	): CalcExpression<Exclude<Refs, K> | R>
-
 	override bind<B extends Partial<Record<Refs, ExpressionInput<string>>>>(
 		bindings: B,
-	): CalcExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
-
-	override bind<K extends Refs>(
-		keyOrBindings: K | Record<K, ExpressionInput<string>>,
-		value?: ExpressionInput<string>,
-	): CalcExpression<string> {
-		return super.bind(
-			keyOrBindings as K,
-			value as ExpressionInput<string>,
-		) as CalcExpression<string>
+	): CalcExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>> {
+		return super.bind(bindings) as CalcExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
 	}
 
 	override asProperty(name: string): CalcExpression<Refs> {
@@ -188,23 +149,10 @@ export class ColorExpression<Refs extends string = never> extends BaseExpression
 		return new ColorExpression<R>(node, refs)
 	}
 
-	override bind<K extends Refs, R extends string>(
-		key: K,
-		value: ExpressionInput<R>,
-	): ColorExpression<Exclude<Refs, K> | R>
-
 	override bind<B extends Partial<Record<Refs, ExpressionInput<string>>>>(
 		bindings: B,
-	): ColorExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
-
-	override bind<K extends Refs>(
-		keyOrBindings: K | Record<K, ExpressionInput<string>>,
-		value?: ExpressionInput<string>,
-	): ColorExpression<string> {
-		return super.bind(
-			keyOrBindings as K,
-			value as ExpressionInput<string>,
-		) as ColorExpression<string>
+	): ColorExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>> {
+		return super.bind(bindings) as ColorExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
 	}
 
 	override asProperty(name: string): ColorExpression<Refs> {
