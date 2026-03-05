@@ -18,19 +18,15 @@ import {
 	INVERSION_THRESHOLD,
 } from './constants.ts'
 
-const yMinNormalTerm = ct.subtract(
-	ct.power(ct.reference('yBg'), APCA_BG_EXP_NORMAL),
-	APCA_SMOOTH_THRESHOLD_OFFSET,
-)
-const yMinNormal = ct.multiply(
-	ct.power(ct.abs(yMinNormalTerm), APCA_NORMAL_INV_EXP),
-	ct.sign(yMinNormalTerm),
+const yMinNormal = ct.signedPow(
+	ct.subtract(ct.pow(ct.reference('yBg'), APCA_BG_EXP_NORMAL), APCA_SMOOTH_THRESHOLD_OFFSET),
+	APCA_NORMAL_INV_EXP,
 )
 
-const yMinReverse = ct.power(ct.add(
-	ct.power(ct.reference('yBg'), APCA_BG_EXP_REVERSE),
-	APCA_SMOOTH_THRESHOLD_OFFSET,
-), APCA_REVERSE_INV_EXP)
+const yMinReverse = ct.pow(
+	ct.add(ct.pow(ct.reference('yBg'), APCA_BG_EXP_REVERSE), APCA_SMOOTH_THRESHOLD_OFFSET),
+	APCA_REVERSE_INV_EXP,
+)
 
 export function createMaxChromaExpr(slice: GamutSlice): CalcExpression<'lightness'> {
 	const L = ct.reference('lightness')
@@ -44,7 +40,7 @@ export function createMaxChromaExpr(slice: GamutSlice): CalcExpression<'lightnes
 	const t = ct.max(0, ct.divide(ct.subtract(L, apexL), oneMinusApexL))
 	const linearChroma = ct.divide(ct.multiply(apexC, ct.subtract(1, L)), oneMinusApexL)
 	const correction = ct.multiply(
-		ct.multiply(curv, ct.power(ct.sin(ct.multiply(t, Math.PI)), GAMUT_SINE_CURVATURE_EXPONENT)),
+		ct.multiply(curv, ct.pow(ct.sin(ct.multiply(t, Math.PI)), GAMUT_SINE_CURVATURE_EXPONENT)),
 		apexC,
 	)
 	const rightHalf = ct.add(linearChroma, correction)
@@ -62,14 +58,16 @@ export function solveNormalPolarity(
 	const yBgRef = ct.reference('yBg')
 	const xRef = ct.reference('x')
 
-	const term = ct.subtract(
-		ct.power(yBgRef, APCA_BG_EXP_NORMAL),
-		ct.divide(ct.add(xRef, APCA_OFFSET), APCA_SCALE),
+	const directSolution = ct.signedPow(
+		ct.subtract(
+			ct.pow(yBgRef, APCA_BG_EXP_NORMAL),
+			ct.divide(ct.add(xRef, APCA_OFFSET), APCA_SCALE),
+		),
+		APCA_NORMAL_INV_EXP,
 	)
-	const directSolution = ct.multiply(ct.power(ct.abs(term), APCA_NORMAL_INV_EXP), ct.sign(term))
 
 	const t = ct.min(ct.divide(xRef, APCA_SMOOTH_THRESHOLD), 1)
-	const blend = ct.power(ct.sin(ct.multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
+	const blend = ct.pow(ct.sin(ct.multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
 	const smoothSolution = ct.add(yBgRef, ct.multiply(ct.subtract(yMinNormal, yBgRef), blend))
 
 	const aboveThreshold = ct.max(0, ct.sign(ct.subtract(xRef, APCA_SMOOTH_THRESHOLD)))
@@ -95,13 +93,13 @@ export function solveReversePolarity(
 	const xRef = ct.reference('x')
 
 	const term = ct.add(
-		ct.power(yBgRef, APCA_BG_EXP_REVERSE),
+		ct.pow(yBgRef, APCA_BG_EXP_REVERSE),
 		ct.divide(ct.add(xRef, APCA_OFFSET), APCA_SCALE),
 	)
-	const directSolution = ct.power(term, APCA_REVERSE_INV_EXP)
+	const directSolution = ct.pow(term, APCA_REVERSE_INV_EXP)
 
 	const t = ct.min(ct.divide(xRef, APCA_SMOOTH_THRESHOLD), 1)
-	const blend = ct.power(ct.sin(ct.multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
+	const blend = ct.pow(ct.sin(ct.multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
 	const smoothSolution = ct.add(yBgRef, ct.multiply(ct.subtract(yMinReverse, yBgRef), blend))
 
 	const aboveThreshold = ct.max(0, ct.sign(ct.subtract(xRef, APCA_SMOOTH_THRESHOLD)))
@@ -155,7 +153,7 @@ export function createContrastMeasurementReverse(): CalcExpression<'yBg' | 'yFg'
 		ct.subtract(
 			ct.multiply(
 				APCA_SCALE,
-				ct.subtract(ct.power(yFg, APCA_FG_EXP_REVERSE), ct.power(yBg, APCA_BG_EXP_REVERSE)),
+				ct.subtract(ct.pow(yFg, APCA_FG_EXP_REVERSE), ct.pow(yBg, APCA_BG_EXP_REVERSE)),
 			),
 			APCA_OFFSET,
 		),
@@ -177,7 +175,7 @@ export function createContrastMeasurementNormal(): CalcExpression<'yBg' | 'yFg'>
 		ct.subtract(
 			ct.multiply(
 				APCA_SCALE,
-				ct.subtract(ct.power(yBg, APCA_BG_EXP_NORMAL), ct.power(yFg, APCA_FG_EXP_NORMAL)),
+				ct.subtract(ct.pow(yBg, APCA_BG_EXP_NORMAL), ct.pow(yFg, APCA_FG_EXP_NORMAL)),
 			),
 			APCA_OFFSET,
 		),
@@ -225,11 +223,10 @@ export function createContrastSolverWithInversion(): CalcExpression<
 	// Use epsilon tolerance to avoid floating-point precision issues
 	const lcDiff = ct.subtract(lcLight, lcDark)
 
-	// Check if difference is within epsilon (treat as tie)
-	// withinEpsilon = 1 if abs(lcDiff) < epsilon, 0 otherwise
-	const absDiff = ct.abs(lcDiff)
-	const withinEpsilon = ct.max(0, ct.sign(ct.subtract(COMPARISON_EPSILON, absDiff))) // 1 if absDiff < epsilon
-	const outsideEpsilon = ct.subtract(1, withinEpsilon)
+	const outsideEpsilon = ct.subtract(
+		1,
+		ct.max(0, ct.sign(ct.subtract(COMPARISON_EPSILON, ct.abs(lcDiff)))),
+	)
 
 	// Only declare a winner if difference is outside epsilon
 	const lightWinsRaw = ct.max(0, ct.sign(lcDiff)) // 1 if light > dark

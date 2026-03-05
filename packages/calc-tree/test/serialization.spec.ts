@@ -7,7 +7,7 @@ import {
 	max,
 	min,
 	multiply,
-	power,
+	pow,
 	reference,
 	sign,
 	sin,
@@ -92,7 +92,7 @@ describe('serialization', () => {
 		})
 
 		it('serializes power', () => {
-			const expr = power(reference('x'), 2)
+			const expr = pow(reference('x'), 2)
 			const css = expr.toCss({ x: reference('x') })
 			expect(css.expression).toBe('pow(var(--x), 2)')
 		})
@@ -194,7 +194,7 @@ describe('serialization', () => {
 	describe('complex expressions', () => {
 		it('serializes quadratic formula components', () => {
 			// ax^2
-			const expr = multiply(reference('a'), power(reference('x'), 2))
+			const expr = multiply(reference('a'), pow(reference('x'), 2))
 			const css = expr.toCss({
 				a: reference('a'),
 				x: reference('x'),
@@ -204,7 +204,7 @@ describe('serialization', () => {
 
 		it('serializes distance formula', () => {
 			// sqrt(x^2 + y^2)
-			const expr = power(add(power(reference('x'), 2), power(reference('y'), 2)), 0.5)
+			const expr = pow(add(pow(reference('x'), 2), pow(reference('y'), 2)), 0.5)
 			const css = expr.toCss({
 				x: reference('x'),
 				y: reference('y'),

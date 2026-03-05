@@ -221,11 +221,28 @@ export class DivideNode extends ArithmeticNode {
 	}
 }
 
-export class PowerNode extends BinaryNode {
-	readonly kind = 'power'
+export class PowNode extends BinaryNode {
+	readonly kind = 'pow'
 	protected compute = (a: number, b: number) => a ** b
 	protected format = (base: string, exp: string) => `pow(${base}, ${exp})`
-	protected create = (left: CalcNode, right: CalcNode) => new PowerNode(left, right)
+	protected create = (left: CalcNode, right: CalcNode) => new PowNode(left, right)
+}
+
+export class SignedPowNode extends BinaryNode {
+	readonly kind = 'signedPow'
+	protected compute = (a: number, b: number) => Math.abs(a) ** b * Math.sign(a)
+	protected format = (base: string, exp: string) => `pow(abs(${base}), ${exp}) * sign(${base})`
+	protected create = (left: CalcNode, right: CalcNode) => new SignedPowNode(left, right)
+
+	override serialize(declarations: Record<string, string>): string {
+		const base = this.left.serialize(declarations)
+		const exp = this.right.serialize(declarations)
+		return `pow(abs(${base}), ${exp}) * sign(${base})`
+	}
+
+	override needsCalcWrap(): boolean {
+		return true
+	}
 }
 
 export class MaxNode extends BinaryNode {

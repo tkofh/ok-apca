@@ -124,7 +124,7 @@ function buildBaseColorExpr(
  * Build expression for Y background (shared across contrast colors).
  */
 function buildYBackgroundExpr(inputMode: InputMode): CalcExpression<string> {
-	return ct.power(ct.reference(vars.lumNormFor(inputMode)), 3).asProperty(vars.yBg)
+	return ct.pow(ct.reference(vars.lumNormFor(inputMode)), 3).asProperty(vars.yBg)
 }
 
 /**
@@ -156,7 +156,7 @@ function buildContrastColorExprSimple(
 		.asProperty(vars.yTarget(label))
 
 	// Convert Y to lightness
-	const conLumExpr = ct.power(yTargetExpr, 1 / 3).asProperty(vars.conLum(label))
+	const conLumExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(vars.conLum(label))
 
 	// Max chroma at contrast lightness
 	const maxChroma = createMaxChromaExpr(slice).bind('lightness', conLumExpr)
@@ -226,7 +226,7 @@ function buildContrastColorExprWithInversion(
 		.asProperty(vars.yTarget(label))
 
 	// Convert Y to lightness
-	const conLumExpr = ct.power(yTargetExpr, 1 / 3).asProperty(vars.conLum(label))
+	const conLumExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(vars.conLum(label))
 
 	// Max chroma at contrast lightness
 	const maxChroma = createMaxChromaExpr(slice).bind('lightness', conLumExpr)

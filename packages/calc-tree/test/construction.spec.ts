@@ -7,7 +7,7 @@ import {
 	max,
 	min,
 	multiply,
-	power,
+	pow,
 	reference,
 	sign,
 	sin,
@@ -83,8 +83,8 @@ describe('construction', () => {
 			expect(result).toBe(3)
 		})
 
-		it('creates power expression', () => {
-			const expr = power(2, 3)
+		it('creates pow expression', () => {
+			const expr = pow(2, 3)
 			const result = expr.toNumber()
 			expect(result).toBe(8)
 		})

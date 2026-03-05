@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { add, multiply, power, reference, toExpression } from '../src/index.ts'
+import { add, multiply, pow, reference, toExpression } from '../src/index.ts'
 
 describe('property wrapping', () => {
 	describe('basic wrapping', () => {
@@ -50,9 +50,9 @@ describe('property wrapping', () => {
 		})
 
 		it('handles deeply nested properties', () => {
-			const xSquared = power(reference('x'), 2).asProperty('x-squared')
-			const ySquared = power(reference('y'), 2).asProperty('y-squared')
-			const distance = power(add(xSquared, ySquared), 0.5).asProperty('distance')
+			const xSquared = pow(reference('x'), 2).asProperty('x-squared')
+			const ySquared = pow(reference('y'), 2).asProperty('y-squared')
+			const distance = pow(add(xSquared, ySquared), 0.5).asProperty('distance')
 
 			const css = distance.toCss({
 				x: reference('x'),
@@ -140,7 +140,7 @@ describe('property wrapping', () => {
 	describe('integration', () => {
 		it('generates CSS with complex nested properties', () => {
 			// Build a quadratic: ax^2 + bx + c
-			const xSquared = power(reference('x'), 2).asProperty('x2')
+			const xSquared = pow(reference('x'), 2).asProperty('x2')
 			const axSquared = multiply(reference('a'), xSquared).asProperty('ax2')
 			const bx = multiply(reference('b'), reference('x')).asProperty('bx')
 			const quadratic = add(add(axSquared, bx), reference('c')).asProperty('quadratic')

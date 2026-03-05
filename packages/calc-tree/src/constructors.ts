@@ -9,8 +9,9 @@ import {
 	MinNode,
 	MultiplyNode,
 	OklchNode,
-	PowerNode,
+	PowNode,
 	ReferenceNode,
+	SignedPowNode,
 	SignNode,
 	SinNode,
 	SubtractNode,
@@ -108,7 +109,7 @@ export function divide<A extends string, B extends string>(
 	return new CalcExpression(node, mergeRefs(l, r))
 }
 
-export function power<A extends string, B extends string>(
+export function pow<A extends string, B extends string>(
 	base: ExpressionInput<A>,
 	exponent: ExpressionInput<B>,
 ): CalcExpression<A | B> {
@@ -117,7 +118,20 @@ export function power<A extends string, B extends string>(
 	const node =
 		isConstant(b.node) && isConstant(e.node)
 			? new ConstantNode(b.node.value ** e.node.value)
-			: new PowerNode(b.node, e.node)
+			: new PowNode(b.node, e.node)
+	return new CalcExpression(node, mergeRefs(b, e))
+}
+
+export function signedPow<A extends string, B extends string>(
+	base: ExpressionInput<A>,
+	exponent: ExpressionInput<B>,
+): CalcExpression<A | B> {
+	const b = toExpression(base)
+	const e = toExpression(exponent)
+	const node =
+		isConstant(b.node) && isConstant(e.node)
+			? new ConstantNode(Math.abs(b.node.value) ** e.node.value * Math.sign(b.node.value))
+			: new SignedPowNode(b.node, e.node)
 	return new CalcExpression(node, mergeRefs(b, e))
 }
 

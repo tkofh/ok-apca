@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { add, multiply, power, reference, toExpression } from '../src/index.ts'
+import { add, multiply, pow, reference, toExpression } from '../src/index.ts'
 
 describe('evaluation', () => {
 	describe('constant evaluation', () => {
@@ -60,9 +60,9 @@ describe('evaluation', () => {
 			expect(result).toBe(24) // 5^2 - 1 = 24
 		})
 
-		it('evaluates power expressions', () => {
+		it('evaluates pow expressions', () => {
 			// f(x, y) = (x^2 + y^2)^0.5
-			const expr = power(add(power(reference('x'), 2), power(reference('y'), 2)), 0.5)
+			const expr = pow(add(pow(reference('x'), 2), pow(reference('y'), 2)), 0.5)
 			const result = expr.toNumber({
 				x: 3,
 				y: 4,
