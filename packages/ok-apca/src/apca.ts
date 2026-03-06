@@ -8,7 +8,7 @@ import {
 	COMPARISON_EPSILON,
 	INVERSION_THRESHOLD,
 } from './constants.ts'
-import { createContrastSolver, normalPolarity, reversePolarity } from './expressions.ts'
+import { contrastSolver, normalPolarity, reversePolarity } from './expressions.ts'
 import { clampNumber } from './util.ts'
 
 /**
@@ -31,21 +31,6 @@ function measureNormalContrast(yBg: number, yFg: number): number {
 		0,
 		APCA_SCALE * (yBg ** APCA_BG_EXP_NORMAL - yFg ** APCA_FG_EXP_NORMAL) - APCA_OFFSET,
 	)
-}
-
-/**
- * Solve for target Y given signed contrast value (simple solver, no inversion).
- * Positive contrast = lighter text, negative = darker text.
- * The result is clamped to the gamut boundary [0, 1].
- *
- * Uses the shared expression tree from expressions.ts to ensure parity
- * with CSS generation.
- */
-function solveTargetYSimple(Y: number, signedContrast: number): number {
-	return createContrastSolver().solve({
-		yBg: Y,
-		signedContrast: signedContrast / 100,
-	})
 }
 
 /**
@@ -124,5 +109,8 @@ export function solveTargetY(Y: number, signedContrast: number, invert = true): 
 	if (invert) {
 		return solveTargetYWithInversion(Y, signedContrast)
 	}
-	return solveTargetYSimple(Y, signedContrast)
+	return contrastSolver.solve({
+		yBg: Y,
+		contrast: signedContrast / 100,
+	})
 }

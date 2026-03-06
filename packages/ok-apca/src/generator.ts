@@ -4,7 +4,7 @@ import { findGamutSlice, type GamutSlice } from './color.ts'
 import {
 	contrastMeasurementNormal,
 	contrastMeasurementReverse,
-	createContrastSolver,
+	contrastSolver,
 	createContrastSolverWithInversion,
 	createMaxChromaExpr,
 	normalPolarity,
@@ -118,10 +118,10 @@ function buildContrastColorExprSimple(
 		.asProperty(vars.contrastSigned(label))
 
 	// Target Y from contrast solver
-	const yTargetExpr = createContrastSolver()
+	const yTargetExpr = contrastSolver
 		.bind({
 			yBg: ct.reference(vars.yBg),
-			signedContrast: signedContrastExpr,
+			contrast: signedContrastExpr,
 		})
 		.asProperty(vars.yTarget(label))
 
@@ -180,7 +180,7 @@ function buildContrastColorExprWithInversion(
 	const yTargetExpr = createContrastSolverWithInversion()
 		.bind({
 			yBg: yBgRef,
-			signedContrast: signedContrastExpr,
+			contrast: signedContrastExpr,
 			yLight: yLightExpr,
 			yDark: yDarkExpr,
 			lcLight: lcLightExpr,

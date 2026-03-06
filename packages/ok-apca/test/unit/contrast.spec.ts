@@ -1,6 +1,6 @@
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { gamutMap } from '../../src/color.ts'
+import { gamutMap, getMaxChroma } from '../../src/color.ts'
 import { computeContrastColor } from '../../src/contrast.ts'
 import { measureContrast } from '../../src/measure.ts'
 
@@ -291,7 +291,7 @@ describe('computeContrastColor', () => {
 			)
 		})
 
-		it('output chroma never significantly exceeds input chroma', () => {
+		it('output chroma ratio never exceeds input chroma ratio', () => {
 			fc.assert(
 				fc.property(
 					fc.record({
@@ -302,9 +302,15 @@ describe('computeContrastColor', () => {
 					contrastArb,
 					(input, contrast) => {
 						const result = computeContrastColor(input, contrast)
-						// Output chroma should be approximately <= input chroma (within 5%)
-						const maxAllowedChroma = input.chroma * 1.05
-						expect(result.chroma).toBeLessThanOrEqual(maxAllowedChroma + 1e-6)
+						const maxAtInput = getMaxChroma(input.lightness, input.hue)
+						const maxAtResult = getMaxChroma(result.lightness, result.hue)
+						if (maxAtInput <= 0 || maxAtResult <= 0) {
+							return
+						}
+						const inputRatio = input.chroma / maxAtInput
+						const resultRatio = result.chroma / maxAtResult
+						// Chroma ratio (percentage of gamut) should be preserved or reduced
+						expect(resultRatio).toBeLessThanOrEqual(Math.min(inputRatio, 1) + 1e-6)
 					},
 				),
 				{ numRuns },

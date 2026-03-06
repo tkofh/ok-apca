@@ -74,25 +74,22 @@ export const reversePolarity: CalcExpression<'yBg' | 'x'> = ct.lerp(
 	aboveThreshold,
 )
 
-export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast'> {
-	const signedContrast = ct.reference('signedContrast')
-	const x = ct.abs(signedContrast)
+const contrastRef = ct.reference('contrast')
+const contrastMagnitude = ct.abs(contrastRef)
+const contrastSign = ct.sign(contrastRef)
+const contrastPreferLight = ct.max(0, contrastSign)
+const contrastPreferDark = ct.max(0, ct.multiply(-1, contrastSign))
+const contrastIsZero = ct.subtract(1, ct.max(contrastPreferLight, contrastPreferDark))
 
-	const signVal = ct.sign(signedContrast)
-	const preferLight = ct.max(0, signVal)
-	const preferDark = ct.max(0, ct.multiply(-1, signVal))
-	const isZero = ct.subtract(1, ct.max(preferLight, preferDark))
-
-	return ct.clamp(
-		0,
-		ct.add(
-			ct.multiply(preferLight, reversePolarity.bind({ x })),
-			ct.multiply(preferDark, normalPolarity.bind({ x })),
-			ct.multiply(isZero, yBgRef),
-		),
-		1,
-	)
-}
+export const contrastSolver: CalcExpression<'yBg' | 'contrast'> = ct.clamp(
+	0,
+	ct.add(
+		ct.multiply(contrastPreferLight, reversePolarity.bind({ x: contrastMagnitude })),
+		ct.multiply(contrastPreferDark, normalPolarity.bind({ x: contrastMagnitude })),
+		ct.multiply(contrastIsZero, yBgRef),
+	),
+	1,
+)
 
 /**
  * Measure achieved contrast for reverse polarity (light text on dark background).
@@ -146,7 +143,7 @@ export const contrastMeasurementNormal: CalcExpression<'yBg' | 'yFg'> = ct.max(
  * - Selection based on max(Lc_light, Lc_dark) with preference tie-breaking
  */
 export function createContrastSolverWithInversion(): CalcExpression<
-	'yBg' | 'signedContrast' | 'yLight' | 'yDark' | 'lcLight' | 'lcDark'
+	'yBg' | 'contrast' | 'yLight' | 'yDark' | 'lcLight' | 'lcDark'
 > {
 	// Pre-computed clamped Y values (passed as properties from generator)
 	const yLight = ct.reference('yLight')
@@ -178,7 +175,7 @@ export function createContrastSolverWithInversion(): CalcExpression<
 	const isTie = ct.subtract(1, ct.max(lightWins, darkWins)) // 1 if within epsilon or equal
 
 	// Preference for tie-breaking (from signed contrast)
-	const signVal = ct.sign(ct.reference('signedContrast'))
+	const signVal = ct.sign(contrastRef)
 	const preferLight = ct.max(0, signVal)
 	const preferDark = ct.max(0, ct.multiply(-1, signVal))
 	const isZero = ct.subtract(1, ct.max(preferLight, preferDark))
