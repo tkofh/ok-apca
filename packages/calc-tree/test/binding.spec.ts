@@ -6,7 +6,7 @@ describe('binding', () => {
 		it('binds to constants', () => {
 			const expr = multiply(2, reference('x'))
 			const bound = expr.bind({ x: 3 })
-			const result = bound.toNumber()
+			const result = bound.solve()
 
 			expect(result).toBe(6)
 		})
@@ -16,14 +16,14 @@ describe('binding', () => {
 			const bound = expr.bind({ x: 5 })
 
 			// Only needs 'y' now
-			const result = bound.toNumber({ y: 10 })
+			const result = bound.solve({ y: 10 })
 			expect(result).toBe(15)
 		})
 
 		it('can bind multiple references by chaining', () => {
 			const expr = add(reference('x'), reference('y'))
 			const bound = expr.bind({ x: 10 }).bind({ y: 20 })
-			const result = bound.toNumber()
+			const result = bound.solve()
 
 			expect(result).toBe(30)
 		})
@@ -36,7 +36,7 @@ describe('binding', () => {
 			const bound = expr.bind({ x: yExpr })
 
 			// Now requires 'y' instead of 'x'
-			const result = bound.toNumber({ y: 3 })
+			const result = bound.solve({ y: 3 })
 			expect(result).toBe(11) // (y * 2) + 5 = (3 * 2) + 5 = 11
 		})
 
@@ -45,7 +45,7 @@ describe('binding', () => {
 			const withE = expr.bind({ a: reference('e') })
 
 			// Now requires: b, e (a removed, e added)
-			const result = withE.toNumber({ b: 5, e: 10 })
+			const result = withE.solve({ b: 5, e: 10 })
 			expect(result).toBe(15)
 		})
 
@@ -54,7 +54,7 @@ describe('binding', () => {
 			const bound = expr.bind({ x: add(reference('a'), reference('b')) })
 
 			// Now requires both a and b
-			const result = bound.toNumber({ a: 1, b: 2 })
+			const result = bound.solve({ a: 1, b: 2 })
 			expect(result).toBe(3)
 		})
 	})
@@ -68,7 +68,7 @@ describe('binding', () => {
 			const step3 = step2.bind({ a: 3 })
 			const step4 = step3.bind({ b: 4 })
 
-			const result = step4.toNumber()
+			const result = step4.solve()
 			// (3 + 1) * (4 + 2) = 4 * 6 = 24
 			expect(result).toBe(24)
 		})
@@ -91,9 +91,25 @@ describe('binding', () => {
 			// x + (x * 2) = 3x
 
 			const bound = expr.bind({ x: 5 })
-			const result = bound.toNumber()
+			const result = bound.solve()
 
 			expect(result).toBe(15) // 5 + (5 * 2) = 15
+		})
+	})
+
+	describe('variadic binding', () => {
+		it('binds within variadic add', () => {
+			const expr = add(reference('x'), reference('y'), 5)
+			const bound = expr.bind({ x: 1 })
+			const result = bound.solve({ y: 10 })
+			expect(result).toBe(16)
+		})
+
+		it('produces correct CSS after binding variadic add', () => {
+			const expr = add(reference('x'), reference('y'), reference('z'))
+			const bound = expr.bind({ x: 10 })
+			const css = bound.toCss({ y: reference('y'), z: reference('z') })
+			expect(css.expression).toBe('calc(10 + var(--y) + var(--z))')
 		})
 	})
 
@@ -119,7 +135,7 @@ describe('binding', () => {
 		it('binds multiple values at once', () => {
 			const expr = add(reference('x'), reference('y'))
 			const bound = expr.bind({ x: 10, y: 20 })
-			const result = bound.toNumber()
+			const result = bound.solve()
 
 			expect(result).toBe(30)
 		})
@@ -129,7 +145,7 @@ describe('binding', () => {
 			const bound = expr.bind({ a: 1, b: 2 })
 
 			// Only needs 'c' now
-			const result = bound.toNumber({ c: 3 })
+			const result = bound.solve({ c: 3 })
 			expect(result).toBe(6)
 		})
 
@@ -141,7 +157,7 @@ describe('binding', () => {
 			})
 
 			// Now requires a and b instead of x and y
-			const result = bound.toNumber({ a: 3, b: 4 })
+			const result = bound.solve({ a: 3, b: 4 })
 			expect(result).toBe(10) // (3 * 2) + 4 = 10
 		})
 

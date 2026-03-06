@@ -157,7 +157,7 @@ export function computeMaxChroma(L: number, slice: GamutSlice): number {
 		return 0
 	}
 
-	return createMaxChromaExpr(slice).toNumber({ lightness: L })
+	return createMaxChromaExpr(slice).solve({ lightness: L })
 }
 
 /**

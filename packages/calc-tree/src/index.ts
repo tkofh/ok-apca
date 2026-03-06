@@ -4,6 +4,7 @@ export {
 	add,
 	clamp,
 	divide,
+	lerp,
 	max,
 	min,
 	multiply,

@@ -8,7 +8,7 @@ describe('property wrapping', () => {
 			const wrapped = expr.asProperty('doubled')
 
 			// Can still evaluate normally
-			const result = wrapped.toNumber({ x: 5 })
+			const result = wrapped.solve({ x: 5 })
 			expect(result).toBe(10)
 		})
 
@@ -26,7 +26,7 @@ describe('property wrapping', () => {
 			const expr = add(reference('x'), reference('y')).asProperty('sum')
 
 			// Should still require both x and y
-			const result = expr.toNumber({
+			const result = expr.solve({
 				x: 5,
 				y: 10,
 			})
@@ -118,7 +118,7 @@ describe('property wrapping', () => {
 			const expr = multiply(inner, reference('z'))
 
 			const bound = expr.bind({ x: 5 })
-			const result = bound.toNumber({
+			const result = bound.solve({
 				y: 10,
 				z: 2,
 			})
@@ -143,7 +143,7 @@ describe('property wrapping', () => {
 			const xSquared = pow(reference('x'), 2).asProperty('x2')
 			const axSquared = multiply(reference('a'), xSquared).asProperty('ax2')
 			const bx = multiply(reference('b'), reference('x')).asProperty('bx')
-			const quadratic = add(add(axSquared, bx), reference('c')).asProperty('quadratic')
+			const quadratic = add(axSquared, bx, reference('c')).asProperty('quadratic')
 
 			const css = quadratic.toCss({
 				a: 1,

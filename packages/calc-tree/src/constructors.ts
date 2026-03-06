@@ -58,16 +58,33 @@ function isConstant(node: unknown): node is ConstantNode {
 }
 
 export function add<A extends string, B extends string>(
-	left: ExpressionInput<A>,
-	right: ExpressionInput<B>,
-): CalcExpression<A | B> {
-	const l = toExpression(left)
-	const r = toExpression(right)
-	const node =
-		isConstant(l.node) && isConstant(r.node)
-			? new ConstantNode(l.node.value + r.node.value)
-			: new AddNode(l.node, r.node)
-	return new CalcExpression(node, mergeRefs(l, r))
+	a: ExpressionInput<A>,
+	b: ExpressionInput<B>,
+): CalcExpression<A | B>
+export function add<A extends string, B extends string, C extends string>(
+	a: ExpressionInput<A>,
+	b: ExpressionInput<B>,
+	c: ExpressionInput<C>,
+): CalcExpression<A | B | C>
+export function add<A extends string, B extends string, C extends string, D extends string>(
+	a: ExpressionInput<A>,
+	b: ExpressionInput<B>,
+	c: ExpressionInput<C>,
+	d: ExpressionInput<D>,
+): CalcExpression<A | B | C | D>
+export function add(
+	...args: [ExpressionInput<string>, ExpressionInput<string>, ...ExpressionInput<string>[]]
+): CalcExpression<string>
+export function add(...args: ExpressionInput<string>[]): CalcExpression<string> {
+	const exprs = args.map((a) => toExpression(a))
+	if (exprs.every((e) => isConstant(e.node))) {
+		const sum = (exprs as CalcExpression<never>[]).reduce(
+			(acc, e) => acc + e.node.evaluateConstant(),
+			0,
+		)
+		return new CalcExpression(new ConstantNode(sum), new Set())
+	}
+	return new CalcExpression(new AddNode(exprs.map((e) => e.node)), mergeRefs(...exprs))
 }
 
 export function subtract<A extends string, B extends string>(
@@ -154,29 +171,61 @@ export function sign<Refs extends string>(arg: ExpressionInput<Refs>): CalcExpre
 }
 
 export function max<A extends string, B extends string>(
-	left: ExpressionInput<A>,
-	right: ExpressionInput<B>,
-): CalcExpression<A | B> {
-	const l = toExpression(left)
-	const r = toExpression(right)
-	const node =
-		isConstant(l.node) && isConstant(r.node)
-			? new ConstantNode(Math.max(l.node.value, r.node.value))
-			: new MaxNode(l.node, r.node)
-	return new CalcExpression(node, mergeRefs(l, r))
+	a: ExpressionInput<A>,
+	b: ExpressionInput<B>,
+): CalcExpression<A | B>
+export function max<A extends string, B extends string, C extends string>(
+	a: ExpressionInput<A>,
+	b: ExpressionInput<B>,
+	c: ExpressionInput<C>,
+): CalcExpression<A | B | C>
+export function max<A extends string, B extends string, C extends string, D extends string>(
+	a: ExpressionInput<A>,
+	b: ExpressionInput<B>,
+	c: ExpressionInput<C>,
+	d: ExpressionInput<D>,
+): CalcExpression<A | B | C | D>
+export function max(
+	...args: [ExpressionInput<string>, ExpressionInput<string>, ...ExpressionInput<string>[]]
+): CalcExpression<string>
+export function max(...args: ExpressionInput<string>[]): CalcExpression<string> {
+	const exprs = args.map((a) => toExpression(a))
+	if (exprs.every((e) => isConstant(e.node))) {
+		const result = Math.max(
+			...(exprs as CalcExpression<never>[]).map((e) => e.node.evaluateConstant()),
+		)
+		return new CalcExpression(new ConstantNode(result), new Set())
+	}
+	return new CalcExpression(new MaxNode(exprs.map((e) => e.node)), mergeRefs(...exprs))
 }
 
 export function min<A extends string, B extends string>(
-	left: ExpressionInput<A>,
-	right: ExpressionInput<B>,
-): CalcExpression<A | B> {
-	const l = toExpression(left)
-	const r = toExpression(right)
-	const node =
-		isConstant(l.node) && isConstant(r.node)
-			? new ConstantNode(Math.min(l.node.value, r.node.value))
-			: new MinNode(l.node, r.node)
-	return new CalcExpression(node, mergeRefs(l, r))
+	a: ExpressionInput<A>,
+	b: ExpressionInput<B>,
+): CalcExpression<A | B>
+export function min<A extends string, B extends string, C extends string>(
+	a: ExpressionInput<A>,
+	b: ExpressionInput<B>,
+	c: ExpressionInput<C>,
+): CalcExpression<A | B | C>
+export function min<A extends string, B extends string, C extends string, D extends string>(
+	a: ExpressionInput<A>,
+	b: ExpressionInput<B>,
+	c: ExpressionInput<C>,
+	d: ExpressionInput<D>,
+): CalcExpression<A | B | C | D>
+export function min(
+	...args: [ExpressionInput<string>, ExpressionInput<string>, ...ExpressionInput<string>[]]
+): CalcExpression<string>
+export function min(...args: ExpressionInput<string>[]): CalcExpression<string> {
+	const exprs = args.map((a) => toExpression(a))
+	if (exprs.every((e) => isConstant(e.node))) {
+		const result = Math.min(
+			...(exprs as CalcExpression<never>[]).map((e) => e.node.evaluateConstant()),
+		)
+		return new CalcExpression(new ConstantNode(result), new Set())
+	}
+	return new CalcExpression(new MinNode(exprs.map((e) => e.node)), mergeRefs(...exprs))
 }
 
 export function clamp<A extends string, B extends string, C extends string>(
@@ -194,6 +243,14 @@ export function clamp<A extends string, B extends string, C extends string>(
 				)
 			: new ClampNode(minExpr.node, valExpr.node, maxExpr.node)
 	return new CalcExpression(node, mergeRefs(minExpr, valExpr, maxExpr))
+}
+
+export function lerp<A extends string, B extends string, T extends string>(
+	a: ExpressionInput<A>,
+	b: ExpressionInput<B>,
+	t: ExpressionInput<T>,
+): CalcExpression<A | B | T> {
+	return add(multiply(subtract(1, t), a), multiply(t, b))
 }
 
 export function oklch<L extends string, C extends string, H extends string>(

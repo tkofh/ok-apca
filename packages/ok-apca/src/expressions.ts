@@ -18,14 +18,25 @@ import {
 	INVERSION_THRESHOLD,
 } from './constants.ts'
 
+const xRef = ct.reference('x')
+const yBgRef = ct.reference('yBg')
+const yFgRef = ct.reference('yFg')
+
 const yMinNormal = ct.signedPow(
-	ct.subtract(ct.pow(ct.reference('yBg'), APCA_BG_EXP_NORMAL), APCA_SMOOTH_THRESHOLD_OFFSET),
+	ct.subtract(ct.pow(yBgRef, APCA_BG_EXP_NORMAL), APCA_SMOOTH_THRESHOLD_OFFSET),
 	APCA_NORMAL_INV_EXP,
 )
 
 const yMinReverse = ct.pow(
-	ct.add(ct.pow(ct.reference('yBg'), APCA_BG_EXP_REVERSE), APCA_SMOOTH_THRESHOLD_OFFSET),
+	ct.add(ct.pow(yBgRef, APCA_BG_EXP_REVERSE), APCA_SMOOTH_THRESHOLD_OFFSET),
 	APCA_REVERSE_INV_EXP,
+)
+
+const contrastDelta = ct.divide(ct.add(xRef, APCA_OFFSET), APCA_SCALE)
+
+const smoothingBlend = ct.pow(
+	ct.sin(ct.multiply(ct.min(ct.divide(xRef, APCA_SMOOTH_THRESHOLD), 1), Math.PI / 2)),
+	APCA_SMOOTH_POWER,
 )
 
 export function createMaxChromaExpr(slice: GamutSlice): CalcExpression<'lightness'> {
@@ -46,74 +57,22 @@ export function createMaxChromaExpr(slice: GamutSlice): CalcExpression<'lightnes
 	const rightHalf = ct.add(linearChroma, correction)
 
 	const isRight = ct.max(0, ct.sign(ct.subtract(L, apexL)))
-	return ct.add(ct.multiply(ct.subtract(1, isRight), leftHalf), ct.multiply(isRight, rightHalf))
+	return ct.lerp(leftHalf, rightHalf, isRight)
 }
 
-export function solveNormalPolarity(yBg: number, x: number): number
-export function solveNormalPolarity(): CalcExpression<'yBg' | 'x'>
-export function solveNormalPolarity(
-	yBg?: number,
-	x?: number,
-): number | CalcExpression<'yBg' | 'x'> {
-	const yBgRef = ct.reference('yBg')
-	const xRef = ct.reference('x')
+const aboveThreshold = ct.max(0, ct.sign(ct.subtract(xRef, APCA_SMOOTH_THRESHOLD)))
 
-	const directSolution = ct.signedPow(
-		ct.subtract(
-			ct.pow(yBgRef, APCA_BG_EXP_NORMAL),
-			ct.divide(ct.add(xRef, APCA_OFFSET), APCA_SCALE),
-		),
-		APCA_NORMAL_INV_EXP,
-	)
+export const normalPolarity: CalcExpression<'yBg' | 'x'> = ct.lerp(
+	ct.lerp(yBgRef, yMinNormal, smoothingBlend),
+	ct.signedPow(ct.subtract(ct.pow(yBgRef, APCA_BG_EXP_NORMAL), contrastDelta), APCA_NORMAL_INV_EXP),
+	aboveThreshold,
+)
 
-	const t = ct.min(ct.divide(xRef, APCA_SMOOTH_THRESHOLD), 1)
-	const blend = ct.pow(ct.sin(ct.multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
-	const smoothSolution = ct.add(yBgRef, ct.multiply(ct.subtract(yMinNormal, yBgRef), blend))
-
-	const aboveThreshold = ct.max(0, ct.sign(ct.subtract(xRef, APCA_SMOOTH_THRESHOLD)))
-	const solver = ct.add(
-		ct.multiply(aboveThreshold, directSolution),
-		ct.multiply(ct.subtract(1, aboveThreshold), smoothSolution),
-	)
-
-	if (yBg === undefined || x === undefined) {
-		return solver
-	}
-
-	return solver.toNumber({ yBg, x })
-}
-
-export function solveReversePolarity(yBg: number, x: number): number
-export function solveReversePolarity(): CalcExpression<'yBg' | 'x'>
-export function solveReversePolarity(
-	yBg?: number,
-	x?: number,
-): number | CalcExpression<'yBg' | 'x'> {
-	const yBgRef = ct.reference('yBg')
-	const xRef = ct.reference('x')
-
-	const term = ct.add(
-		ct.pow(yBgRef, APCA_BG_EXP_REVERSE),
-		ct.divide(ct.add(xRef, APCA_OFFSET), APCA_SCALE),
-	)
-	const directSolution = ct.pow(term, APCA_REVERSE_INV_EXP)
-
-	const t = ct.min(ct.divide(xRef, APCA_SMOOTH_THRESHOLD), 1)
-	const blend = ct.pow(ct.sin(ct.multiply(t, Math.PI / 2)), APCA_SMOOTH_POWER)
-	const smoothSolution = ct.add(yBgRef, ct.multiply(ct.subtract(yMinReverse, yBgRef), blend))
-
-	const aboveThreshold = ct.max(0, ct.sign(ct.subtract(xRef, APCA_SMOOTH_THRESHOLD)))
-	const solver = ct.add(
-		ct.multiply(aboveThreshold, directSolution),
-		ct.multiply(ct.subtract(1, aboveThreshold), smoothSolution),
-	)
-
-	if (yBg === undefined || x === undefined) {
-		return solver
-	}
-
-	return solver.toNumber({ yBg, x })
-}
+export const reversePolarity: CalcExpression<'yBg' | 'x'> = ct.lerp(
+	ct.lerp(yBgRef, yMinReverse, smoothingBlend),
+	ct.pow(ct.add(ct.pow(yBgRef, APCA_BG_EXP_REVERSE), contrastDelta), APCA_REVERSE_INV_EXP),
+	aboveThreshold,
+)
 
 export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast' | 'contrastScale'> {
 	const signedContrast = ct.reference('signedContrast')
@@ -127,11 +86,9 @@ export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast' 
 	return ct.clamp(
 		0,
 		ct.add(
-			ct.add(
-				ct.multiply(preferLight, solveReversePolarity().bind({ x })),
-				ct.multiply(preferDark, solveNormalPolarity().bind({ x })),
-			),
-			ct.multiply(isZero, ct.reference('yBg')),
+			ct.multiply(preferLight, reversePolarity.bind({ x })),
+			ct.multiply(preferDark, normalPolarity.bind({ x })),
+			ct.multiply(isZero, yBgRef),
 		),
 		1,
 	)
@@ -143,21 +100,16 @@ export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast' 
  *
  * Formula: max(0, 1.14 * (Y_fg^0.62 - Y_bg^0.65) - 0.027)
  */
-export function createContrastMeasurementReverse(): CalcExpression<'yBg' | 'yFg'> {
-	const yBg = ct.reference('yBg')
-	const yFg = ct.reference('yFg')
-
-	return ct.max(
-		0,
-		ct.subtract(
-			ct.multiply(
-				APCA_SCALE,
-				ct.subtract(ct.pow(yFg, APCA_FG_EXP_REVERSE), ct.pow(yBg, APCA_BG_EXP_REVERSE)),
-			),
-			APCA_OFFSET,
+export const contrastMeasurementReverse: CalcExpression<'yBg' | 'yFg'> = ct.max(
+	0,
+	ct.subtract(
+		ct.multiply(
+			APCA_SCALE,
+			ct.subtract(ct.pow(yFgRef, APCA_FG_EXP_REVERSE), ct.pow(yBgRef, APCA_BG_EXP_REVERSE)),
 		),
-	)
-}
+		APCA_OFFSET,
+	),
+)
 
 /**
  * Measure achieved contrast for normal polarity (dark text on light background).
@@ -165,21 +117,16 @@ export function createContrastMeasurementReverse(): CalcExpression<'yBg' | 'yFg'
  *
  * Formula: max(0, 1.14 * (Y_bg^0.56 - Y_fg^0.57) - 0.027)
  */
-export function createContrastMeasurementNormal(): CalcExpression<'yBg' | 'yFg'> {
-	const yBg = ct.reference('yBg')
-	const yFg = ct.reference('yFg')
-
-	return ct.max(
-		0,
-		ct.subtract(
-			ct.multiply(
-				APCA_SCALE,
-				ct.subtract(ct.pow(yBg, APCA_BG_EXP_NORMAL), ct.pow(yFg, APCA_FG_EXP_NORMAL)),
-			),
-			APCA_OFFSET,
+export const contrastMeasurementNormal: CalcExpression<'yBg' | 'yFg'> = ct.max(
+	0,
+	ct.subtract(
+		ct.multiply(
+			APCA_SCALE,
+			ct.subtract(ct.pow(yBgRef, APCA_BG_EXP_NORMAL), ct.pow(yFgRef, APCA_FG_EXP_NORMAL)),
 		),
-	)
-}
+		APCA_OFFSET,
+	),
+)
 
 /**
  * Contrast solver with automatic polarity inversion.
@@ -202,7 +149,6 @@ export function createContrastSolverWithInversion(): CalcExpression<
 	'yBg' | 'signedContrast' | 'contrastScale' | 'yLight' | 'yDark' | 'lcLight' | 'lcDark'
 > {
 	const signedContrast = ct.reference('signedContrast')
-	const yBg = ct.reference('yBg')
 
 	// Pre-computed clamped Y values (passed as properties from generator)
 	const yLight = ct.reference('yLight')
@@ -228,10 +174,8 @@ export function createContrastSolverWithInversion(): CalcExpression<
 	)
 
 	// Only declare a winner if difference is outside epsilon
-	const lightWinsRaw = ct.max(0, ct.sign(lcDiff)) // 1 if light > dark
-	const darkWinsRaw = ct.max(0, ct.sign(ct.multiply(-1, lcDiff))) // 1 if dark > light
-	const lightWins = ct.multiply(outsideEpsilon, lightWinsRaw) // Only wins if outside epsilon
-	const darkWins = ct.multiply(outsideEpsilon, darkWinsRaw) // Only wins if outside epsilon
+	const lightWins = ct.multiply(outsideEpsilon, ct.max(0, ct.sign(lcDiff))) // Only wins if outside epsilon
+	const darkWins = ct.multiply(outsideEpsilon, ct.max(0, ct.sign(ct.multiply(-1, lcDiff)))) // Only wins if outside epsilon
 	const isTie = ct.subtract(1, ct.max(lightWins, darkWins)) // 1 if within epsilon or equal
 
 	// Preference for tie-breaking (from signed contrast)
@@ -247,18 +191,23 @@ export function createContrastSolverWithInversion(): CalcExpression<
 
 	// Final selection: low contrast uses preference, normal uses comparison
 	const aboveThreshold = ct.subtract(1, bothBelowThreshold)
-	const useLight = ct.add(
-		ct.multiply(bothBelowThreshold, preferLight),
-		ct.multiply(aboveThreshold, useLightNormal),
-	)
-	const useDark = ct.add(
-		ct.multiply(bothBelowThreshold, preferDark),
-		ct.multiply(aboveThreshold, useDarkNormal),
-	)
 
 	// Result: selected Y + fallback to yBg for zero contrast
 	return ct.add(
-		ct.add(ct.multiply(useLight, yLight), ct.multiply(useDark, yDark)),
-		ct.multiply(isZero, yBg),
+		ct.multiply(
+			ct.add(
+				ct.multiply(bothBelowThreshold, preferLight),
+				ct.multiply(aboveThreshold, useLightNormal),
+			),
+			yLight,
+		),
+		ct.multiply(
+			ct.add(
+				ct.multiply(bothBelowThreshold, preferDark),
+				ct.multiply(aboveThreshold, useDarkNormal),
+			),
+			yDark,
+		),
+		ct.multiply(isZero, yBgRef),
 	)
 }

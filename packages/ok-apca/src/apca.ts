@@ -8,7 +8,7 @@ import {
 	COMPARISON_EPSILON,
 	INVERSION_THRESHOLD,
 } from './constants.ts'
-import { createContrastSolver, solveNormalPolarity, solveReversePolarity } from './expressions.ts'
+import { createContrastSolver, normalPolarity, reversePolarity } from './expressions.ts'
 import { clampNumber } from './util.ts'
 
 /**
@@ -42,7 +42,7 @@ function measureNormalContrast(yBg: number, yFg: number): number {
  * with CSS generation.
  */
 function solveTargetYSimple(Y: number, signedContrast: number): number {
-	return createContrastSolver().toNumber({
+	return createContrastSolver().solve({
 		yBg: Y,
 		signedContrast,
 		contrastScale: 100,
@@ -64,8 +64,8 @@ function solveTargetYWithInversion(Y: number, signedContrast: number): number {
 	}
 
 	// Compute both polarity solutions
-	const yLight = clampNumber(0, solveReversePolarity(Y, x), 1)
-	const yDark = clampNumber(0, solveNormalPolarity(Y, x), 1)
+	const yLight = clampNumber(0, reversePolarity.solve({ yBg: Y, x }), 1)
+	const yDark = clampNumber(0, normalPolarity.solve({ yBg: Y, x }), 1)
 
 	// Measure achieved contrast for each
 	const lcLight = measureReverseContrast(Y, yLight)

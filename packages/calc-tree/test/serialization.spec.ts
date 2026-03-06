@@ -110,6 +110,36 @@ describe('serialization', () => {
 		})
 	})
 
+	describe('variadic operations', () => {
+		it('serializes variadic addition', () => {
+			const expr = add(reference('x'), reference('y'), 5)
+			const css = expr.toCss({ x: reference('x'), y: reference('y') })
+			expect(css.expression).toBe('calc(var(--x) + var(--y) + 5)')
+		})
+
+		it('serializes variadic max', () => {
+			const expr = max(reference('x'), 0, reference('y'))
+			const css = expr.toCss({ x: reference('x'), y: reference('y') })
+			expect(css.expression).toBe('max(var(--x), 0, var(--y))')
+		})
+
+		it('serializes variadic min', () => {
+			const expr = min(reference('x'), 100, reference('y'))
+			const css = expr.toCss({ x: reference('x'), y: reference('y') })
+			expect(css.expression).toBe('min(var(--x), 100, var(--y))')
+		})
+
+		it('parenthesizes variadic add inside multiply', () => {
+			const expr = multiply(add(reference('a'), reference('b'), reference('c')), 2)
+			const css = expr.toCss({
+				a: reference('a'),
+				b: reference('b'),
+				c: reference('c'),
+			})
+			expect(css.expression).toBe('calc((var(--a) + var(--b) + var(--c)) * 2)')
+		})
+	})
+
 	describe('unary operations', () => {
 		it('serializes sin', () => {
 			const expr = sin(reference('x'))

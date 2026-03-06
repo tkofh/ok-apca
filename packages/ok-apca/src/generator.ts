@@ -2,13 +2,13 @@ import type { CalcExpression, ColorExpression } from '@ok-apca/calc-tree'
 import * as ct from '@ok-apca/calc-tree'
 import { findGamutSlice, type GamutSlice } from './color.ts'
 import {
-	createContrastMeasurementNormal,
-	createContrastMeasurementReverse,
+	contrastMeasurementNormal,
+	contrastMeasurementReverse,
 	createContrastSolver,
 	createContrastSolverWithInversion,
 	createMaxChromaExpr,
-	solveNormalPolarity,
-	solveReversePolarity,
+	normalPolarity,
+	reversePolarity,
 } from './expressions.ts'
 import type { HueDefinition, InputMode } from './types.ts'
 import { outdent } from './util.ts'
@@ -197,18 +197,18 @@ function buildContrastColorExprWithInversion(
 
 	// Clamp both to valid Y range [0, 1]
 	const yLightExpr = ct
-		.clamp(0, solveReversePolarity().bind({ yBg: yBgRef, x }), 1)
+		.clamp(0, reversePolarity.bind({ yBg: yBgRef, x }), 1)
 		.asProperty(vars.yLight(label))
 	const yDarkExpr = ct
-		.clamp(0, solveNormalPolarity().bind({ yBg: yBgRef, x }), 1)
+		.clamp(0, normalPolarity.bind({ yBg: yBgRef, x }), 1)
 		.asProperty(vars.yDark(label))
 
 	// Measure achieved contrast for each clamped solution
-	const lcLightExpr = createContrastMeasurementReverse()
+	const lcLightExpr = contrastMeasurementReverse
 		.bind({ yBg: yBgRef, yFg: yLightExpr })
 		.asProperty(vars.lcLight(label))
 
-	const lcDarkExpr = createContrastMeasurementNormal()
+	const lcDarkExpr = contrastMeasurementNormal
 		.bind({ yBg: yBgRef, yFg: yDarkExpr })
 		.asProperty(vars.lcDark(label))
 

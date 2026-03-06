@@ -19,13 +19,13 @@ describe('construction', () => {
 	describe('toExpression', () => {
 		it('converts numbers to expressions', () => {
 			const expr = toExpression(42)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(42)
 		})
 
 		it('converts pi', () => {
 			const expr = toExpression(Math.PI)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBeCloseTo(Math.PI)
 		})
 
@@ -44,7 +44,7 @@ describe('construction', () => {
 	describe('reference', () => {
 		it('creates a reference expression', () => {
 			const expr = reference('x')
-			const result = expr.toNumber({ x: 5 })
+			const result = expr.solve({ x: 5 })
 			expect(result).toBe(5)
 		})
 
@@ -61,43 +61,43 @@ describe('construction', () => {
 	describe('binary operations', () => {
 		it('creates add expression', () => {
 			const expr = add(2, 3)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(5)
 		})
 
 		it('creates subtract expression', () => {
 			const expr = subtract(5, 3)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(2)
 		})
 
 		it('creates multiply expression', () => {
 			const expr = multiply(4, 3)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(12)
 		})
 
 		it('creates divide expression', () => {
 			const expr = divide(12, 4)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(3)
 		})
 
 		it('creates pow expression', () => {
 			const expr = pow(2, 3)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(8)
 		})
 
 		it('creates max expression', () => {
 			const expr = max(5, 3)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(5)
 		})
 
 		it('creates min expression', () => {
 			const expr = min(5, 3)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(3)
 		})
 	})
@@ -105,19 +105,19 @@ describe('construction', () => {
 	describe('unary operations', () => {
 		it('creates sin expression', () => {
 			const expr = sin(0)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBeCloseTo(0)
 		})
 
 		it('creates abs expression', () => {
 			const expr = abs(-5)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(5)
 		})
 
 		it('creates sign expression', () => {
 			const expr = sign(-5)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(-1)
 		})
 	})
@@ -125,20 +125,60 @@ describe('construction', () => {
 	describe('clamp', () => {
 		it('creates clamp expression', () => {
 			const expr = clamp(0, 5, 10)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(5)
 		})
 
 		it('clamps to minimum', () => {
 			const expr = clamp(0, -5, 10)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(0)
 		})
 
 		it('clamps to maximum', () => {
 			const expr = clamp(0, 15, 10)
-			const result = expr.toNumber()
+			const result = expr.solve()
 			expect(result).toBe(10)
+		})
+	})
+
+	describe('variadic operations', () => {
+		it('adds three constants', () => {
+			const expr = add(1, 2, 3)
+			expect(expr.solve()).toBe(6)
+		})
+
+		it('adds four constants', () => {
+			const expr = add(1, 2, 3, 4)
+			expect(expr.solve()).toBe(10)
+		})
+
+		it('finds max of three constants', () => {
+			const expr = max(1, 5, 3)
+			expect(expr.solve()).toBe(5)
+		})
+
+		it('finds min of three constants', () => {
+			const expr = min(5, 1, 3)
+			expect(expr.solve()).toBe(1)
+		})
+
+		it('adds three expressions with references', () => {
+			const expr = add(reference('a'), reference('b'), reference('c'))
+			const result = expr.solve({ a: 10, b: 20, c: 30 })
+			expect(result).toBe(60)
+		})
+
+		it('finds max with references', () => {
+			const expr = max(reference('x'), 0, reference('y'))
+			const result = expr.solve({ x: -5, y: 3 })
+			expect(result).toBe(3)
+		})
+
+		it('finds min with references', () => {
+			const expr = min(reference('x'), 100, reference('y'))
+			const result = expr.solve({ x: 50, y: 25 })
+			expect(result).toBe(25)
 		})
 	})
 
@@ -146,7 +186,7 @@ describe('construction', () => {
 		it('merges references from operations', () => {
 			const expr = add(reference('x'), reference('y'))
 			// Needs both x and y to evaluate
-			const result = expr.toNumber({ x: 1, y: 2 })
+			const result = expr.solve({ x: 1, y: 2 })
 			expect(result).toBe(3)
 		})
 
@@ -154,7 +194,7 @@ describe('construction', () => {
 			const x = reference('x')
 			const expr = add(x, x)
 			// Only needs x once
-			const result = expr.toNumber({ x: 5 })
+			const result = expr.solve({ x: 5 })
 			expect(result).toBe(10)
 		})
 
@@ -163,7 +203,7 @@ describe('construction', () => {
 				multiply(reference('a'), reference('b')),
 				subtract(reference('c'), reference('d')),
 			)
-			const result = expr.toNumber({
+			const result = expr.solve({
 				a: 2,
 				b: 3,
 				c: 10,

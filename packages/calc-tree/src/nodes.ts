@@ -128,6 +128,46 @@ export class SignNode extends UnaryNode {
 	protected create = (arg: CalcNode) => new SignNode(arg)
 }
 
+abstract class NaryNode implements CalcNode {
+	abstract readonly kind: string
+	readonly children: CalcNode[]
+
+	constructor(children: CalcNode[]) {
+		this.children = children
+	}
+
+	protected abstract computeReduce(a: number, b: number): number
+	protected abstract readonly identity: number
+	protected abstract formatChildren(serialized: string[]): string
+	protected abstract create(children: CalcNode[]): CalcNode
+
+	substitute(bindings: Record<string, CalcNode>): CalcNode {
+		const children = this.children.map((c) => c.substitute(bindings))
+		if (children.every((c) => ConstantNode.is(c))) {
+			return new ConstantNode(
+				(children as ConstantNode[]).map((c) => c.value).reduce((a, b) => this.computeReduce(a, b)),
+			)
+		}
+		return this.create(children)
+	}
+
+	isConstant(): boolean {
+		return this.children.every((c) => c.isConstant())
+	}
+
+	evaluateConstant(): number {
+		return this.children.map((c) => c.evaluateConstant()).reduce((a, b) => this.computeReduce(a, b))
+	}
+
+	serialize(declarations: Record<string, string>): string {
+		return this.formatChildren(this.children.map((c) => c.serialize(declarations)))
+	}
+
+	needsCalcWrap(): boolean {
+		return false
+	}
+}
+
 abstract class BinaryNode implements CalcNode {
 	abstract readonly kind: string
 	readonly left: CalcNode
@@ -163,7 +203,6 @@ abstract class BinaryNode implements CalcNode {
 		return this.format(this.left.serialize(declarations), this.right.serialize(declarations))
 	}
 
-	// Default: binary operations that are function calls (pow, max, min) don't need calc wrap
 	needsCalcWrap(): boolean {
 		return false
 	}
@@ -175,11 +214,16 @@ abstract class ArithmeticNode extends BinaryNode {
 	}
 }
 
-export class AddNode extends ArithmeticNode {
+export class AddNode extends NaryNode {
 	readonly kind = 'add'
-	protected compute = (a: number, b: number) => a + b
-	protected format = (left: string, right: string) => `${left} + ${right}`
-	protected create = (left: CalcNode, right: CalcNode) => new AddNode(left, right)
+	protected computeReduce = (a: number, b: number) => a + b
+	protected readonly identity = 0
+	protected formatChildren = (serialized: string[]) => serialized.join(' + ')
+	protected create = (children: CalcNode[]) => new AddNode(children)
+
+	override needsCalcWrap(): boolean {
+		return true
+	}
 }
 
 export class SubtractNode extends ArithmeticNode {
@@ -245,18 +289,20 @@ export class SignedPowNode extends BinaryNode {
 	}
 }
 
-export class MaxNode extends BinaryNode {
+export class MaxNode extends NaryNode {
 	readonly kind = 'max'
-	protected compute = Math.max
-	protected format = (left: string, right: string) => `max(${left}, ${right})`
-	protected create = (left: CalcNode, right: CalcNode) => new MaxNode(left, right)
+	protected computeReduce = Math.max
+	protected readonly identity = -Number.POSITIVE_INFINITY
+	protected formatChildren = (serialized: string[]) => `max(${serialized.join(', ')})`
+	protected create = (children: CalcNode[]) => new MaxNode(children)
 }
 
-export class MinNode extends BinaryNode {
+export class MinNode extends NaryNode {
 	readonly kind = 'min'
-	protected compute = Math.min
-	protected format = (left: string, right: string) => `min(${left}, ${right})`
-	protected create = (left: CalcNode, right: CalcNode) => new MinNode(left, right)
+	protected computeReduce = Math.min
+	protected readonly identity = Number.POSITIVE_INFINITY
+	protected formatChildren = (serialized: string[]) => `min(${serialized.join(', ')})`
+	protected create = (children: CalcNode[]) => new MinNode(children)
 }
 
 export class ClampNode implements CalcNode {

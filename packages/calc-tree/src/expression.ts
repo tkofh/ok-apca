@@ -121,7 +121,7 @@ export class CalcExpression<Refs extends string = never> extends BaseExpression<
 	 * Evaluate the expression to a numeric value.
 	 * Throws if the expression contains unbound references after applying bindings.
 	 */
-	toNumber(
+	solve(
 		bindings: [Refs] extends [never]
 			? Record<string, never> | undefined
 			: Record<Refs, ExpressionInput<never>> = {} as Record<string, never>,

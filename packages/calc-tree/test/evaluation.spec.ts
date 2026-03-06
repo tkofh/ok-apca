@@ -5,21 +5,21 @@ describe('evaluation', () => {
 	describe('constant evaluation', () => {
 		it('evaluates constants to numbers', () => {
 			const expr = toExpression(42)
-			const result = expr.toNumber()
+			const result = expr.solve()
 
 			expect(result).toBe(42)
 		})
 
 		it('evaluates negative constants', () => {
 			const expr = toExpression(-3.14)
-			const result = expr.toNumber()
+			const result = expr.solve()
 
 			expect(result).toBeCloseTo(-3.14)
 		})
 
 		it('evaluates zero', () => {
 			const expr = toExpression(0)
-			const result = expr.toNumber()
+			const result = expr.solve()
 
 			expect(result).toBe(0)
 		})
@@ -28,7 +28,7 @@ describe('evaluation', () => {
 	describe('bound evaluation', () => {
 		it('evaluates with all bindings constant', () => {
 			const expr = add(reference('x'), 5)
-			const result = expr.toNumber({ x: 10 })
+			const result = expr.solve({ x: 10 })
 
 			expect(result).toBe(15)
 		})
@@ -36,12 +36,12 @@ describe('evaluation', () => {
 		it('throws for non-constant bindings', () => {
 			const expr = add(reference('x'), 5)
 
-			expect(() => expr.toNumber({ x: reference('runtime') })).toThrow()
+			expect(() => expr.solve({ x: reference('runtime') })).toThrow()
 		})
 
 		it('evaluates multiple bindings', () => {
 			const expr = add(reference('x'), reference('y'))
-			const result = expr.toNumber({
+			const result = expr.solve({
 				x: 10,
 				y: 20,
 			})
@@ -55,7 +55,7 @@ describe('evaluation', () => {
 			// f(x) = (x + 1) * (x - 1) = x^2 - 1
 			const x = reference('x')
 			const expr = multiply(add(x, 1), add(x, -1))
-			const result = expr.toNumber({ x: 5 })
+			const result = expr.solve({ x: 5 })
 
 			expect(result).toBe(24) // 5^2 - 1 = 24
 		})
@@ -63,7 +63,7 @@ describe('evaluation', () => {
 		it('evaluates pow expressions', () => {
 			// f(x, y) = (x^2 + y^2)^0.5
 			const expr = pow(add(pow(reference('x'), 2), pow(reference('y'), 2)), 0.5)
-			const result = expr.toNumber({
+			const result = expr.solve({
 				x: 3,
 				y: 4,
 			})
@@ -74,7 +74,7 @@ describe('evaluation', () => {
 		it('evaluates deeply nested expressions', () => {
 			// ((2 * 3) + (4 * 5)) * ((6 - 2) / 2)
 			const expr = multiply(add(multiply(2, 3), multiply(4, 5)), add(add(6, -2), -2))
-			const result = expr.toNumber()
+			const result = expr.solve()
 
 			// (6 + 20) * 2 = 52
 			expect(result).toBe(52)
@@ -110,21 +110,21 @@ describe('evaluation', () => {
 	describe('simplification', () => {
 		it('folds constant addition', () => {
 			const expr = add(2, 3)
-			const result = expr.toNumber()
+			const result = expr.solve()
 
 			expect(result).toBe(5)
 		})
 
 		it('folds constant multiplication', () => {
 			const expr = multiply(4, 5)
-			const result = expr.toNumber()
+			const result = expr.solve()
 
 			expect(result).toBe(20)
 		})
 
 		it('simplifies nested constants', () => {
 			const expr = add(multiply(2, 3), add(4, 5))
-			const result = expr.toNumber()
+			const result = expr.solve()
 
 			expect(result).toBe(15) // (2*3) + (4+5) = 6 + 9 = 15
 		})
