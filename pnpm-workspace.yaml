@@ -2,9 +2,11 @@ packages:
   - packages/*
 
 onlyBuiltDependencies:
-  - '@parcel/watcher'
+  - "@parcel/watcher"
   - esbuild
   - rolldown
 
 allowedDeprecatedVersions:
-  '@types/parse-path': '7.1.0'
+  "@types/parse-path": "7.1.0"
+  glob: "10.5.0"
+  "unplugin-vue-router": "0.19.2"

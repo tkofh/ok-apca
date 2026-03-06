@@ -32,7 +32,6 @@ const generatedCss = computed(() => defineHue({
 		hue: state.hue,
 		selector: '.preview',
 		contrastColors: [{ label: 'text' }, { label: 'stroke' }],
-		inputMode: 'normalized',
 		noContrastInversion: state.noContrastInversion,
 	}).css)
 

@@ -44,8 +44,7 @@ function measureNormalContrast(yBg: number, yFg: number): number {
 function solveTargetYSimple(Y: number, signedContrast: number): number {
 	return createContrastSolver().solve({
 		yBg: Y,
-		signedContrast,
-		contrastScale: 100,
+		signedContrast: signedContrast / 100,
 	})
 }
 

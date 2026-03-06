@@ -74,9 +74,9 @@ export const reversePolarity: CalcExpression<'yBg' | 'x'> = ct.lerp(
 	aboveThreshold,
 )
 
-export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast' | 'contrastScale'> {
+export function createContrastSolver(): CalcExpression<'yBg' | 'signedContrast'> {
 	const signedContrast = ct.reference('signedContrast')
-	const x = ct.divide(ct.abs(signedContrast), ct.reference('contrastScale'))
+	const x = ct.abs(signedContrast)
 
 	const signVal = ct.sign(signedContrast)
 	const preferLight = ct.max(0, signVal)
@@ -146,10 +146,8 @@ export const contrastMeasurementNormal: CalcExpression<'yBg' | 'yFg'> = ct.max(
  * - Selection based on max(Lc_light, Lc_dark) with preference tie-breaking
  */
 export function createContrastSolverWithInversion(): CalcExpression<
-	'yBg' | 'signedContrast' | 'contrastScale' | 'yLight' | 'yDark' | 'lcLight' | 'lcDark'
+	'yBg' | 'signedContrast' | 'yLight' | 'yDark' | 'lcLight' | 'lcDark'
 > {
-	const signedContrast = ct.reference('signedContrast')
-
 	// Pre-computed clamped Y values (passed as properties from generator)
 	const yLight = ct.reference('yLight')
 	const yDark = ct.reference('yDark')
@@ -160,9 +158,10 @@ export function createContrastSolverWithInversion(): CalcExpression<
 
 	// Check if both contrasts are below threshold (low contrast regime)
 	// In this regime, APCA asymmetry makes comparison unreliable, so use preference
-	const lightBelowThreshold = ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, lcLight))) // 1 if lcLight < threshold
-	const darkBelowThreshold = ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, lcDark))) // 1 if lcDark < threshold
-	const bothBelowThreshold = ct.multiply(lightBelowThreshold, darkBelowThreshold) // 1 if both below threshold
+	const belowThreshold = ct.multiply(
+		ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, lcLight))),
+		ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, lcDark))),
+	) // 1 if both below threshold
 
 	// Compare achieved contrasts (only meaningful when at least one is above threshold)
 	// Use epsilon tolerance to avoid floating-point precision issues
@@ -179,7 +178,7 @@ export function createContrastSolverWithInversion(): CalcExpression<
 	const isTie = ct.subtract(1, ct.max(lightWins, darkWins)) // 1 if within epsilon or equal
 
 	// Preference for tie-breaking (from signed contrast)
-	const signVal = ct.sign(signedContrast)
+	const signVal = ct.sign(ct.reference('signedContrast'))
 	const preferLight = ct.max(0, signVal)
 	const preferDark = ct.max(0, ct.multiply(-1, signVal))
 	const isZero = ct.subtract(1, ct.max(preferLight, preferDark))
@@ -190,24 +189,10 @@ export function createContrastSolverWithInversion(): CalcExpression<
 	const useDarkNormal = ct.max(darkWins, ct.multiply(isTie, preferDark))
 
 	// Final selection: low contrast uses preference, normal uses comparison
-	const aboveThreshold = ct.subtract(1, bothBelowThreshold)
-
 	// Result: selected Y + fallback to yBg for zero contrast
 	return ct.add(
-		ct.multiply(
-			ct.add(
-				ct.multiply(bothBelowThreshold, preferLight),
-				ct.multiply(aboveThreshold, useLightNormal),
-			),
-			yLight,
-		),
-		ct.multiply(
-			ct.add(
-				ct.multiply(bothBelowThreshold, preferDark),
-				ct.multiply(aboveThreshold, useDarkNormal),
-			),
-			yDark,
-		),
+		ct.multiply(ct.lerp(useLightNormal, preferLight, belowThreshold), yLight),
+		ct.multiply(ct.lerp(useDarkNormal, preferDark, belowThreshold), yDark),
 		ct.multiply(isZero, yBgRef),
 	)
 }

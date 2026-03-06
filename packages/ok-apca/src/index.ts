@@ -3,11 +3,11 @@
  */
 
 import { generateHueCss } from './generator.ts'
-import type { ContrastColor, Hue, HueOptions, InputMode } from './types.ts'
+import type { ContrastColor, Hue, HueOptions } from './types.ts'
 
 export { type Color, gamutMap, getMaxChroma } from './color.ts'
 export { computeContrastColor } from './contrast.ts'
-export type { ContrastColor, Hue, HueOptions, InputMode } from './types.ts'
+export type { ContrastColor, Hue, HueOptions } from './types.ts'
 
 const LABEL_REGEX = /^[a-z][a-z0-9_-]*$/i
 
@@ -49,7 +49,6 @@ export function defineHue(options: HueOptions): Hue {
 	const hue = ((options.hue % 360) + 360) % 360
 	const contrastColors: readonly ContrastColor[] = options.contrastColors ?? []
 	const output = options.output ?? 'color'
-	const inputMode: InputMode = options.inputMode ?? 'percentage'
 	const noContrastInversion = options.noContrastInversion ?? false
 	const selector = options.selector
 
@@ -64,7 +63,6 @@ export function defineHue(options: HueOptions): Hue {
 		selector,
 		output,
 		contrastColors,
-		inputMode,
 		noContrastInversion,
 	})
 

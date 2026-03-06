@@ -19,11 +19,13 @@ import { cleanupAll, createTestHarness } from './harness.ts'
 /**
  * Compute the expected color matching CSS behavior:
  * chroma = maxChroma(lightness) * chromaPercentage
+ *
+ * All inputs are normalized (0-1).
  */
 function computeExpectedColor(hue: number, lightness: number, chromaPct: number) {
-	const L = Math.max(0, Math.min(1, lightness / 100))
+	const L = Math.max(0, Math.min(1, lightness))
 	const maxC = getMaxChroma(L, hue)
-	const C = maxC * Math.max(0, Math.min(1, chromaPct / 100))
+	const C = maxC * Math.max(0, Math.min(1, chromaPct))
 	return { hue, lightness: L, chroma: C }
 }
 
@@ -31,15 +33,15 @@ describe('gamutMap parity with CSS', () => {
 	afterEach(() => cleanupAll())
 
 	const testCases = [
-		{ hue: 30, lightness: 50, chroma: 100, label: 'orange at L=50, max chroma' },
-		{ hue: 30, lightness: 70, chroma: 100, label: 'orange at L=70, max chroma' },
-		{ hue: 30, lightness: 30, chroma: 100, label: 'orange at L=30, max chroma' },
-		{ hue: 240, lightness: 50, chroma: 100, label: 'blue at L=50, max chroma' },
-		{ hue: 120, lightness: 60, chroma: 80, label: 'green at L=60, 80% chroma' },
-		{ hue: 0, lightness: 50, chroma: 50, label: 'red at L=50, 50% chroma' },
-		{ hue: 180, lightness: 70, chroma: 60, label: 'cyan at L=70, 60% chroma' },
-		{ hue: 270, lightness: 40, chroma: 100, label: 'purple at L=40, max chroma' },
-		{ hue: 60, lightness: 80, chroma: 100, label: 'yellow at L=80, max chroma' },
+		{ hue: 30, lightness: 0.5, chroma: 1, label: 'orange at L=0.5, max chroma' },
+		{ hue: 30, lightness: 0.7, chroma: 1, label: 'orange at L=0.7, max chroma' },
+		{ hue: 30, lightness: 0.3, chroma: 1, label: 'orange at L=0.3, max chroma' },
+		{ hue: 240, lightness: 0.5, chroma: 1, label: 'blue at L=0.5, max chroma' },
+		{ hue: 120, lightness: 0.6, chroma: 0.8, label: 'green at L=0.6, 80% chroma' },
+		{ hue: 0, lightness: 0.5, chroma: 0.5, label: 'red at L=0.5, 50% chroma' },
+		{ hue: 180, lightness: 0.7, chroma: 0.6, label: 'cyan at L=0.7, 60% chroma' },
+		{ hue: 270, lightness: 0.4, chroma: 1, label: 'purple at L=0.4, max chroma' },
+		{ hue: 60, lightness: 0.8, chroma: 1, label: 'yellow at L=0.8, max chroma' },
 	]
 
 	for (const { hue, lightness, chroma, label } of testCases) {
@@ -74,7 +76,7 @@ describe('findGamutSlice parity with CSS gamut clamping', () => {
 	afterEach(() => cleanupAll())
 
 	const hues = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330]
-	const lightnessLevels = [20, 40, 60, 80]
+	const lightnessLevels = [0.2, 0.4, 0.6, 0.8]
 
 	for (const hue of hues) {
 		it(`produces correct max chroma curve for hue ${hue}`, () => {
@@ -85,13 +87,13 @@ describe('findGamutSlice parity with CSS gamut clamping', () => {
 
 			for (const lightness of lightnessLevels) {
 				harness.setVar('lightness', lightness)
-				harness.setVar('chroma', 100) // Request max chroma
+				harness.setVar('chroma', 1) // Request max chroma
 
 				const cssColor = harness.getColor()
 				const cssChroma = cssColor.get('oklch.c')
 
 				// Compute expected max chroma from TypeScript
-				const expectedMaxChroma = getMaxChroma(lightness / 100, hue)
+				const expectedMaxChroma = getMaxChroma(lightness, hue)
 
 				expect(cssChroma).toBeCloseTo(expectedMaxChroma, 2)
 			}
@@ -105,14 +107,14 @@ describe('computeContrastColor parity with CSS', () => {
 	afterEach(() => cleanupAll())
 
 	const testCases = [
-		{ lightness: 30, chroma: 50, contrast: 60, label: 'dark base, positive contrast' },
-		{ lightness: 70, chroma: 50, contrast: -60, label: 'light base, negative contrast' },
-		{ lightness: 50, chroma: 50, contrast: 40, label: 'mid base, moderate positive' },
-		{ lightness: 50, chroma: 50, contrast: -40, label: 'mid base, moderate negative' },
-		{ lightness: 20, chroma: 80, contrast: 80, label: 'very dark, high contrast' },
-		{ lightness: 80, chroma: 80, contrast: -80, label: 'very light, high negative' },
-		{ lightness: 50, chroma: 50, contrast: 10, label: 'mid base, low contrast' },
-		{ lightness: 50, chroma: 50, contrast: -10, label: 'mid base, low negative' },
+		{ lightness: 0.3, chroma: 0.5, contrast: 60, label: 'dark base, positive contrast' },
+		{ lightness: 0.7, chroma: 0.5, contrast: -60, label: 'light base, negative contrast' },
+		{ lightness: 0.5, chroma: 0.5, contrast: 40, label: 'mid base, moderate positive' },
+		{ lightness: 0.5, chroma: 0.5, contrast: -40, label: 'mid base, moderate negative' },
+		{ lightness: 0.2, chroma: 0.8, contrast: 80, label: 'very dark, high contrast' },
+		{ lightness: 0.8, chroma: 0.8, contrast: -80, label: 'very light, high negative' },
+		{ lightness: 0.5, chroma: 0.5, contrast: 10, label: 'mid base, low contrast' },
+		{ lightness: 0.5, chroma: 0.5, contrast: -10, label: 'mid base, low negative' },
 	]
 
 	for (const { lightness, chroma, contrast, label } of testCases) {
@@ -122,10 +124,10 @@ describe('computeContrastColor parity with CSS', () => {
 			// First compute the base color as CSS does
 			const baseColor = computeExpectedColor(hue, lightness, chroma)
 
-			// Then apply contrast using the TS function
+			// Then apply contrast using the TS function (takes -108 to 108)
 			const tsResult = computeContrastColor(baseColor, contrast)
 
-			// Get result from CSS in browser
+			// Get result from CSS in browser (contrast input is normalized)
 			const harness = createTestHarness({
 				hue,
 				selector: '.test-element',
@@ -133,7 +135,7 @@ describe('computeContrastColor parity with CSS', () => {
 			})
 			harness.setVar('lightness', lightness)
 			harness.setVar('chroma', chroma)
-			harness.setVar('contrast-text', contrast)
+			harness.setVar('contrast-text', contrast / 100)
 
 			const cssColor = harness.getColor('text')
 			const cssLightness = cssColor.get('oklch.l')
@@ -143,9 +145,7 @@ describe('computeContrastColor parity with CSS', () => {
 			expect(tsResult.lightness).toBeCloseTo(cssLightness, 1)
 
 			// Compare chroma - CSS computes: maxChroma(contrastL) * chromaPct
-			// The TS computeContrastColor preserves chroma percentage, so we need to
-			// compute what the CSS would produce
-			const expectedContrastChroma = getMaxChroma(cssLightness, hue) * (chroma / 100)
+			const expectedContrastChroma = getMaxChroma(cssLightness, hue) * chroma
 			expect(cssChroma).toBeCloseTo(expectedContrastChroma, 1)
 
 			harness.cleanup()
@@ -155,15 +155,15 @@ describe('computeContrastColor parity with CSS', () => {
 	// Test across multiple hues
 	const hues = [30, 120, 240, 330]
 	for (const hue of hues) {
-		it(`matches for hue ${hue} with L=40, C=60, contrast=50`, () => {
-			const lightness = 40
-			const chroma = 60
+		it(`matches for hue ${hue} with L=0.4, C=0.6, contrast=50`, () => {
+			const lightness = 0.4
+			const chroma = 0.6
 			const contrast = 50
 
 			// Compute base color as CSS does
 			const baseColor = computeExpectedColor(hue, lightness, chroma)
 
-			// Apply contrast
+			// Apply contrast (TS function takes -108 to 108)
 			const tsResult = computeContrastColor(baseColor, contrast)
 
 			const harness = createTestHarness({
@@ -173,7 +173,7 @@ describe('computeContrastColor parity with CSS', () => {
 			})
 			harness.setVar('lightness', lightness)
 			harness.setVar('chroma', chroma)
-			harness.setVar('contrast-text', contrast)
+			harness.setVar('contrast-text', contrast / 100)
 
 			const cssColor = harness.getColor('text')
 
@@ -182,7 +182,7 @@ describe('computeContrastColor parity with CSS', () => {
 
 			// CSS computes chroma as: maxChroma(contrastL) * chromaPct
 			const cssL = cssColor.get('oklch.l')
-			const expectedChroma = getMaxChroma(cssL, hue) * (chroma / 100)
+			const expectedChroma = getMaxChroma(cssL, hue) * chroma
 			expect(cssColor.get('oklch.c')).toBeCloseTo(expectedChroma, 1)
 
 			harness.cleanup()
@@ -195,8 +195,8 @@ describe('chroma percentage preservation parity', () => {
 
 	it('preserves chroma percentage from base to contrast color', () => {
 		const hue = 240
-		const lightness = 40
-		const chroma = 50 // 50% of max chroma
+		const lightness = 0.4
+		const chroma = 0.5 // 50% of max chroma
 		const contrast = 60
 
 		// CSS computation
@@ -207,7 +207,7 @@ describe('chroma percentage preservation parity', () => {
 		})
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
-		harness.setVar('contrast-text', contrast)
+		harness.setVar('contrast-text', contrast / 100)
 
 		const cssBaseColor = harness.getColor()
 		const cssContrastColor = harness.getColor('text')
@@ -238,7 +238,7 @@ describe('edge case parity', () => {
 
 	it('handles zero chroma identically', () => {
 		const hue = 240
-		const lightness = 50
+		const lightness = 0.5
 		const chroma = 0
 		const contrast = 60
 
@@ -253,7 +253,7 @@ describe('edge case parity', () => {
 		})
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
-		harness.setVar('contrast-text', contrast)
+		harness.setVar('contrast-text', contrast / 100)
 
 		const cssColor = harness.getColor('text')
 
@@ -266,8 +266,8 @@ describe('edge case parity', () => {
 
 	it('handles zero contrast identically', () => {
 		const hue = 240
-		const lightness = 50
-		const chroma = 50
+		const lightness = 0.5
+		const chroma = 0.5
 		const contrast = 0
 
 		const baseColor = computeExpectedColor(hue, lightness, chroma)
@@ -280,7 +280,7 @@ describe('edge case parity', () => {
 		})
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
-		harness.setVar('contrast-text', contrast)
+		harness.setVar('contrast-text', contrast / 100)
 
 		const cssColor = harness.getColor('text')
 
@@ -289,7 +289,7 @@ describe('edge case parity', () => {
 
 		// CSS computes chroma as maxChroma(L) * pct
 		const cssL = cssColor.get('oklch.l')
-		const expectedChroma = getMaxChroma(cssL, hue) * (chroma / 100)
+		const expectedChroma = getMaxChroma(cssL, hue) * chroma
 		expect(cssColor.get('oklch.c')).toBeCloseTo(expectedChroma, 1)
 
 		harness.cleanup()
@@ -297,13 +297,13 @@ describe('edge case parity', () => {
 
 	it('handles extreme lightness values identically', () => {
 		const hue = 240
-		const chroma = 50
+		const chroma = 0.5
 
 		// Very dark
 		{
-			const expected = computeExpectedColor(hue, 5, chroma)
+			const expected = computeExpectedColor(hue, 0.05, chroma)
 			const harness = createTestHarness({ hue, selector: '.test-element' })
-			harness.setVar('lightness', 5)
+			harness.setVar('lightness', 0.05)
 			harness.setVar('chroma', chroma)
 			const cssColor = harness.getColor()
 
@@ -314,9 +314,9 @@ describe('edge case parity', () => {
 
 		// Very light
 		{
-			const expected = computeExpectedColor(hue, 95, chroma)
+			const expected = computeExpectedColor(hue, 0.95, chroma)
 			const harness = createTestHarness({ hue, selector: '.test-element' })
-			harness.setVar('lightness', 95)
+			harness.setVar('lightness', 0.95)
 			harness.setVar('chroma', chroma)
 			const cssColor = harness.getColor()
 

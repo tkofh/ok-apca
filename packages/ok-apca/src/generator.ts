@@ -1,4 +1,4 @@
-import type { CalcExpression, ColorExpression } from '@ok-apca/calc-tree'
+import type { ColorExpression } from '@ok-apca/calc-tree'
 import * as ct from '@ok-apca/calc-tree'
 import { findGamutSlice, type GamutSlice } from './color.ts'
 import {
@@ -10,19 +10,13 @@ import {
 	normalPolarity,
 	reversePolarity,
 } from './expressions.ts'
-import type { HueDefinition, InputMode } from './types.ts'
+import type { HueDefinition } from './types.ts'
 import { outdent } from './util.ts'
 
 const vars = {
 	lightness: 'lightness',
 	chroma: 'chroma',
-	lumNorm: '_lum-norm',
-	chrPct: '_chr-pct',
 	yBg: '_Y-bg',
-
-	lumNormFor: (mode: InputMode) => (mode === 'percentage' ? vars.lumNorm : vars.lightness),
-	chrPctFor: (mode: InputMode) => (mode === 'percentage' ? vars.chrPct : vars.chroma),
-	contrastScaleFor: (mode: InputMode) => (mode === 'percentage' ? 100 : 1),
 
 	contrastInput: (label: string) => `contrast-${label}`,
 	contrastSigned: (label: string) => `_contrast-signed-${label}`,
@@ -42,7 +36,6 @@ const vars = {
 function generatePropertyRules(
 	output: string,
 	labels: readonly string[],
-	inputMode: InputMode,
 	noContrastInversion: boolean,
 ): string {
 	const numeric = (name: string, inherits = false) => outdent`
@@ -61,10 +54,6 @@ function generatePropertyRules(
 	`
 
 	const properties: string[] = [numeric(vars.lightness, true), numeric(vars.chroma, true)]
-
-	if (inputMode === 'percentage') {
-		properties.push(numeric(vars.lumNorm), numeric(vars.chrPct))
-	}
 
 	properties.push(color(vars.output(output), true))
 
@@ -99,32 +88,20 @@ function buildBaseColorExpr(
 	hue: number,
 	slice: GamutSlice,
 	output: string,
-	inputMode: InputMode,
 ): ColorExpression<string> {
-	const isPercentage = inputMode === 'percentage'
+	const lightness = ct.reference(vars.lightness)
+	const chroma = ct.reference(vars.chroma)
 
-	const lumNorm = isPercentage
-		? ct.clamp(0, ct.divide(ct.reference(vars.lightness), 100), 1).asProperty(vars.lumNorm)
-		: ct.reference(vars.lightness)
+	const maxChroma = createMaxChromaExpr(slice).bind({ lightness })
 
-	const chrPct = isPercentage
-		? ct.clamp(0, ct.divide(ct.reference(vars.chroma), 100), 1).asProperty(vars.chrPct)
-		: ct.reference(vars.chroma)
-
-	const maxChroma = createMaxChromaExpr(slice).bind({ lightness: lumNorm })
-
-	// Final chroma = maxChroma * chromaPercentage
-	const chroma = ct.multiply(maxChroma, chrPct)
-
-	// Build the color
-	return ct.oklch(lumNorm, chroma, hue).asProperty(vars.output(output))
+	return ct.oklch(lightness, ct.multiply(maxChroma, chroma), hue).asProperty(vars.output(output))
 }
 
 /**
  * Build expression for Y background (shared across contrast colors).
  */
-function buildYBackgroundExpr(inputMode: InputMode): CalcExpression<string> {
-	return ct.pow(ct.reference(vars.lumNormFor(inputMode)), 3).asProperty(vars.yBg)
+function buildYBackgroundExpr() {
+	return ct.pow(ct.reference(vars.lightness), 3).asProperty(vars.yBg)
 }
 
 /**
@@ -135,21 +112,14 @@ function buildContrastColorExprSimple(
 	hue: number,
 	slice: GamutSlice,
 	output: string,
-	inputMode: InputMode,
 ): ColorExpression<string> {
-	const isPercentage = inputMode === 'percentage'
-
-	// Signed contrast: clamp if percentage mode, otherwise direct
-	const signedContrastExpr = isPercentage
-		? ct
-				.clamp(-108, ct.reference(vars.contrastInput(label)), 108)
-				.asProperty(vars.contrastSigned(label))
-		: ct.reference(vars.contrastInput(label)).asProperty(vars.contrastSigned(label))
+	const signedContrastExpr = ct
+		.reference(vars.contrastInput(label))
+		.asProperty(vars.contrastSigned(label))
 
 	// Target Y from contrast solver
 	const yTargetExpr = createContrastSolver()
 		.bind({
-			contrastScale: vars.contrastScaleFor(inputMode),
 			yBg: ct.reference(vars.yBg),
 			signedContrast: signedContrastExpr,
 		})
@@ -162,7 +132,7 @@ function buildContrastColorExprSimple(
 	const maxChroma = createMaxChromaExpr(slice).bind({ lightness: conLumExpr })
 
 	// Final chroma
-	const chroma = ct.multiply(maxChroma, ct.reference(vars.chrPctFor(inputMode)))
+	const chroma = ct.multiply(maxChroma, ct.reference(vars.chroma))
 
 	// Build the contrast color
 	return ct.oklch(conLumExpr, chroma, hue).asProperty(vars.outputContrast(output, label))
@@ -179,21 +149,15 @@ function buildContrastColorExprWithInversion(
 	hue: number,
 	slice: GamutSlice,
 	output: string,
-	inputMode: InputMode,
 ): ColorExpression<string> {
-	const isPercentage = inputMode === 'percentage'
-	const contrastScale = vars.contrastScaleFor(inputMode)
 	const yBgRef = ct.reference(vars.yBg)
 
-	// Signed contrast: clamp if percentage mode, otherwise direct
-	const signedContrastExpr = isPercentage
-		? ct
-				.clamp(-108, ct.reference(vars.contrastInput(label)), 108)
-				.asProperty(vars.contrastSigned(label))
-		: ct.reference(vars.contrastInput(label)).asProperty(vars.contrastSigned(label))
+	const signedContrastExpr = ct
+		.reference(vars.contrastInput(label))
+		.asProperty(vars.contrastSigned(label))
 
-	// Absolute contrast scaled
-	const x = ct.divide(ct.abs(signedContrastExpr), contrastScale)
+	// Absolute contrast magnitude
+	const x = ct.abs(signedContrastExpr)
 
 	// Clamp both to valid Y range [0, 1]
 	const yLightExpr = ct
@@ -217,7 +181,6 @@ function buildContrastColorExprWithInversion(
 		.bind({
 			yBg: yBgRef,
 			signedContrast: signedContrastExpr,
-			contrastScale,
 			yLight: yLightExpr,
 			yDark: yDarkExpr,
 			lcLight: lcLightExpr,
@@ -232,7 +195,7 @@ function buildContrastColorExprWithInversion(
 	const maxChroma = createMaxChromaExpr(slice).bind({ lightness: conLumExpr })
 
 	// Final chroma
-	const chroma = ct.multiply(maxChroma, ct.reference(vars.chrPctFor(inputMode)))
+	const chroma = ct.multiply(maxChroma, ct.reference(vars.chroma))
 
 	// Build the contrast color
 	return ct.oklch(conLumExpr, chroma, hue).asProperty(vars.outputContrast(output, label))
@@ -247,13 +210,12 @@ function buildContrastColorExpr(
 	hue: number,
 	slice: GamutSlice,
 	output: string,
-	inputMode: InputMode,
 	noContrastInversion: boolean,
 ): ColorExpression<string> {
 	if (noContrastInversion) {
-		return buildContrastColorExprSimple(label, hue, slice, output, inputMode)
+		return buildContrastColorExprSimple(label, hue, slice, output)
 	}
-	return buildContrastColorExprWithInversion(label, hue, slice, output, inputMode)
+	return buildContrastColorExprWithInversion(label, hue, slice, output)
 }
 
 /**
@@ -261,9 +223,9 @@ function buildContrastColorExpr(
  *
  * Accepts a pre-validated `HueDefinition` from `defineHue`.
  *
- * Runtime inputs:
- * - `--lightness` (0-100), `--chroma` (0-100)
- * - `--contrast-{label}` (-108 to 108)
+ * Runtime inputs (all normalized):
+ * - `--lightness` (0–1), `--chroma` (0–1)
+ * - `--contrast-{label}` (-1.08 to 1.08)
  *
  * Outputs:
  * - `--{output}` (e.g., `--color`)
@@ -273,24 +235,24 @@ function buildContrastColorExpr(
  * enabling proper type checking, animation support, and initial values.
  */
 export function generateHueCss(definition: HueDefinition): string {
-	const { hue, selector, output, contrastColors, inputMode, noContrastInversion } = definition
+	const { hue, selector, output, contrastColors, noContrastInversion } = definition
 	const slice = findGamutSlice(hue)
 	const labels = contrastColors.map((c) => c.label)
 
-	const propertyRules = generatePropertyRules(output, labels, inputMode, noContrastInversion)
+	const propertyRules = generatePropertyRules(output, labels, noContrastInversion)
 
 	// Build base color expression
-	const baseColorExpr = buildBaseColorExpr(hue, slice, output, inputMode)
+	const baseColorExpr = buildBaseColorExpr(hue, slice, output)
 	const baseColorCss = baseColorExpr.toCss().toDeclarationBlock()
 
 	// Build Y background if we have contrast colors
 	const yBackgroundCss =
-		contrastColors.length > 0 ? buildYBackgroundExpr(inputMode).toCss().toDeclarationBlock() : ''
+		contrastColors.length > 0 ? buildYBackgroundExpr().toCss().toDeclarationBlock() : ''
 
 	// Build contrast color expressions
 	const contrastColorsCss = contrastColors
 		.map(({ label }) =>
-			buildContrastColorExpr(label, hue, slice, output, inputMode, noContrastInversion)
+			buildContrastColorExpr(label, hue, slice, output, noContrastInversion)
 				.toCss()
 				.toDeclarationBlock(),
 		)

@@ -2,15 +2,6 @@
  * Shared type definitions for ok-apca.
  */
 
-/**
- * Controls how runtime CSS custom property inputs are processed.
- *
- * - `'percentage'` (default): Inputs are 0-100, clamped and normalized to 0-1.
- * - `'normalized'`: Inputs are already 0-1, no clamping or normalization applied.
- *   Use this for closed systems where inputs are guaranteed valid.
- */
-export type InputMode = 'percentage' | 'normalized'
-
 export interface ContrastColor {
 	readonly label: string
 }
@@ -28,11 +19,6 @@ export interface HueOptions {
 	 * @default 'color'
 	 */
 	readonly output?: string
-	/**
-	 * Controls how runtime CSS custom property inputs are processed.
-	 * @default 'percentage'
-	 */
-	readonly inputMode?: InputMode
 	/**
 	 * Disables automatic contrast polarity inversion.
 	 *
@@ -54,7 +40,6 @@ export interface HueDefinition {
 	readonly selector: string
 	readonly output: string
 	readonly contrastColors: readonly ContrastColor[]
-	readonly inputMode: InputMode
 	readonly noContrastInversion: boolean
 }
 
