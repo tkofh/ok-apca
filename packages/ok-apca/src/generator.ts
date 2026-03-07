@@ -56,10 +56,7 @@ function generatePropertyRules(
 	}
 
 	for (const label of labels) {
-		properties.push(
-			numeric(`contrast-${label}`, true),
-			numeric(`_contrast-signed-${label}`),
-		)
+		properties.push(numeric(`contrast-${label}`, true), numeric(`_contrast-signed-${label}`))
 
 		// Inversion properties (only when inversion is enabled)
 		if (!noContrastInversion) {

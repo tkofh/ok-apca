@@ -75,7 +75,7 @@ export const APCA_SMOOTH_POWER = 2.46
  * This prevents floating-point precision issues from causing unexpected
  * polarity flips at boundary conditions.
  */
-export const COMPARISON_EPSILON = 0.001 // ~0.1 Lc units
+export const COMPARISON_EPSILON = 0.01 // ~1 Lc unit
 
 /**
  * Minimum contrast threshold for inversion consideration.
