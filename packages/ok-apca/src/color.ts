@@ -2,6 +2,7 @@ import { getLuminance, inGamut, OKLCH, P3 } from 'colorjs.io/fn'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
+	APCA_BLACK_CLAMP,
 	APCA_FG_EXP_NORMAL,
 	APCA_FG_EXP_REVERSE,
 	APCA_OFFSET,
@@ -198,9 +199,7 @@ export function gamutMap(color: ColorInput): Color {
  * The following are specific to measurement only.
  */
 
-// Black level soft clamp factor
-// biome-ignore lint/suspicious/noApproximativeNumericConstant: w3 spec uses 1.414
-const BLACK_CLAMP = 1.414
+const BLACK_CLAMP = APCA_BLACK_CLAMP
 
 // Minimum delta Y to avoid division issues
 const DELTA_Y_MIN = 0.0005

@@ -57,6 +57,14 @@ export const APCA_SCALE = 1.14
 export const APCA_SMOOTH_THRESHOLD = 0.022
 
 /**
+ * Soft clamp exponent for near-black luminance values.
+ * When Y < APCA_SMOOTH_THRESHOLD, Y is replaced with Y + (threshold - Y)^BLACK_CLAMP.
+ * This prevents division-by-zero and stabilizes contrast near black.
+ */
+// biome-ignore lint/suspicious/noApproximativeNumericConstant: w3 spec uses 1.414
+export const APCA_BLACK_CLAMP = 1.414
+
+/**
  * Pre-computed threshold offset for smoothing calculations.
  * Formula: (APCA_SMOOTH_THRESHOLD + APCA_OFFSET) / APCA_SCALE
  */
@@ -75,7 +83,7 @@ export const APCA_SMOOTH_POWER = 2.46
  * This prevents floating-point precision issues from causing unexpected
  * polarity flips at boundary conditions.
  */
-export const COMPARISON_EPSILON = 0.01 // ~1 Lc unit
+export const COMPARISON_EPSILON = 0.005 // ~0.5 Lc units
 
 /**
  * Minimum contrast threshold for inversion consideration.
