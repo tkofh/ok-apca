@@ -214,12 +214,50 @@ abstract class ArithmeticNode extends BinaryNode {
 	}
 }
 
+function hasNegativeCoefficient(node: CalcNode): boolean {
+	if (ConstantNode.is(node) && node.value < 0) {
+		return true
+	}
+	if (node.kind === 'multiply' || node.kind === 'divide') {
+		const left = (node as MultiplyNode | DivideNode).left
+		return ConstantNode.is(left) && left.value < 0
+	}
+	return false
+}
+
+function serializeNegated(node: CalcNode, declarations: Record<string, string>): string {
+	if (ConstantNode.is(node)) {
+		return formatNumber(-node.value)
+	}
+	const binary = node as MultiplyNode | DivideNode
+	const negatedLeft = new ConstantNode(-(binary.left as ConstantNode).value)
+	const negated =
+		binary.kind === 'multiply'
+			? new MultiplyNode(negatedLeft, binary.right)
+			: new DivideNode(negatedLeft, binary.right)
+	return negated.serialize(declarations)
+}
+
 export class AddNode extends NaryNode {
 	readonly kind = 'add'
 	protected computeReduce = (a: number, b: number) => a + b
 	protected readonly identity = 0
 	protected formatChildren = (serialized: string[]) => serialized.join(' + ')
 	protected create = (children: CalcNode[]) => new AddNode(children)
+
+	override serialize(declarations: Record<string, string>): string {
+		const parts: string[] = []
+		for (const [index, child] of this.children.entries()) {
+			if (index === 0) {
+				parts.push(child.serialize(declarations))
+			} else if (hasNegativeCoefficient(child)) {
+				parts.push(` - ${serializeNegated(child, declarations)}`)
+			} else {
+				parts.push(` + ${child.serialize(declarations)}`)
+			}
+		}
+		return parts.join('')
+	}
 
 	override needsCalcWrap(): boolean {
 		return true
@@ -231,6 +269,14 @@ export class SubtractNode extends ArithmeticNode {
 	protected compute = (a: number, b: number) => a - b
 	protected format = (left: string, right: string) => `${left} - ${right}`
 	protected create = (left: CalcNode, right: CalcNode) => new SubtractNode(left, right)
+
+	override serialize(declarations: Record<string, string>): string {
+		const left = this.left.serialize(declarations)
+		if (hasNegativeCoefficient(this.right)) {
+			return `${left} + ${serializeNegated(this.right, declarations)}`
+		}
+		return `${left} - ${this.right.serialize(declarations)}`
+	}
 }
 
 function wrapIfNeeded(node: CalcNode, serialized: string): string {

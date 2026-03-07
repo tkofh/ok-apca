@@ -173,6 +173,39 @@ describe('Contrast inversion timing', () => {
 			).toBeLessThanOrEqual(bgLightness + 0.01)
 		}
 	})
+
+	it('should not invert until non-inverted path reaches true white (CSS)', () => {
+		const lightness = 0.5
+		const chroma = 0.5
+
+		harness.setVar('lightness', lightness)
+		harness.setVar('chroma', chroma)
+		harnessNoInversion.setVar('lightness', lightness)
+		harnessNoInversion.setVar('chroma', chroma)
+
+		const bgLightness = harness.getColor().get('oklch.l')
+
+		// Find where non-inverted path reaches white
+		let whiteThreshold = 108
+		for (let c = 1; c <= 108; c++) {
+			harnessNoInversion.setVar('contrast-text', c / 100)
+			const noInvL = harnessNoInversion.getColor('text').get('oklch.l')
+			if (noInvL > 0.99) {
+				whiteThreshold = c
+				break
+			}
+		}
+
+		// Inversion should not happen before that point
+		for (let c = 1; c < whiteThreshold; c++) {
+			harness.setVar('contrast-text', c / 100)
+			const invL = harness.getColor('text').get('oklch.l')
+			expect(
+				invL,
+				`contrast ${c}: CSS should go lighter (not invert) before non-inverted reaches white at ${whiteThreshold}`,
+			).toBeGreaterThanOrEqual(bgLightness - 0.01)
+		}
+	})
 })
 
 describe('Multiple contrast colors', () => {

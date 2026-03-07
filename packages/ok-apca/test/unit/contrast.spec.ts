@@ -1,7 +1,7 @@
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { gamutMap, getMaxChroma, measureContrast } from '../../src/color.ts'
-import { computeContrastColor } from '../../src/contrast.ts'
+import { gamutMap, getMaxChroma } from '../../src/color.ts'
+import { computeContrastColor, measureContrast } from '../../src/contrast.ts'
 
 // Arbitraries for OKLCH color components
 const hueArb = fc.double({ min: 0, max: 360, noNaN: true })
@@ -200,6 +200,29 @@ describe('computeContrastColor', () => {
 					withInv.lightness,
 					`contrast ${c}: should go darker (not invert) before non-inverted reaches black at ${blackThreshold}`,
 				).toBeLessThanOrEqual(input.lightness)
+			}
+		})
+
+		it('should not invert until non-inverted path reaches true white', () => {
+			const input = { hue: 240, chroma: 0.15, lightness: 0.5 }
+
+			// Find the contrast at which the non-inverted path reaches white
+			let whiteThreshold = 108
+			for (let c = 1; c <= 108; c++) {
+				const noInv = computeContrastColor(input, c, false)
+				if (noInv.lightness >= 0.999) {
+					whiteThreshold = c
+					break
+				}
+			}
+
+			// Inversion should not happen before the non-inverted path is clamped
+			for (let c = 1; c < whiteThreshold; c++) {
+				const withInv = computeContrastColor(input, c, true)
+				expect(
+					withInv.lightness,
+					`contrast ${c}: should go lighter (not invert) before non-inverted reaches white at ${whiteThreshold}`,
+				).toBeGreaterThanOrEqual(input.lightness)
 			}
 		})
 	})

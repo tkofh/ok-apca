@@ -3,8 +3,7 @@
  */
 
 import Color from 'colorjs.io'
-import { defineHue } from '../../src/index.ts'
-import type { HueOptions } from '../../src/types.ts'
+import { defineHue, type HueOptions } from '../../src/index.ts'
 
 export type TestHarness = ReturnType<typeof createTestHarness>
 

@@ -78,8 +78,8 @@ export abstract class BaseExpression<Refs extends string = never> {
 		>
 	}
 
-	asProperty(name: string): BaseExpression<Refs> {
-		return this.create(new PropertyNode(name, this.node), new Set(this.refs))
+	asProperty<const N extends string>(name: N): BaseExpression<N> {
+		return this.create(new PropertyNode(name, this.node), new Set([name]))
 	}
 
 	/**
@@ -113,8 +113,8 @@ export class CalcExpression<Refs extends string = never> extends BaseExpression<
 		return super.bind(bindings) as CalcExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
 	}
 
-	override asProperty(name: string): CalcExpression<Refs> {
-		return super.asProperty(name) as CalcExpression<Refs>
+	override asProperty<const N extends string>(name: N): CalcExpression<N> {
+		return super.asProperty(name) as CalcExpression<N>
 	}
 
 	/**
@@ -155,7 +155,7 @@ export class ColorExpression<Refs extends string = never> extends BaseExpression
 		return super.bind(bindings) as ColorExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
 	}
 
-	override asProperty(name: string): ColorExpression<Refs> {
-		return super.asProperty(name) as ColorExpression<Refs>
+	override asProperty<const N extends string>(name: N): ColorExpression<N> {
+		return super.asProperty(name) as ColorExpression<N>
 	}
 }

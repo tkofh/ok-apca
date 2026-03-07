@@ -1,3 +1,4 @@
+import { getLuminance, OKLCH } from 'colorjs.io/fn'
 import {
 	type Color,
 	type ColorInput,
@@ -13,8 +14,35 @@ import {
 	contrastSolverWithInversion,
 	normalPolarity,
 	reversePolarity,
+	yDarkRef,
+	yLightRef,
 } from './expressions.ts'
 import { clampNumber } from './util.ts'
+
+/**
+ * Measure APCA contrast between colors.
+ * Returns signed Lc value: positive = dark on light, negative = light on dark.
+ *
+ * Uses the same expression trees as CSS generation, ensuring parity between
+ * JS measurement and generated CSS output.
+ */
+export function measureContrast(baseColor: ColorInput, contrastColor: ColorInput): number {
+	const bgY = getLuminance({ space: OKLCH, coords: toColor(baseColor).coords() })
+	const fgY = getLuminance({ space: OKLCH, coords: toColor(contrastColor).coords() })
+
+	if (
+		!(Number.isFinite(fgY) && Number.isFinite(bgY)) ||
+		Math.min(fgY, bgY) < 0 ||
+		Math.max(fgY, bgY) > 1.1
+	) {
+		return 0
+	}
+
+	if (bgY >= fgY) {
+		return contrastMeasurementNormal.solve({ yBg: bgY, yFg: fgY }) * 100
+	}
+	return -contrastMeasurementReverse.solve({ yBg: bgY, yFg: fgY }) * 100
+}
 
 /**
  * Compute contrast color achieving target APCA Lc value.
@@ -28,11 +56,7 @@ import { clampNumber } from './util.ts'
  * and selects the one that achieves higher absolute contrast. The signed contrast
  * value acts as a preference that breaks ties when both directions achieve equal contrast.
  */
-export function computeContrastColor(
-	color: ColorInput,
-	contrast: number,
-	invert = true,
-): Color {
+export function computeContrastColor(color: ColorInput, contrast: number, invert = true): Color {
 	const { hue, lightness, chroma } = gamutMap(color)
 	const Y = lightness ** 3
 	const clampedContrast = clampNumber(-108, contrast, 108)
@@ -40,16 +64,17 @@ export function computeContrastColor(
 	let targetY: number
 	if (invert) {
 		const contrastMagnitude = Math.abs(clampedContrast) / 100
-		const yLight = clampNumber(0, reversePolarity.solve({ yBg: Y, contrastMagnitude }), 1)
-		const yDark = clampNumber(0, normalPolarity.solve({ yBg: Y, contrastMagnitude }), 1)
-		targetY = contrastSolverWithInversion.solve({
-			yBg: Y,
-			contrast: clampedContrast / 100,
-			yLight,
-			yDark,
-			lcLight: contrastMeasurementReverse.solve({ yBg: Y, yFg: yLight }),
-			lcDark: contrastMeasurementNormal.solve({ yBg: Y, yFg: yDark }),
-		})
+		targetY = contrastSolverWithInversion
+			.bind({
+				lcDark: contrastMeasurementReverse.bind({ yFg: yLightRef }),
+				lcLight: contrastMeasurementNormal.bind({ yFg: yDarkRef }),
+			})
+			.solve({
+				yBg: Y,
+				contrast: clampedContrast / 100,
+				yLight: clampNumber(0, reversePolarity.solve({ yBg: Y, contrastMagnitude }), 1),
+				yDark: clampNumber(0, normalPolarity.solve({ yBg: Y, contrastMagnitude }), 1),
+			})
 	} else {
 		targetY = contrastSolver.solve({
 			yBg: Y,

@@ -5,42 +5,42 @@ describe('property wrapping', () => {
 	describe('basic wrapping', () => {
 		it('wraps expression as property', () => {
 			const expr = multiply(reference('x'), 2)
-			const wrapped = expr.asProperty('doubled')
 
-			// Can still evaluate normally
-			const result = wrapped.solve({ x: 5 })
+			// Evaluate before wrapping
+			const result = expr.solve({ x: 5 })
 			expect(result).toBe(10)
 		})
 
 		it('includes property declaration in CSS output', () => {
-			const expr = multiply(reference('x'), 2).asProperty('doubled')
+			const expr = multiply(reference('x'), 2)
+				.bind({ x: reference('runtime') })
+				.asProperty('doubled')
 
-			const css = expr.toCss({ x: reference('runtime') })
+			const css = expr.toCss()
 
 			expect(css.expression).toBe('var(--doubled)')
 			expect(css.declarations).toHaveProperty('--doubled')
 			expect(css.declarations['--doubled']).toBe('calc(var(--runtime) * 2)')
 		})
 
-		it('preserves references through property wrapping', () => {
+		it('leaves unbound references as CSS variables', () => {
 			const expr = add(reference('x'), reference('y')).asProperty('sum')
 
-			// Should still require both x and y
-			const result = expr.solve({
-				x: 5,
-				y: 10,
-			})
+			const css = expr.toCss()
 
-			expect(result).toBe(15)
+			expect(css.expression).toBe('var(--sum)')
+			expect(css.declarations['--sum']).toBe('calc(var(--x) + var(--y))')
 		})
 	})
 
 	describe('nested properties', () => {
 		it('handles nested properties', () => {
-			const inner = multiply(reference('x'), 2).asProperty('doubled')
+			const inner = multiply(reference('x'), 2)
+				.bind({ x: reference('runtime') })
+				.asProperty('doubled')
 			const outer = add(inner, 5).asProperty('result')
 
-			const css = outer.toCss({ x: reference('runtime') })
+			const css = outer.toCss()
 
 			expect(css.expression).toBe('var(--result)')
 			expect(css.declarations).toHaveProperty('--doubled')
@@ -54,10 +54,7 @@ describe('property wrapping', () => {
 			const ySquared = pow(reference('y'), 2).asProperty('y-squared')
 			const distance = pow(add(xSquared, ySquared), 0.5).asProperty('distance')
 
-			const css = distance.toCss({
-				x: reference('x'),
-				y: reference('y'),
-			})
+			const css = distance.toCss()
 
 			expect(css.expression).toBe('var(--distance)')
 			expect(Object.keys(css.declarations)).toHaveLength(3)
@@ -67,11 +64,13 @@ describe('property wrapping', () => {
 		})
 
 		it('collects declarations in correct order', () => {
-			const a = reference('x').asProperty('a')
+			const a = reference('x')
+				.bind({ x: reference('input') })
+				.asProperty('a')
 			const b = add(a, 1).asProperty('b')
 			const c = multiply(b, 2).asProperty('c')
 
-			const css = c.toCss({ x: reference('input') })
+			const css = c.toCss()
 
 			// All three properties should be declared
 			expect(css.declarations['--a']).toBe('var(--input)')
@@ -87,7 +86,7 @@ describe('property wrapping', () => {
 			const expr = add(prop1, prop2)
 
 			expect(() => {
-				expr.toCss({ x: reference('a'), y: reference('b') })
+				expr.toCss()
 			}).toThrow(/property.*--value.*multiple times/i)
 		})
 
@@ -95,10 +94,10 @@ describe('property wrapping', () => {
 			const shared = reference('x').asProperty('shared')
 			const expr = add(shared, shared)
 
-			const css = expr.toCss({ x: reference('runtime') })
+			const css = expr.toCss()
 
 			expect(css.expression).toBe('calc(var(--shared) + var(--shared))')
-			expect(css.declarations['--shared']).toBe('var(--runtime)')
+			expect(css.declarations['--shared']).toBe('var(--x)')
 		})
 
 		it('allows same property when resolved to same constant', () => {
@@ -113,50 +112,39 @@ describe('property wrapping', () => {
 	})
 
 	describe('binding with properties', () => {
-		it('binding works with wrapped properties', () => {
-			const inner = add(reference('x'), reference('y')).asProperty('sum')
+		it('binding works before property wrapping', () => {
+			const inner = add(reference('x'), reference('y')).bind({ x: 5, y: 10 }).asProperty('sum')
 			const expr = multiply(inner, reference('z'))
 
-			const bound = expr.bind({ x: 5 })
-			const result = bound.solve({
-				y: 10,
-				z: 2,
-			})
+			const result = expr.solve({ z: 2 })
 
 			expect(result).toBe(30) // (5 + 10) * 2
 		})
 
 		it('binding updates property declarations', () => {
-			const inner = add(reference('x'), reference('y')).asProperty('sum')
+			const inner = add(reference('x'), reference('y')).bind({ x: 5 }).asProperty('sum')
 			const expr = multiply(inner, 2)
 
-			const bound = expr.bind({ x: 5 })
-			const css = bound.toCss({ y: reference('runtime') })
+			const css = expr.toCss()
 
-			expect(css.declarations['--sum']).toBe('calc(5 + var(--runtime))')
+			expect(css.declarations['--sum']).toBe('calc(5 + var(--y))')
 		})
 	})
 
 	describe('integration', () => {
 		it('generates CSS with complex nested properties', () => {
-			// Build a quadratic: ax^2 + bx + c
 			const xSquared = pow(reference('x'), 2).asProperty('x2')
 			const axSquared = multiply(reference('a'), xSquared).asProperty('ax2')
 			const bx = multiply(reference('b'), reference('x')).asProperty('bx')
 			const quadratic = add(axSquared, bx, reference('c')).asProperty('quadratic')
 
-			const css = quadratic.toCss({
-				a: 1,
-				b: -3,
-				c: 2,
-				x: reference('input'),
-			})
+			const css = quadratic.toCss()
 
 			expect(css.expression).toBe('var(--quadratic)')
-			expect(css.declarations['--x2']).toBe('pow(var(--input), 2)')
-			expect(css.declarations['--ax2']).toBe('calc(1 * var(--x2))')
-			expect(css.declarations['--bx']).toBe('calc(-3 * var(--input))')
-			expect(css.declarations['--quadratic']).toBe('calc(var(--ax2) + var(--bx) + 2)')
+			expect(css.declarations['--x2']).toBe('pow(var(--x), 2)')
+			expect(css.declarations['--ax2']).toBe('calc(var(--a) * var(--x2))')
+			expect(css.declarations['--bx']).toBe('calc(var(--b) * var(--x))')
+			expect(css.declarations['--quadratic']).toBe('calc(var(--ax2) + var(--bx) + var(--c))')
 		})
 	})
 })

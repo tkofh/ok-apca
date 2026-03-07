@@ -1,6 +1,6 @@
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { measureContrast } from '../../src/color.ts'
+import { measureContrast } from '../../src/contrast.ts'
 
 // Arbitraries for OKLCH color components
 const hueArb = fc.double({ min: 0, max: 360, noNaN: true })
