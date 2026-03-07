@@ -1,6 +1,15 @@
 import { getLuminance, inGamut, OKLCH, P3 } from 'colorjs.io/fn'
-import { GAMUT_SINE_CURVATURE_EXPONENT } from './constants.ts'
-import { createMaxChromaExpr } from './expressions.ts'
+import {
+	APCA_BG_EXP_NORMAL,
+	APCA_BG_EXP_REVERSE,
+	APCA_FG_EXP_NORMAL,
+	APCA_FG_EXP_REVERSE,
+	APCA_OFFSET,
+	APCA_SCALE,
+	APCA_SMOOTH_THRESHOLD,
+	GAMUT_SINE_CURVATURE_EXPONENT,
+} from './constants.ts'
+import { maxChroma } from './expressions.ts'
 import { clampNumber } from './util.ts'
 
 export interface GamutApex {
@@ -30,10 +39,6 @@ class Color implements ColorCoords {
 	readonly lightness: number
 	readonly chroma: number
 	readonly hue: number
-
-	get luminance(): number {
-		return getLuminance({ space: OKLCH, coords: [this.lightness, this.chroma, this.hue] })
-	}
 
 	constructor({ lightness, chroma, hue }: ColorCoords) {
 		this.lightness = clampNumber(0, lightness, 1)
@@ -146,18 +151,23 @@ export function findGamutSlice(hue: number): GamutSlice {
  * Uses the shared expression tree from expressions.ts to ensure parity
  * with CSS generation.
  */
-export function computeMaxChroma(L: number, slice: GamutSlice): number {
+export function computeMaxChroma(lightness: number, slice: GamutSlice): number {
 	const { apex } = slice
 
 	// Edge cases not handled by the expression (division by zero)
-	if (L <= 0 || L >= 1) {
+	if (lightness <= 0 || lightness >= 1) {
 		return 0
 	}
 	if (apex.lightness <= 0 || apex.lightness >= 1) {
 		return 0
 	}
 
-	return createMaxChromaExpr(slice).solve({ lightness: L })
+	return maxChroma.solve({
+		lightness,
+		apexL: slice.apex.lightness,
+		apexC: slice.apex.chroma,
+		curvature: slice.curvature,
+	})
 }
 
 /**
@@ -181,4 +191,65 @@ export function gamutMap(color: ColorInput): Color {
 		chroma: clampNumber(0, chroma, computeMaxChroma(lightness, findGamutSlice(hue))),
 		lightness,
 	})
+}
+
+/**
+ * APCA 0.0.98G constants (W3 version)
+ * The following are specific to measurement only.
+ */
+
+// Black level soft clamp factor
+// biome-ignore lint/suspicious/noApproximativeNumericConstant: w3 spec uses 1.414
+const BLACK_CLAMP = 1.414
+
+// Minimum delta Y to avoid division issues
+const DELTA_Y_MIN = 0.0005
+
+// Low contrast clipping threshold
+const LOW_CLIP = 0.1
+
+function colorLuminance(color: ColorInput): number {
+	const { lightness, chroma, hue } = toColor(color)
+	return getLuminance({ space: OKLCH, coords: [lightness, chroma, hue] })
+}
+
+/**
+ * Measure APCA contrast between colors.
+ * Returns signed Lc value: positive = dark on light, negative = light on dark.
+ */
+export function measureContrast(baseColor: ColorInput, contrastColor: ColorInput): number {
+	let bgY = colorLuminance(baseColor)
+	let fgY = colorLuminance(contrastColor)
+
+	// Input validation
+	if (
+		!(Number.isFinite(fgY) && Number.isFinite(bgY)) ||
+		Math.min(fgY, bgY) < 0 ||
+		Math.max(fgY, bgY) > 1.1
+	) {
+		return 0
+	}
+
+	// Soft clamp black levels
+	fgY = fgY > APCA_SMOOTH_THRESHOLD ? fgY : fgY + (APCA_SMOOTH_THRESHOLD - fgY) ** BLACK_CLAMP
+	bgY = bgY > APCA_SMOOTH_THRESHOLD ? bgY : bgY + (APCA_SMOOTH_THRESHOLD - bgY) ** BLACK_CLAMP
+
+	// Return 0 for extremely low delta Y
+	if (Math.abs(bgY - fgY) < DELTA_Y_MIN) {
+		return 0
+	}
+
+	let outputContrast: number
+
+	if (bgY > fgY) {
+		// Normal polarity: dark text on light background (BoW)
+		const sapc = (bgY ** APCA_BG_EXP_NORMAL - fgY ** APCA_FG_EXP_NORMAL) * APCA_SCALE
+		outputContrast = sapc < LOW_CLIP ? 0 : sapc - APCA_OFFSET
+	} else {
+		// Reverse polarity: light text on dark background (WoB)
+		const sapc = (bgY ** APCA_BG_EXP_REVERSE - fgY ** APCA_FG_EXP_REVERSE) * APCA_SCALE
+		outputContrast = sapc > -LOW_CLIP ? 0 : sapc + APCA_OFFSET
+	}
+
+	return outputContrast * 100
 }

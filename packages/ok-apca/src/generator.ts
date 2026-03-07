@@ -1,37 +1,31 @@
-import type { ColorExpression } from '@ok-apca/calc-tree'
 import * as ct from '@ok-apca/calc-tree'
 import { findGamutSlice, type GamutSlice } from './color.ts'
 import {
 	contrastMeasurementNormal,
 	contrastMeasurementReverse,
 	contrastSolver,
-	createContrastSolverWithInversion,
-	createMaxChromaExpr,
+	contrastSolverWithInversion,
+	maxChroma,
 	normalPolarity,
 	reversePolarity,
 } from './expressions.ts'
-import type { HueDefinition } from './types.ts'
 import { outdent } from './util.ts'
 
-const vars = {
-	lightness: 'lightness',
-	chroma: 'chroma',
-	yBg: '_Y-bg',
-
-	contrastInput: (label: string) => `contrast-${label}`,
-	contrastSigned: (label: string) => `_contrast-signed-${label}`,
-	yTarget: (label: string) => `_Y-target-${label}`,
-	conLum: (label: string) => `_con-lum-${label}`,
-
-	// Inversion-specific properties
-	yLight: (label: string) => `_Y-light-${label}`,
-	yDark: (label: string) => `_Y-dark-${label}`,
-	lcLight: (label: string) => `_Lc-light-${label}`,
-	lcDark: (label: string) => `_Lc-dark-${label}`,
-
-	output: (name: string) => name,
-	outputContrast: (name: string, label: string) => `${name}-${label}`,
+export interface ContrastColor {
+	readonly label: string
 }
+
+export interface HueDefinition {
+	readonly hue: number
+	readonly selector: string
+	readonly output: string
+	readonly contrastColors: readonly ContrastColor[]
+	readonly noContrastInversion: boolean
+}
+
+const lightnessRef = ct.reference('lightness')
+const chromaRef = ct.reference('chroma')
+const yBgRef = ct.reference('_Y-bg')
 
 function generatePropertyRules(
 	output: string,
@@ -53,55 +47,63 @@ function generatePropertyRules(
 		}
 	`
 
-	const properties: string[] = [numeric(vars.lightness, true), numeric(vars.chroma, true)]
+	const properties: string[] = [numeric('lightness', true), numeric('chroma', true)]
 
-	properties.push(color(vars.output(output), true))
+	properties.push(color(output, true))
 
 	if (labels.length > 0) {
-		properties.push(numeric(vars.yBg))
+		properties.push(numeric('_Y-bg'))
 	}
 
 	for (const label of labels) {
-		properties.push(numeric(vars.contrastInput(label), true), numeric(vars.contrastSigned(label)))
+		properties.push(
+			numeric(`contrast-${label}`, true),
+			numeric(`_contrast-signed-${label}`),
+		)
 
 		// Inversion properties (only when inversion is enabled)
 		if (!noContrastInversion) {
 			properties.push(
-				numeric(vars.yLight(label)),
-				numeric(vars.yDark(label)),
-				numeric(vars.lcLight(label)),
-				numeric(vars.lcDark(label)),
+				numeric(`_Y-light-${label}`),
+				numeric(`_Y-dark-${label}`),
+				numeric(`_Lc-light-${label}`),
+				numeric(`_Lc-dark-${label}`),
 			)
 		}
 
 		properties.push(
-			numeric(vars.yTarget(label)),
-			numeric(vars.conLum(label)),
-			color(vars.outputContrast(output, label), true),
+			numeric(`_Y-target-${label}`),
+			numeric(`_con-lum-${label}`),
+			color(`${output}-${label}`, true),
 		)
 	}
 
 	return properties.join('\n')
 }
 
-function buildBaseColorExpr(
-	hue: number,
-	slice: GamutSlice,
-	output: string,
-): ColorExpression<string> {
-	const lightness = ct.reference(vars.lightness)
-	const chroma = ct.reference(vars.chroma)
-
-	const maxChroma = createMaxChromaExpr(slice).bind({ lightness })
-
-	return ct.oklch(lightness, ct.multiply(maxChroma, chroma), hue).asProperty(vars.output(output))
+function buildBaseColorExpr(hue: number, slice: GamutSlice, output: string) {
+	return ct
+		.oklch(
+			lightnessRef,
+			ct.multiply(
+				maxChroma.bind({
+					lightness: lightnessRef,
+					apexL: slice.apex.lightness,
+					apexC: slice.apex.chroma,
+					curvature: slice.curvature,
+				}),
+				chromaRef,
+			),
+			hue,
+		)
+		.asProperty(output)
 }
 
 /**
  * Build expression for Y background (shared across contrast colors).
  */
 function buildYBackgroundExpr() {
-	return ct.pow(ct.reference(vars.lightness), 3).asProperty(vars.yBg)
+	return ct.pow(lightnessRef, 3).asProperty('_Y-bg')
 }
 
 /**
@@ -112,30 +114,38 @@ function buildContrastColorExprSimple(
 	hue: number,
 	slice: GamutSlice,
 	output: string,
-): ColorExpression<string> {
-	const signedContrastExpr = ct
-		.reference(vars.contrastInput(label))
-		.asProperty(vars.contrastSigned(label))
+) {
+	const contrastInputRef = ct.reference(`contrast-${label}`)
+
+	const signedContrastExpr = contrastInputRef.asProperty(`_contrast-signed-${label}`)
 
 	// Target Y from contrast solver
 	const yTargetExpr = contrastSolver
 		.bind({
-			yBg: ct.reference(vars.yBg),
+			yBg: yBgRef,
 			contrast: signedContrastExpr,
 		})
-		.asProperty(vars.yTarget(label))
+		.asProperty(`_Y-target-${label}`)
 
 	// Convert Y to lightness
-	const conLumExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(vars.conLum(label))
-
-	// Max chroma at contrast lightness
-	const maxChroma = createMaxChromaExpr(slice).bind({ lightness: conLumExpr })
-
-	// Final chroma
-	const chroma = ct.multiply(maxChroma, ct.reference(vars.chroma))
+	const conLumExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(`_con-lum-${label}`)
 
 	// Build the contrast color
-	return ct.oklch(conLumExpr, chroma, hue).asProperty(vars.outputContrast(output, label))
+	return ct
+		.oklch(
+			conLumExpr,
+			ct.multiply(
+				maxChroma.bind({
+					lightness: conLumExpr,
+					apexL: slice.apex.lightness,
+					apexC: slice.apex.chroma,
+					curvature: slice.curvature,
+				}),
+				chromaRef,
+			),
+			hue,
+		)
+		.asProperty(`${output}-${label}`)
 }
 
 /**
@@ -149,12 +159,10 @@ function buildContrastColorExprWithInversion(
 	hue: number,
 	slice: GamutSlice,
 	output: string,
-): ColorExpression<string> {
-	const yBgRef = ct.reference(vars.yBg)
+) {
+	const contrastInputRef = ct.reference(`contrast-${label}`)
 
-	const signedContrastExpr = ct
-		.reference(vars.contrastInput(label))
-		.asProperty(vars.contrastSigned(label))
+	const signedContrastExpr = contrastInputRef.asProperty(`_contrast-signed-${label}`)
 
 	// Absolute contrast magnitude
 	const x = ct.abs(signedContrastExpr)
@@ -162,22 +170,22 @@ function buildContrastColorExprWithInversion(
 	// Clamp both to valid Y range [0, 1]
 	const yLightExpr = ct
 		.clamp(0, reversePolarity.bind({ yBg: yBgRef, x }), 1)
-		.asProperty(vars.yLight(label))
+		.asProperty(`_Y-light-${label}`)
 	const yDarkExpr = ct
 		.clamp(0, normalPolarity.bind({ yBg: yBgRef, x }), 1)
-		.asProperty(vars.yDark(label))
+		.asProperty(`_Y-dark-${label}`)
 
 	// Measure achieved contrast for each clamped solution
 	const lcLightExpr = contrastMeasurementReverse
 		.bind({ yBg: yBgRef, yFg: yLightExpr })
-		.asProperty(vars.lcLight(label))
+		.asProperty(`_Lc-light-${label}`)
 
 	const lcDarkExpr = contrastMeasurementNormal
 		.bind({ yBg: yBgRef, yFg: yDarkExpr })
-		.asProperty(vars.lcDark(label))
+		.asProperty(`_Lc-dark-${label}`)
 
 	// Use the inversion solver to select the best Y
-	const yTargetExpr = createContrastSolverWithInversion()
+	const yTargetExpr = contrastSolverWithInversion
 		.bind({
 			yBg: yBgRef,
 			contrast: signedContrastExpr,
@@ -186,19 +194,27 @@ function buildContrastColorExprWithInversion(
 			lcLight: lcLightExpr,
 			lcDark: lcDarkExpr,
 		})
-		.asProperty(vars.yTarget(label))
+		.asProperty(`_Y-target-${label}`)
 
 	// Convert Y to lightness
-	const conLumExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(vars.conLum(label))
-
-	// Max chroma at contrast lightness
-	const maxChroma = createMaxChromaExpr(slice).bind({ lightness: conLumExpr })
-
-	// Final chroma
-	const chroma = ct.multiply(maxChroma, ct.reference(vars.chroma))
+	const conLumExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(`_con-lum-${label}`)
 
 	// Build the contrast color
-	return ct.oklch(conLumExpr, chroma, hue).asProperty(vars.outputContrast(output, label))
+	return ct
+		.oklch(
+			conLumExpr,
+			ct.multiply(
+				maxChroma.bind({
+					lightness: conLumExpr,
+					apexL: slice.apex.lightness,
+					apexC: slice.apex.chroma,
+					curvature: slice.curvature,
+				}),
+				chromaRef,
+			),
+			hue,
+		)
+		.asProperty(`${output}-${label}`)
 }
 
 /**
@@ -211,7 +227,7 @@ function buildContrastColorExpr(
 	slice: GamutSlice,
 	output: string,
 	noContrastInversion: boolean,
-): ColorExpression<string> {
+) {
 	if (noContrastInversion) {
 		return buildContrastColorExprSimple(label, hue, slice, output)
 	}

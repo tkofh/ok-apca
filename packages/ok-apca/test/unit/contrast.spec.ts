@@ -2,7 +2,7 @@ import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { gamutMap, getMaxChroma } from '../../src/color.ts'
 import { computeContrastColor } from '../../src/contrast.ts'
-import { measureContrast } from '../../src/measure.ts'
+import { measureContrast } from '../../src/color.ts'
 
 // Arbitraries for OKLCH color components
 const hueArb = fc.double({ min: 0, max: 360, noNaN: true })

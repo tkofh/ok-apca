@@ -29,7 +29,7 @@ A standalone expression tree library for building CSS `calc()` expressions. It p
 The main library that uses `@ok-apca/calc-tree` to generate CSS for OKLCH colors with APCA contrast. Key modules:
 
 - **`expressions.ts`** - Expression trees for gamut mapping and APCA contrast solving:
-  - `createMaxChromaExpr(slice)` - tent function with sine-based curvature correction
+  - `createmaxChroma(slice)` - tent function with sine-based curvature correction
   - `createContrastSolver()` - solves for target Y given signed contrast value
 
 - **`generator.ts`** - Builds complete CSS from hue definitions:

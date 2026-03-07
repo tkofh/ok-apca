@@ -1,4 +1,3 @@
-import { solveTargetY } from './apca.ts'
 import {
 	type Color,
 	type ColorInput,
@@ -7,6 +6,14 @@ import {
 	gamutMap,
 	toColor,
 } from './color.ts'
+import {
+	contrastMeasurementNormal,
+	contrastMeasurementReverse,
+	contrastSolver,
+	contrastSolverWithInversion,
+	normalPolarity,
+	reversePolarity,
+} from './expressions.ts'
 import { clampNumber } from './util.ts'
 
 /**
@@ -27,11 +34,30 @@ export function computeContrastColor(
 	invert = true,
 ): Color {
 	const { hue, lightness, chroma } = gamutMap(color)
-	const targetLightness = clampNumber(
-		0,
-		solveTargetY(lightness ** 3, clampNumber(-108, signedContrast, 108), invert) ** (1 / 3),
-		1,
-	)
+	const Y = lightness ** 3
+	const clampedContrast = clampNumber(-108, signedContrast, 108)
+
+	let targetY: number
+	if (invert) {
+		const x = Math.abs(clampedContrast) / 100
+		const yLight = clampNumber(0, reversePolarity.solve({ yBg: Y, x }), 1)
+		const yDark = clampNumber(0, normalPolarity.solve({ yBg: Y, x }), 1)
+		targetY = contrastSolverWithInversion.solve({
+			yBg: Y,
+			contrast: clampedContrast / 100,
+			yLight,
+			yDark,
+			lcLight: contrastMeasurementReverse.solve({ yBg: Y, yFg: yLight }),
+			lcDark: contrastMeasurementNormal.solve({ yBg: Y, yFg: yDark }),
+		})
+	} else {
+		targetY = contrastSolver.solve({
+			yBg: Y,
+			contrast: clampedContrast / 100,
+		})
+	}
+
+	const targetLightness = clampNumber(0, targetY ** (1 / 3), 1)
 
 	// Preserve chroma percentage from base lightness to contrast lightness
 	// Use gamut-mapped chroma to compute percentage (matching CSS behavior)
