@@ -19,7 +19,7 @@ import {
 } from './constants.ts'
 
 const lightnessRef = ct.reference('lightness')
-const xRef = ct.reference('x')
+const contrastMagnitudeRef = ct.reference('contrastMagnitude')
 const yBgRef = ct.reference('yBg')
 const yFgRef = ct.reference('yFg')
 const contrastRef = ct.reference('contrast')
@@ -55,16 +55,16 @@ export const maxChroma: CalcExpression<'lightness' | 'apexL' | 'apexC' | 'curvat
 
 // --- Contrast polarity solver ---
 
-const contrastDelta = ct.divide(ct.add(xRef, APCA_OFFSET), APCA_SCALE)
+const contrastDelta = ct.divide(ct.add(contrastMagnitudeRef, APCA_OFFSET), APCA_SCALE)
 
 const smoothingBlend = ct.pow(
-	ct.sin(ct.multiply(ct.min(ct.divide(xRef, APCA_SMOOTH_THRESHOLD), 1), Math.PI / 2)),
+	ct.sin(ct.multiply(ct.min(ct.divide(contrastMagnitudeRef, APCA_SMOOTH_THRESHOLD), 1), Math.PI / 2)),
 	APCA_SMOOTH_POWER,
 )
 
-const aboveSmoothThreshold = ct.max(0, ct.sign(ct.subtract(xRef, APCA_SMOOTH_THRESHOLD)))
+const aboveSmoothThreshold = ct.max(0, ct.sign(ct.subtract(contrastMagnitudeRef, APCA_SMOOTH_THRESHOLD)))
 
-export const normalPolarity: CalcExpression<'yBg' | 'x'> = ct.lerp(
+export const normalPolarity: CalcExpression<'yBg' | 'contrastMagnitude'> = ct.lerp(
 	ct.lerp(
 		yBgRef,
 		ct.signedPow(
@@ -77,7 +77,7 @@ export const normalPolarity: CalcExpression<'yBg' | 'x'> = ct.lerp(
 	aboveSmoothThreshold,
 )
 
-export const reversePolarity: CalcExpression<'yBg' | 'x'> = ct.lerp(
+export const reversePolarity: CalcExpression<'yBg' | 'contrastMagnitude'> = ct.lerp(
 	ct.lerp(
 		yBgRef,
 		ct.pow(
@@ -99,8 +99,8 @@ const contrastIsZero = ct.subtract(1, ct.max(contrastPreferLight, contrastPrefer
 export const contrastSolver: CalcExpression<'yBg' | 'contrast'> = ct.clamp(
 	0,
 	ct.add(
-		ct.multiply(contrastPreferLight, reversePolarity.bind({ x: contrastMagnitude })),
-		ct.multiply(contrastPreferDark, normalPolarity.bind({ x: contrastMagnitude })),
+		ct.multiply(contrastPreferLight, reversePolarity.bind({ contrastMagnitude })),
+		ct.multiply(contrastPreferDark, normalPolarity.bind({ contrastMagnitude })),
 		ct.multiply(contrastIsZero, yBgRef),
 	),
 	1,

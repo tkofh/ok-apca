@@ -85,8 +85,8 @@ async function copyCss() {
 
 				<label>
 					Contrast (signed)
-					<input v-model.number="state.contrast" type="number" min="-108" max="108" step="0.1" />
-					<input v-model.number="state.contrast" type="range" min="-108" max="108" step="0.1" />
+					<input v-model.number="state.contrast" type="number" min="-108" max="108" step="1" />
+					<input v-model.number="state.contrast" type="range" min="-108" max="108" step="1" />
 					<span class="hint">Positive = light text, Negative = dark text</span>
 				</label>
 

@@ -21,7 +21,7 @@ import { clampNumber } from './util.ts'
  * Positive contrast = lighter text, negative = darker text.
  *
  * @param color - The base color to compute contrast from
- * @param signedContrast - Signed contrast value (-108 to 108)
+ * @param contrast - Signed contrast value (-108 to 108)
  * @param invert - Whether to enable automatic polarity inversion (default: true)
  *
  * When inversion is enabled (default), the solver computes both polarity solutions
@@ -30,18 +30,18 @@ import { clampNumber } from './util.ts'
  */
 export function computeContrastColor(
 	color: ColorInput,
-	signedContrast: number,
+	contrast: number,
 	invert = true,
 ): Color {
 	const { hue, lightness, chroma } = gamutMap(color)
 	const Y = lightness ** 3
-	const clampedContrast = clampNumber(-108, signedContrast, 108)
+	const clampedContrast = clampNumber(-108, contrast, 108)
 
 	let targetY: number
 	if (invert) {
-		const x = Math.abs(clampedContrast) / 100
-		const yLight = clampNumber(0, reversePolarity.solve({ yBg: Y, x }), 1)
-		const yDark = clampNumber(0, normalPolarity.solve({ yBg: Y, x }), 1)
+		const contrastMagnitude = Math.abs(clampedContrast) / 100
+		const yLight = clampNumber(0, reversePolarity.solve({ yBg: Y, contrastMagnitude }), 1)
+		const yDark = clampNumber(0, normalPolarity.solve({ yBg: Y, contrastMagnitude }), 1)
 		targetY = contrastSolverWithInversion.solve({
 			yBg: Y,
 			contrast: clampedContrast / 100,

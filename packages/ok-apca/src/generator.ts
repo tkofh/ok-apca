@@ -162,14 +162,14 @@ function buildContrastColorExprWithInversion(
 	const signedContrastExpr = contrastInputRef.asProperty(`_contrast-signed-${label}`)
 
 	// Absolute contrast magnitude
-	const x = ct.abs(signedContrastExpr)
+	const contrastMagnitude = ct.abs(signedContrastExpr)
 
 	// Clamp both to valid Y range [0, 1]
 	const yLightExpr = ct
-		.clamp(0, reversePolarity.bind({ yBg: yBgRef, x }), 1)
+		.clamp(0, reversePolarity.bind({ yBg: yBgRef, contrastMagnitude }), 1)
 		.asProperty(`_Y-light-${label}`)
 	const yDarkExpr = ct
-		.clamp(0, normalPolarity.bind({ yBg: yBgRef, x }), 1)
+		.clamp(0, normalPolarity.bind({ yBg: yBgRef, contrastMagnitude }), 1)
 		.asProperty(`_Y-dark-${label}`)
 
 	// Measure achieved contrast for each clamped solution
