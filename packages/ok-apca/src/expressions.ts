@@ -3,7 +3,6 @@ import * as ct from '@ok-apca/calc-tree'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
-	APCA_BLACK_CLAMP,
 	APCA_FG_EXP_NORMAL,
 	APCA_FG_EXP_REVERSE,
 	APCA_NORMAL_INV_EXP,
@@ -106,19 +105,12 @@ export const contrastSolver: CalcExpression<'yBg' | 'contrast'> = ct.clamp(
 	1,
 )
 
-// Soft black clamp: Y + pow(max(0, threshold - Y), 1.414)
-// When Y >= threshold this is a no-op; when Y < threshold it bumps Y up
-const softClampY = <R extends string>(y: CalcExpression<R>) =>
-	ct.add(y, ct.pow(ct.max(0, ct.subtract(APCA_SMOOTH_THRESHOLD, y)), APCA_BLACK_CLAMP))
-
-const yBgClamped = softClampY(yBgRef)
-const yFgClamped = softClampY(yFgRef)
-
 /**
  * Measure achieved contrast for reverse polarity (light text on dark background).
- * Includes APCA soft black clamp for accuracy near Y=0.
+ * Uses raw Y values (no soft clamp) so the measurement matches what the polarity
+ * solver actually computes, preventing premature inversion decisions.
  *
- * Formula: max(0, 1.14 * (clamp(Y_fg)^0.62 - clamp(Y_bg)^0.65) - 0.027)
+ * Formula: max(0, 1.14 * (Y_fg^0.62 - Y_bg^0.65) - 0.027)
  */
 export const contrastMeasurementReverse: CalcExpression<'yBg' | 'yFg'> = ct.max(
 	0,
@@ -126,8 +118,8 @@ export const contrastMeasurementReverse: CalcExpression<'yBg' | 'yFg'> = ct.max(
 		ct.multiply(
 			APCA_SCALE,
 			ct.subtract(
-				ct.pow(yFgClamped, APCA_FG_EXP_REVERSE),
-				ct.pow(yBgClamped, APCA_BG_EXP_REVERSE),
+				ct.pow(yFgRef, APCA_FG_EXP_REVERSE),
+				ct.pow(yBgRef, APCA_BG_EXP_REVERSE),
 			),
 		),
 		APCA_OFFSET,
@@ -136,9 +128,10 @@ export const contrastMeasurementReverse: CalcExpression<'yBg' | 'yFg'> = ct.max(
 
 /**
  * Measure achieved contrast for normal polarity (dark text on light background).
- * Includes APCA soft black clamp for accuracy near Y=0.
+ * Uses raw Y values (no soft clamp) so the measurement matches what the polarity
+ * solver actually computes, preventing premature inversion decisions.
  *
- * Formula: max(0, 1.14 * (clamp(Y_bg)^0.56 - clamp(Y_fg)^0.57) - 0.027)
+ * Formula: max(0, 1.14 * (Y_bg^0.56 - Y_fg^0.57) - 0.027)
  */
 export const contrastMeasurementNormal: CalcExpression<'yBg' | 'yFg'> = ct.max(
 	0,
@@ -146,8 +139,8 @@ export const contrastMeasurementNormal: CalcExpression<'yBg' | 'yFg'> = ct.max(
 		ct.multiply(
 			APCA_SCALE,
 			ct.subtract(
-				ct.pow(yBgClamped, APCA_BG_EXP_NORMAL),
-				ct.pow(yFgClamped, APCA_FG_EXP_NORMAL),
+				ct.pow(yBgRef, APCA_BG_EXP_NORMAL),
+				ct.pow(yFgRef, APCA_FG_EXP_NORMAL),
 			),
 		),
 		APCA_OFFSET,

@@ -113,6 +113,68 @@ describe('Contrast color computation', () => {
 	})
 })
 
+describe('Contrast inversion timing', () => {
+	let harness: TestHarness
+	let harnessNoInversion: TestHarness
+
+	beforeEach(() => {
+		harness = createTestHarness({
+			hue: 240,
+			selector: '.test-inv',
+			contrastColors: [{ label: 'text' }],
+		})
+		harnessNoInversion = createTestHarness({
+			hue: 240,
+			selector: '.test-noinv',
+			contrastColors: [{ label: 'text' }],
+			noContrastInversion: true,
+		})
+	})
+
+	afterEach(() => {
+		harness.cleanup()
+		harnessNoInversion.cleanup()
+	})
+
+	it('should not invert until non-inverted path reaches true black (CSS)', () => {
+		// Regression: soft clamping in contrast measurement underestimated
+		// dark-direction contrast near Y=0, causing premature polarity inversion.
+		//
+		// At hue=240, L=0.5, negative contrast should keep going darker until
+		// the non-inverted path is fully clamped to black.
+		const lightness = 0.5
+		const chroma = 0.5
+
+		harness.setVar('lightness', lightness)
+		harness.setVar('chroma', chroma)
+		harnessNoInversion.setVar('lightness', lightness)
+		harnessNoInversion.setVar('chroma', chroma)
+
+		const bgLightness = harness.getColor().get('oklch.l')
+
+		// Find where non-inverted path reaches black
+		let blackThreshold = -108
+		for (let c = -1; c >= -108; c--) {
+			harnessNoInversion.setVar('contrast-text', c / 100)
+			const noInvL = harnessNoInversion.getColor('text').get('oklch.l')
+			if (noInvL < 0.01) {
+				blackThreshold = c
+				break
+			}
+		}
+
+		// Inversion should not happen before that point
+		for (let c = -1; c > blackThreshold; c--) {
+			harness.setVar('contrast-text', c / 100)
+			const invL = harness.getColor('text').get('oklch.l')
+			expect(
+				invL,
+				`contrast ${c}: CSS should go darker (not invert) before non-inverted reaches black at ${blackThreshold}`,
+			).toBeLessThanOrEqual(bgLightness + 0.01)
+		}
+	})
+})
+
 describe('Multiple contrast colors', () => {
 	let harness: TestHarness
 

@@ -66,21 +66,21 @@ async function copyCss() {
 			<div class="controls">
 				<label>
 					Hue
-					<input v-model.number="state.hue" type="number" min="0" max="360" step="0.1" />
-					<input v-model.number="state.hue" type="range" min="0" max="360" step="0.1" />
+					<input v-model.number="state.hue" type="number" min="0" max="360" step="1" />
+					<input v-model.number="state.hue" type="range" min="0" max="360" step="1" />
 				</label>
 
 				<label>
 					Chroma (% of max)
-					<input v-model.number="state.chroma" type="number" min="0" max="100" step="0.1" />
-					<input v-model.number="state.chroma" type="range" min="0" max="100" step="0.1" />
+					<input v-model.number="state.chroma" type="number" min="0" max="100" step="1" />
+					<input v-model.number="state.chroma" type="range" min="0" max="100" step="1" />
 					<span class="hint">Percentage of maximum chroma available at current lightness</span>
 				</label>
 
 				<label>
 					Lightness
-					<input v-model.number="state.lightness" type="number" min="0" max="100" step="0.1" />
-					<input v-model.number="state.lightness" type="range" min="0" max="100" step="0.1" />
+					<input v-model.number="state.lightness" type="number" min="0" max="100" step="1" />
+					<input v-model.number="state.lightness" type="range" min="0" max="100" step="1" />
 				</label>
 
 				<label>

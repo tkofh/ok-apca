@@ -173,6 +173,35 @@ describe('computeContrastColor', () => {
 			// Without inversion, negative contrast demands darker (towards 0), clamped if needed
 			expect(result.lightness).toBeLessThanOrEqual(input.lightness)
 		})
+
+		it('should not invert until non-inverted path reaches true black', () => {
+			// Regression: soft clamping in contrast measurement was underestimating
+			// dark-direction contrast near Y=0, causing premature inversion.
+			//
+			// At hue=240, L=0.5, the non-inverted path for negative contrast doesn't
+			// reach true black (L=0) until around contrast -33. Inversion should not
+			// happen before that point.
+			const input = { hue: 240, chroma: 0.15, lightness: 0.5 }
+
+			// Find the contrast at which the non-inverted path reaches black
+			let blackThreshold = -108
+			for (let c = -1; c >= -108; c--) {
+				const noInv = computeContrastColor(input, c, false)
+				if (noInv.lightness <= 0.001) {
+					blackThreshold = c
+					break
+				}
+			}
+
+			// Inversion should not happen before the non-inverted path is clamped
+			for (let c = -1; c > blackThreshold; c--) {
+				const withInv = computeContrastColor(input, c, true)
+				expect(
+					withInv.lightness,
+					`contrast ${c}: should go darker (not invert) before non-inverted reaches black at ${blackThreshold}`,
+				).toBeLessThanOrEqual(input.lightness)
+			}
+		})
 	})
 
 	describe('chroma blending', () => {
