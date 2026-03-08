@@ -19,6 +19,8 @@ import {
 
 export type ExpressionInput<Refs extends string = never> = CalcExpression<Refs> | number
 
+export type InferRefs<T> = T extends CalcExpression<infer R> ? R : never
+
 export function constant(value: number | string): CalcExpression<never> {
 	const num = typeof value === 'string' ? Number(value) : value
 	if (!Number.isFinite(num)) {
@@ -27,13 +29,13 @@ export function constant(value: number | string): CalcExpression<never> {
 	return new CalcExpression(new ConstantNode(num))
 }
 
-export function toExpression<Refs extends string>(
-	input: ExpressionInput<Refs>,
-): CalcExpression<Refs> {
+export function toExpression<A extends ExpressionInput<string>>(
+	input: A,
+): CalcExpression<InferRefs<A>> {
 	if (typeof input === 'number') {
-		return constant(input) as CalcExpression<Refs>
+		return constant(input) as CalcExpression<InferRefs<A>>
 	}
-	return input
+	return input as CalcExpression<InferRefs<A>>
 }
 
 export function reference<Name extends string>(name: Name): CalcExpression<Name> {
@@ -57,21 +59,21 @@ function isConstant(node: unknown): node is ConstantNode {
 	return node instanceof ConstantNode
 }
 
-export function add<A extends string, B extends string>(
-	a: ExpressionInput<A>,
-	b: ExpressionInput<B>,
-): CalcExpression<A | B>
-export function add<A extends string, B extends string, C extends string>(
-	a: ExpressionInput<A>,
-	b: ExpressionInput<B>,
-	c: ExpressionInput<C>,
-): CalcExpression<A | B | C>
-export function add<A extends string, B extends string, C extends string, D extends string>(
-	a: ExpressionInput<A>,
-	b: ExpressionInput<B>,
-	c: ExpressionInput<C>,
-	d: ExpressionInput<D>,
-): CalcExpression<A | B | C | D>
+export function add<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
+	a: A,
+	b: B,
+): CalcExpression<InferRefs<A> | InferRefs<B>>
+export function add<
+	A extends ExpressionInput<string>,
+	B extends ExpressionInput<string>,
+	C extends ExpressionInput<string>,
+>(a: A, b: B, c: C): CalcExpression<InferRefs<A> | InferRefs<B> | InferRefs<C>>
+export function add<
+	A extends ExpressionInput<string>,
+	B extends ExpressionInput<string>,
+	C extends ExpressionInput<string>,
+	D extends ExpressionInput<string>,
+>(a: A, b: B, c: C, d: D): CalcExpression<InferRefs<A> | InferRefs<B> | InferRefs<C> | InferRefs<D>>
 export function add(
 	...args: [ExpressionInput<string>, ExpressionInput<string>, ...ExpressionInput<string>[]]
 ): CalcExpression<string>
@@ -87,10 +89,10 @@ export function add(...args: ExpressionInput<string>[]): CalcExpression<string> 
 	return new CalcExpression(new AddNode(exprs.map((e) => e.node)), mergeRefs(...exprs))
 }
 
-export function subtract<A extends string, B extends string>(
-	left: ExpressionInput<A>,
-	right: ExpressionInput<B>,
-): CalcExpression<A | B> {
+export function subtract<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
+	left: A,
+	right: B,
+): CalcExpression<InferRefs<A> | InferRefs<B>> {
 	const l = toExpression(left)
 	const r = toExpression(right)
 	const node =
@@ -100,10 +102,10 @@ export function subtract<A extends string, B extends string>(
 	return new CalcExpression(node, mergeRefs(l, r))
 }
 
-export function multiply<A extends string, B extends string>(
-	left: ExpressionInput<A>,
-	right: ExpressionInput<B>,
-): CalcExpression<A | B> {
+export function multiply<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
+	left: A,
+	right: B,
+): CalcExpression<InferRefs<A> | InferRefs<B>> {
 	const l = toExpression(left)
 	const r = toExpression(right)
 	const node =
@@ -113,10 +115,10 @@ export function multiply<A extends string, B extends string>(
 	return new CalcExpression(node, mergeRefs(l, r))
 }
 
-export function divide<A extends string, B extends string>(
-	left: ExpressionInput<A>,
-	right: ExpressionInput<B>,
-): CalcExpression<A | B> {
+export function divide<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
+	left: A,
+	right: B,
+): CalcExpression<InferRefs<A> | InferRefs<B>> {
 	const l = toExpression(left)
 	const r = toExpression(right)
 	const node =
@@ -126,10 +128,10 @@ export function divide<A extends string, B extends string>(
 	return new CalcExpression(node, mergeRefs(l, r))
 }
 
-export function pow<A extends string, B extends string>(
-	base: ExpressionInput<A>,
-	exponent: ExpressionInput<B>,
-): CalcExpression<A | B> {
+export function pow<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
+	base: A,
+	exponent: B,
+): CalcExpression<InferRefs<A> | InferRefs<B>> {
 	const b = toExpression(base)
 	const e = toExpression(exponent)
 	const node =
@@ -139,10 +141,10 @@ export function pow<A extends string, B extends string>(
 	return new CalcExpression(node, mergeRefs(b, e))
 }
 
-export function signedPow<A extends string, B extends string>(
-	base: ExpressionInput<A>,
-	exponent: ExpressionInput<B>,
-): CalcExpression<A | B> {
+export function signedPow<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
+	base: A,
+	exponent: B,
+): CalcExpression<InferRefs<A> | InferRefs<B>> {
 	const b = toExpression(base)
 	const e = toExpression(exponent)
 	const node =
@@ -152,39 +154,39 @@ export function signedPow<A extends string, B extends string>(
 	return new CalcExpression(node, mergeRefs(b, e))
 }
 
-export function sin<Refs extends string>(arg: ExpressionInput<Refs>): CalcExpression<Refs> {
+export function sin<A extends ExpressionInput<string>>(arg: A): CalcExpression<InferRefs<A>> {
 	const a = toExpression(arg)
 	const node = isConstant(a.node) ? new ConstantNode(Math.sin(a.node.value)) : new SinNode(a.node)
 	return new CalcExpression(node, new Set(a.refs))
 }
 
-export function abs<Refs extends string>(arg: ExpressionInput<Refs>): CalcExpression<Refs> {
+export function abs<A extends ExpressionInput<string>>(arg: A): CalcExpression<InferRefs<A>> {
 	const a = toExpression(arg)
 	const node = isConstant(a.node) ? new ConstantNode(Math.abs(a.node.value)) : new AbsNode(a.node)
 	return new CalcExpression(node, new Set(a.refs))
 }
 
-export function sign<Refs extends string>(arg: ExpressionInput<Refs>): CalcExpression<Refs> {
+export function sign<A extends ExpressionInput<string>>(arg: A): CalcExpression<InferRefs<A>> {
 	const a = toExpression(arg)
 	const node = isConstant(a.node) ? new ConstantNode(Math.sign(a.node.value)) : new SignNode(a.node)
 	return new CalcExpression(node, new Set(a.refs))
 }
 
-export function max<A extends string, B extends string>(
-	a: ExpressionInput<A>,
-	b: ExpressionInput<B>,
-): CalcExpression<A | B>
-export function max<A extends string, B extends string, C extends string>(
-	a: ExpressionInput<A>,
-	b: ExpressionInput<B>,
-	c: ExpressionInput<C>,
-): CalcExpression<A | B | C>
-export function max<A extends string, B extends string, C extends string, D extends string>(
-	a: ExpressionInput<A>,
-	b: ExpressionInput<B>,
-	c: ExpressionInput<C>,
-	d: ExpressionInput<D>,
-): CalcExpression<A | B | C | D>
+export function max<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
+	a: A,
+	b: B,
+): CalcExpression<InferRefs<A> | InferRefs<B>>
+export function max<
+	A extends ExpressionInput<string>,
+	B extends ExpressionInput<string>,
+	C extends ExpressionInput<string>,
+>(a: A, b: B, c: C): CalcExpression<InferRefs<A> | InferRefs<B> | InferRefs<C>>
+export function max<
+	A extends ExpressionInput<string>,
+	B extends ExpressionInput<string>,
+	C extends ExpressionInput<string>,
+	D extends ExpressionInput<string>,
+>(a: A, b: B, c: C, d: D): CalcExpression<InferRefs<A> | InferRefs<B> | InferRefs<C> | InferRefs<D>>
 export function max(
 	...args: [ExpressionInput<string>, ExpressionInput<string>, ...ExpressionInput<string>[]]
 ): CalcExpression<string>
@@ -199,21 +201,21 @@ export function max(...args: ExpressionInput<string>[]): CalcExpression<string> 
 	return new CalcExpression(new MaxNode(exprs.map((e) => e.node)), mergeRefs(...exprs))
 }
 
-export function min<A extends string, B extends string>(
-	a: ExpressionInput<A>,
-	b: ExpressionInput<B>,
-): CalcExpression<A | B>
-export function min<A extends string, B extends string, C extends string>(
-	a: ExpressionInput<A>,
-	b: ExpressionInput<B>,
-	c: ExpressionInput<C>,
-): CalcExpression<A | B | C>
-export function min<A extends string, B extends string, C extends string, D extends string>(
-	a: ExpressionInput<A>,
-	b: ExpressionInput<B>,
-	c: ExpressionInput<C>,
-	d: ExpressionInput<D>,
-): CalcExpression<A | B | C | D>
+export function min<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
+	a: A,
+	b: B,
+): CalcExpression<InferRefs<A> | InferRefs<B>>
+export function min<
+	A extends ExpressionInput<string>,
+	B extends ExpressionInput<string>,
+	C extends ExpressionInput<string>,
+>(a: A, b: B, c: C): CalcExpression<InferRefs<A> | InferRefs<B> | InferRefs<C>>
+export function min<
+	A extends ExpressionInput<string>,
+	B extends ExpressionInput<string>,
+	C extends ExpressionInput<string>,
+	D extends ExpressionInput<string>,
+>(a: A, b: B, c: C, d: D): CalcExpression<InferRefs<A> | InferRefs<B> | InferRefs<C> | InferRefs<D>>
 export function min(
 	...args: [ExpressionInput<string>, ExpressionInput<string>, ...ExpressionInput<string>[]]
 ): CalcExpression<string>
@@ -228,11 +230,11 @@ export function min(...args: ExpressionInput<string>[]): CalcExpression<string> 
 	return new CalcExpression(new MinNode(exprs.map((e) => e.node)), mergeRefs(...exprs))
 }
 
-export function clamp<A extends string, B extends string, C extends string>(
-	minimum: ExpressionInput<A>,
-	value: ExpressionInput<B>,
-	maximum: ExpressionInput<C>,
-): CalcExpression<A | B | C> {
+export function clamp<
+	A extends ExpressionInput<string>,
+	B extends ExpressionInput<string>,
+	C extends ExpressionInput<string>,
+>(minimum: A, value: B, maximum: C): CalcExpression<InferRefs<A> | InferRefs<B> | InferRefs<C>> {
 	const minExpr = toExpression(minimum)
 	const valExpr = toExpression(value)
 	const maxExpr = toExpression(maximum)
@@ -245,19 +247,19 @@ export function clamp<A extends string, B extends string, C extends string>(
 	return new CalcExpression(node, mergeRefs(minExpr, valExpr, maxExpr))
 }
 
-export function lerp<A extends string, B extends string, T extends string>(
-	a: ExpressionInput<A>,
-	b: ExpressionInput<B>,
-	t: ExpressionInput<T>,
-): CalcExpression<A | B | T> {
+export function lerp<
+	A extends ExpressionInput<string>,
+	B extends ExpressionInput<string>,
+	T extends ExpressionInput<string>,
+>(a: A, b: B, t: T): CalcExpression<InferRefs<A> | InferRefs<B> | InferRefs<T>> {
 	return add(multiply(subtract(1, t), a), multiply(t, b))
 }
 
-export function oklch<L extends string, C extends string, H extends string>(
-	lightness: ExpressionInput<L>,
-	chroma: ExpressionInput<C>,
-	hue: ExpressionInput<H>,
-): ColorExpression<L | C | H> {
+export function oklch<
+	L extends ExpressionInput<string>,
+	C extends ExpressionInput<string>,
+	H extends ExpressionInput<string>,
+>(lightness: L, chroma: C, hue: H): ColorExpression<InferRefs<L> | InferRefs<C> | InferRefs<H>> {
 	const l = toExpression(lightness)
 	const c = toExpression(chroma)
 	const h = toExpression(hue)

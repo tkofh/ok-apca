@@ -153,9 +153,9 @@ describe('Contrast inversion timing', () => {
 		const bgLightness = harness.getColor().get('oklch.l')
 
 		// Find where non-inverted path reaches black
-		let blackThreshold = -108
-		for (let c = -1; c >= -108; c--) {
-			harnessNoInversion.setVar('contrast-text', c / 100)
+		let blackThreshold = -1.08
+		for (let c = -0.01; c >= -1.08; c -= 0.01) {
+			harnessNoInversion.setVar('contrast-text', c)
 			const noInvL = harnessNoInversion.getColor('text').get('oklch.l')
 			if (noInvL < 0.01) {
 				blackThreshold = c
@@ -164,8 +164,8 @@ describe('Contrast inversion timing', () => {
 		}
 
 		// Inversion should not happen before that point
-		for (let c = -1; c > blackThreshold; c--) {
-			harness.setVar('contrast-text', c / 100)
+		for (let c = -0.01; c > blackThreshold; c -= 0.01) {
+			harness.setVar('contrast-text', c)
 			const invL = harness.getColor('text').get('oklch.l')
 			expect(
 				invL,
@@ -186,9 +186,9 @@ describe('Contrast inversion timing', () => {
 		const bgLightness = harness.getColor().get('oklch.l')
 
 		// Find where non-inverted path reaches white
-		let whiteThreshold = 108
-		for (let c = 1; c <= 108; c++) {
-			harnessNoInversion.setVar('contrast-text', c / 100)
+		let whiteThreshold = 1.08
+		for (let c = 0.01; c <= 1.08; c += 0.01) {
+			harnessNoInversion.setVar('contrast-text', c)
 			const noInvL = harnessNoInversion.getColor('text').get('oklch.l')
 			if (noInvL > 0.99) {
 				whiteThreshold = c
@@ -197,8 +197,8 @@ describe('Contrast inversion timing', () => {
 		}
 
 		// Inversion should not happen before that point
-		for (let c = 1; c < whiteThreshold; c++) {
-			harness.setVar('contrast-text', c / 100)
+		for (let c = 0.01; c < whiteThreshold; c += 0.01) {
+			harness.setVar('contrast-text', c)
 			const invL = harness.getColor('text').get('oklch.l')
 			expect(
 				invL,

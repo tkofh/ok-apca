@@ -1,4 +1,4 @@
-export type { ExpressionInput } from './constructors.ts'
+export type { ExpressionInput, InferRefs } from './constructors.ts'
 export {
 	abs,
 	add,

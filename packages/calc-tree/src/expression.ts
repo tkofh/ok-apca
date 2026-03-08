@@ -107,7 +107,7 @@ export class CalcExpression<Refs extends string = never> extends BaseExpression<
 		return new CalcExpression<R>(node, refs)
 	}
 
-	override bind<B extends Partial<Record<Refs, ExpressionInput<string>>>>(
+	override bind<const B extends Partial<Record<Refs, ExpressionInput<string>>>>(
 		bindings: B,
 	): CalcExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>> {
 		return super.bind(bindings) as CalcExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>

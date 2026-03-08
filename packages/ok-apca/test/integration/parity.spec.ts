@@ -107,14 +107,14 @@ describe('computeContrastColor parity with CSS', () => {
 	afterEach(() => cleanupAll())
 
 	const testCases = [
-		{ lightness: 0.3, chroma: 0.5, contrast: 60, label: 'dark base, positive contrast' },
-		{ lightness: 0.7, chroma: 0.5, contrast: -60, label: 'light base, negative contrast' },
-		{ lightness: 0.5, chroma: 0.5, contrast: 40, label: 'mid base, moderate positive' },
-		{ lightness: 0.5, chroma: 0.5, contrast: -40, label: 'mid base, moderate negative' },
-		{ lightness: 0.2, chroma: 0.8, contrast: 80, label: 'very dark, high contrast' },
-		{ lightness: 0.8, chroma: 0.8, contrast: -80, label: 'very light, high negative' },
-		{ lightness: 0.5, chroma: 0.5, contrast: 10, label: 'mid base, low contrast' },
-		{ lightness: 0.5, chroma: 0.5, contrast: -10, label: 'mid base, low negative' },
+		{ lightness: 0.3, chroma: 0.5, contrast: 0.6, label: 'dark base, positive contrast' },
+		{ lightness: 0.7, chroma: 0.5, contrast: -0.6, label: 'light base, negative contrast' },
+		{ lightness: 0.5, chroma: 0.5, contrast: 0.4, label: 'mid base, moderate positive' },
+		{ lightness: 0.5, chroma: 0.5, contrast: -0.4, label: 'mid base, moderate negative' },
+		{ lightness: 0.2, chroma: 0.8, contrast: 0.8, label: 'very dark, high contrast' },
+		{ lightness: 0.8, chroma: 0.8, contrast: -0.8, label: 'very light, high negative' },
+		{ lightness: 0.5, chroma: 0.5, contrast: 0.1, label: 'mid base, low contrast' },
+		{ lightness: 0.5, chroma: 0.5, contrast: -0.1, label: 'mid base, low negative' },
 	]
 
 	for (const { lightness, chroma, contrast, label } of testCases) {
@@ -124,7 +124,7 @@ describe('computeContrastColor parity with CSS', () => {
 			// First compute the base color as CSS does
 			const baseColor = computeExpectedColor(hue, lightness, chroma)
 
-			// Then apply contrast using the TS function (takes -108 to 108)
+			// Then apply contrast using the TS function (takes -1.08 to 1.08)
 			const tsResult = computeContrastColor(baseColor, contrast)
 
 			// Get result from CSS in browser (contrast input is normalized)
@@ -135,7 +135,7 @@ describe('computeContrastColor parity with CSS', () => {
 			})
 			harness.setVar('lightness', lightness)
 			harness.setVar('chroma', chroma)
-			harness.setVar('contrast-text', contrast / 100)
+			harness.setVar('contrast-text', contrast)
 
 			const cssColor = harness.getColor('text')
 			const cssLightness = cssColor.get('oklch.l')
@@ -155,15 +155,15 @@ describe('computeContrastColor parity with CSS', () => {
 	// Test across multiple hues
 	const hues = [30, 120, 240, 330]
 	for (const hue of hues) {
-		it(`matches for hue ${hue} with L=0.4, C=0.6, contrast=50`, () => {
+		it(`matches for hue ${hue} with L=0.4, C=0.6, contrast=0.5`, () => {
 			const lightness = 0.4
 			const chroma = 0.6
-			const contrast = 50
+			const contrast = 0.5
 
 			// Compute base color as CSS does
 			const baseColor = computeExpectedColor(hue, lightness, chroma)
 
-			// Apply contrast (TS function takes -108 to 108)
+			// Apply contrast (TS function takes -1.08 to 1.08)
 			const tsResult = computeContrastColor(baseColor, contrast)
 
 			const harness = createTestHarness({
@@ -173,7 +173,7 @@ describe('computeContrastColor parity with CSS', () => {
 			})
 			harness.setVar('lightness', lightness)
 			harness.setVar('chroma', chroma)
-			harness.setVar('contrast-text', contrast / 100)
+			harness.setVar('contrast-text', contrast)
 
 			const cssColor = harness.getColor('text')
 
@@ -197,7 +197,7 @@ describe('chroma percentage preservation parity', () => {
 		const hue = 240
 		const lightness = 0.4
 		const chroma = 0.5 // 50% of max chroma
-		const contrast = 60
+		const contrast = 0.6
 
 		// CSS computation
 		const harness = createTestHarness({
@@ -207,7 +207,7 @@ describe('chroma percentage preservation parity', () => {
 		})
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
-		harness.setVar('contrast-text', contrast / 100)
+		harness.setVar('contrast-text', contrast)
 
 		const cssBaseColor = harness.getColor()
 		const cssContrastColor = harness.getColor('text')
@@ -240,7 +240,7 @@ describe('edge case parity', () => {
 		const hue = 240
 		const lightness = 0.5
 		const chroma = 0
-		const contrast = 60
+		const contrast = 0.6
 
 		// Base color with zero chroma
 		const baseColor = computeExpectedColor(hue, lightness, chroma)
@@ -253,7 +253,7 @@ describe('edge case parity', () => {
 		})
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
-		harness.setVar('contrast-text', contrast / 100)
+		harness.setVar('contrast-text', contrast)
 
 		const cssColor = harness.getColor('text')
 
@@ -280,7 +280,7 @@ describe('edge case parity', () => {
 		})
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
-		harness.setVar('contrast-text', contrast / 100)
+		harness.setVar('contrast-text', contrast)
 
 		const cssColor = harness.getColor('text')
 
