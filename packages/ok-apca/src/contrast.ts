@@ -59,30 +59,26 @@ export function computeContrastColor(color: ColorInput, contrast: number, invert
 	const Y = lightness ** 3
 	const clampedContrast = clampNumber(-1.08, contrast, 1.08)
 
-	const targetLightness = clampNumber(
-		0,
-		(invert
-			? contrastSolverWithInversion
-					.bind({
-						lcLight: contrastMeasurementReverse.bind({ yFg: yLightRef }),
-						lcDark: contrastMeasurementNormal.bind({ yFg: yDarkRef }),
-					})
-					.bind({
-						yLight: clamp(0, reversePolarity, 1),
-						yDark: clamp(0, normalPolarity, 1),
-					})
-					.solve({
-						yBg: Y,
-						contrast: clampedContrast,
-						contrastMagnitude: Math.abs(clampedContrast),
-					})
-			: contrastSolver.solve({
+	const ySolver = invert
+		? contrastSolverWithInversion
+				.bind({
+					lcLight: contrastMeasurementReverse.bind({ yFg: yLightRef }),
+					lcDark: contrastMeasurementNormal.bind({ yFg: yDarkRef }),
+				})
+				.bind({
+					yLight: clamp(0, reversePolarity, 1),
+					yDark: clamp(0, normalPolarity, 1),
+				})
+				.solve({
 					yBg: Y,
 					contrast: clampedContrast,
-				})) **
-			(1 / 3),
-		1,
-	)
+					contrastMagnitude: Math.abs(clampedContrast),
+				})
+		: contrastSolver.solve({
+				yBg: Y,
+				contrast: clampedContrast,
+			})
+	const targetLightness = clampNumber(0, ySolver ** (1 / 3), 1)
 
 	// Preserve chroma percentage from base lightness to contrast lightness
 	// Use gamut-mapped chroma to compute percentage (matching CSS behavior)
