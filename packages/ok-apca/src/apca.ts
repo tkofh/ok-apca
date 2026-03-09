@@ -17,61 +17,45 @@ import {
 	INVERSION_THRESHOLD,
 } from './constants.ts'
 
-// --- References ---
-
-const contrastMagnitudeRef = ct.reference('contrastMagnitude')
-const yBgRef = ct.reference('yBg')
-const yFgRef = ct.reference('yFg')
-const contrastRef = ct.reference('contrast')
-export const yLightRef = ct.reference('yLight')
-export const yDarkRef = ct.reference('yDark')
-const lcLightRef = ct.reference('lcLight')
-const lcDarkRef = ct.reference('lcDark')
-
 // --- Contrast polarity solver ---
 
-const contrastDelta = ct.divide(ct.add(contrastMagnitudeRef, APCA_OFFSET), APCA_SCALE)
+const absContrast = ct.abs('contrast')
+const contrastDelta = ct.divide(ct.add(absContrast, APCA_OFFSET), APCA_SCALE)
 
 const smoothingBlend = ct.pow(
-	ct.sin(
-		ct.multiply(ct.min(ct.divide(contrastMagnitudeRef, APCA_SMOOTH_THRESHOLD), 1), Math.PI / 2),
-	),
+	ct.sin(ct.multiply(ct.min(ct.divide(absContrast, APCA_SMOOTH_THRESHOLD), 1), Math.PI / 2)),
 	APCA_SMOOTH_POWER,
 )
 
-const aboveSmoothThreshold = ct.max(
-	0,
-	ct.sign(ct.subtract(contrastMagnitudeRef, APCA_SMOOTH_THRESHOLD)),
-)
+const aboveSmoothThreshold = ct.max(0, ct.sign(ct.subtract(absContrast, APCA_SMOOTH_THRESHOLD)))
 
-export const normalPolarity: CalcExpression<'yBg' | 'contrastMagnitude'> = ct.lerp(
+export const normalPolarity: CalcExpression<'yBg' | 'contrast'> = ct.lerp(
 	ct.lerp(
-		yBgRef,
+		'yBg',
 		ct.signedPow(
-			ct.subtract(ct.pow(yBgRef, APCA_BG_EXP_NORMAL), APCA_SMOOTH_THRESHOLD_OFFSET),
+			ct.subtract(ct.pow('yBg', APCA_BG_EXP_NORMAL), APCA_SMOOTH_THRESHOLD_OFFSET),
 			APCA_NORMAL_INV_EXP,
 		),
 		smoothingBlend,
 	),
-	ct.signedPow(ct.subtract(ct.pow(yBgRef, APCA_BG_EXP_NORMAL), contrastDelta), APCA_NORMAL_INV_EXP),
+	ct.signedPow(ct.subtract(ct.pow('yBg', APCA_BG_EXP_NORMAL), contrastDelta), APCA_NORMAL_INV_EXP),
 	aboveSmoothThreshold,
 )
 
-export const reversePolarity: CalcExpression<'yBg' | 'contrastMagnitude'> = ct.lerp(
+export const reversePolarity: CalcExpression<'yBg' | 'contrast'> = ct.lerp(
 	ct.lerp(
-		yBgRef,
+		'yBg',
 		ct.pow(
-			ct.add(ct.pow(yBgRef, APCA_BG_EXP_REVERSE), APCA_SMOOTH_THRESHOLD_OFFSET),
+			ct.add(ct.pow('yBg', APCA_BG_EXP_REVERSE), APCA_SMOOTH_THRESHOLD_OFFSET),
 			APCA_REVERSE_INV_EXP,
 		),
 		smoothingBlend,
 	),
-	ct.pow(ct.add(ct.pow(yBgRef, APCA_BG_EXP_REVERSE), contrastDelta), APCA_REVERSE_INV_EXP),
+	ct.pow(ct.add(ct.pow('yBg', APCA_BG_EXP_REVERSE), contrastDelta), APCA_REVERSE_INV_EXP),
 	aboveSmoothThreshold,
 )
 
-const contrastMagnitude = ct.abs(contrastRef)
-const contrastSign = ct.sign(contrastRef)
+const contrastSign = ct.sign('contrast')
 const contrastPreferLight = ct.max(0, contrastSign)
 const contrastPreferDark = ct.max(0, ct.multiply(-1, contrastSign))
 const contrastIsZero = ct.subtract(1, ct.max(contrastPreferLight, contrastPreferDark))
@@ -79,9 +63,9 @@ const contrastIsZero = ct.subtract(1, ct.max(contrastPreferLight, contrastPrefer
 export const contrastSolver: CalcExpression<'yBg' | 'contrast'> = ct.clamp(
 	0,
 	ct.add(
-		ct.multiply(contrastPreferLight, reversePolarity.bind({ contrastMagnitude })),
-		ct.multiply(contrastPreferDark, normalPolarity.bind({ contrastMagnitude })),
-		ct.multiply(contrastIsZero, yBgRef),
+		ct.multiply(contrastPreferLight, reversePolarity),
+		ct.multiply(contrastPreferDark, normalPolarity),
+		ct.multiply(contrastIsZero, 'yBg'),
 	),
 	1,
 )
@@ -93,8 +77,8 @@ export const contrastSolver: CalcExpression<'yBg' | 'contrast'> = ct.clamp(
 const softClampY = <R extends string>(y: CalcExpression<R>) =>
 	ct.add(y, ct.pow(ct.max(0, ct.subtract(APCA_SMOOTH_THRESHOLD, y)), APCA_BLACK_CLAMP))
 
-const yBgClamped = softClampY(yBgRef)
-const yFgClamped = softClampY(yFgRef)
+const yBgClamped = softClampY(ct.toExpression('yBg'))
+const yFgClamped = softClampY(ct.toExpression('yFg'))
 
 /**
  * Measure achieved contrast for reverse polarity (light text on dark background).
@@ -136,23 +120,23 @@ export const contrastMeasurementNormal: CalcExpression<'yBg' | 'yFg'> = ct.max(
 // (clamped to the boundary). sign(0)=0 and sign(x>0)=1, so:
 // darkNotExhausted = 1 when yDark > 0 (still has room to go darker)
 // lightNotExhausted = 1 when yLight < 1 (still has room to go lighter)
-const darkNotExhausted = ct.max(0, ct.sign(yDarkRef))
-const lightNotExhausted = ct.max(0, ct.sign(ct.subtract(1, yLightRef)))
+const darkNotExhausted = ct.max(0, ct.sign('yDark'))
+const lightNotExhausted = ct.max(0, ct.sign(ct.subtract(1, 'yLight')))
 const preferredNotExhausted = ct.add(
 	ct.multiply(contrastPreferDark, darkNotExhausted),
 	ct.multiply(contrastPreferLight, lightNotExhausted),
 )
 
 const belowInvertThreshold = ct.multiply(
-	ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, lcLightRef))),
-	ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, lcDarkRef))),
+	ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, 'lcLight'))),
+	ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, 'lcDark'))),
 ) // 1 if both below threshold
 
 // Use preference when the preferred direction still has headroom,
 // or when both contrasts are below the inversion threshold
 const usePreference = ct.max(belowInvertThreshold, preferredNotExhausted)
 
-const lcDiff = ct.subtract(lcLightRef, lcDarkRef)
+const lcDiff = ct.subtract('lcLight', 'lcDark')
 
 const outsideEpsilon = ct.subtract(
 	1,
@@ -188,7 +172,7 @@ const useDarkComparison = ct.max(darkWins, ct.multiply(isTie, contrastPreferDark
 export const contrastSolverWithInversion: CalcExpression<
 	'yBg' | 'contrast' | 'yLight' | 'yDark' | 'lcLight' | 'lcDark'
 > = ct.add(
-	ct.multiply(ct.lerp(useLightComparison, contrastPreferLight, usePreference), yLightRef),
-	ct.multiply(ct.lerp(useDarkComparison, contrastPreferDark, usePreference), yDarkRef),
-	ct.multiply(contrastIsZero, yBgRef),
+	ct.multiply(ct.lerp(useLightComparison, contrastPreferLight, usePreference), 'yLight'),
+	ct.multiply(ct.lerp(useDarkComparison, contrastPreferDark, usePreference), 'yDark'),
+	ct.multiply(contrastIsZero, 'yBg'),
 )

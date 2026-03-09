@@ -10,7 +10,6 @@ export {
 	multiply,
 	oklch,
 	pow,
-	reference,
 	sign,
 	signedPow,
 	sin,

@@ -17,9 +17,9 @@ import {
 	SubtractNode,
 } from './nodes.ts'
 
-export type ExpressionInput<Refs extends string = never> = CalcExpression<Refs> | number
+export type ExpressionInput<Refs extends string = never> = CalcExpression<Refs> | number | string
 
-export type InferRefs<T> = T extends CalcExpression<infer R> ? R : never
+export type InferRefs<T> = T extends CalcExpression<infer R> ? R : T extends string ? T : never
 
 export function constant(value: number | string): CalcExpression<never> {
 	const num = typeof value === 'string' ? Number(value) : value
@@ -29,20 +29,31 @@ export function constant(value: number | string): CalcExpression<never> {
 	return new CalcExpression(new ConstantNode(num))
 }
 
+const referenceCache = new Map<string, CalcExpression<string>>()
+
+function reference<Name extends string>(name: Name): CalcExpression<Name> {
+	const cached = referenceCache.get(name)
+	if (cached) {
+		return cached as CalcExpression<Name>
+	}
+	if (name.length === 0) {
+		throw new TypeError('Reference name must be a non-empty string')
+	}
+	const expr = new CalcExpression(new ReferenceNode(name), new Set([name]))
+	referenceCache.set(name, expr)
+	return expr
+}
+
 export function toExpression<A extends ExpressionInput<string>>(
 	input: A,
 ): CalcExpression<InferRefs<A>> {
 	if (typeof input === 'number') {
 		return constant(input) as CalcExpression<InferRefs<A>>
 	}
-	return input as CalcExpression<InferRefs<A>>
-}
-
-export function reference<Name extends string>(name: Name): CalcExpression<Name> {
-	if (typeof name !== 'string' || name.length === 0) {
-		throw new TypeError('Reference name must be a non-empty string')
+	if (typeof input === 'string') {
+		return reference(input) as CalcExpression<InferRefs<A>>
 	}
-	return new CalcExpression(new ReferenceNode(name), new Set([name]))
+	return input as CalcExpression<InferRefs<A>>
 }
 
 function mergeRefs(...exprs: CalcExpression<string>[]): Set<string> {

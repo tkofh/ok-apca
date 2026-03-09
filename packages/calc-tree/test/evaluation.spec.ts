@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { add, multiply, pow, reference, toExpression } from '../src/index.ts'
+import { add, multiply, pow, toExpression } from '../src/index.ts'
 
 describe('evaluation', () => {
 	describe('constant evaluation', () => {
@@ -27,20 +27,20 @@ describe('evaluation', () => {
 
 	describe('bound evaluation', () => {
 		it('evaluates with all bindings constant', () => {
-			const expr = add(reference('x'), 5)
+			const expr = add('x', 5)
 			const result = expr.solve({ x: 10 })
 
 			expect(result).toBe(15)
 		})
 
 		it('throws for non-constant bindings', () => {
-			const expr = add(reference('x'), 5)
+			const expr = add('x', 5)
 
-			expect(() => expr.solve({ x: reference('runtime') })).toThrow()
+			expect(() => expr.solve({ x: 'runtime' })).toThrow()
 		})
 
 		it('evaluates multiple bindings', () => {
-			const expr = add(reference('x'), reference('y'))
+			const expr = add('x', 'y')
 			const result = expr.solve({
 				x: 10,
 				y: 20,
@@ -53,7 +53,7 @@ describe('evaluation', () => {
 	describe('complex expressions', () => {
 		it('evaluates nested operations', () => {
 			// f(x) = (x + 1) * (x - 1) = x^2 - 1
-			const x = reference('x')
+			const x = 'x'
 			const expr = multiply(add(x, 1), add(x, -1))
 			const result = expr.solve({ x: 5 })
 
@@ -62,7 +62,7 @@ describe('evaluation', () => {
 
 		it('evaluates pow expressions', () => {
 			// f(x, y) = (x^2 + y^2)^0.5
-			const expr = pow(add(pow(reference('x'), 2), pow(reference('y'), 2)), 0.5)
+			const expr = pow(add(pow('x', 2), pow('y', 2)), 0.5)
 			const result = expr.solve({
 				x: 3,
 				y: 4,
@@ -83,7 +83,7 @@ describe('evaluation', () => {
 
 	describe('css output', () => {
 		it('toCss returns expression and declarations', () => {
-			const expr = add(reference('x'), 5)
+			const expr = add('x', 5)
 			const css = expr.toCss({ x: 10 })
 
 			expect(css).toHaveProperty('expression')
@@ -91,8 +91,8 @@ describe('evaluation', () => {
 		})
 
 		it('toCss with non-constant bindings produces css', () => {
-			const expr = add(reference('x'), 5)
-			const css = expr.toCss({ x: reference('runtime') })
+			const expr = add('x', 5)
+			const css = expr.toCss({ x: 'runtime' })
 
 			expect(css).toHaveProperty('expression')
 			expect(css).toHaveProperty('declarations')
@@ -131,8 +131,8 @@ describe('evaluation', () => {
 
 		it('produces simplified CSS output', () => {
 			// 2*3 should fold to 6
-			const expr = add(multiply(2, 3), reference('x'))
-			const css = expr.toCss({ x: reference('x') })
+			const expr = add(multiply(2, 3), 'x')
+			const css = expr.toCss({ x: 'x' })
 
 			// Should have simplified 2*3 to 6
 			expect(css.expression).toContain('6')

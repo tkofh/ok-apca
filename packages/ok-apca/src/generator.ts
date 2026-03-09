@@ -14,7 +14,7 @@ import {
 	hueYCoefficients,
 	yCorrectionFactor,
 } from './correction.ts'
-import { chromaRef, lightnessRef, maxChroma } from './gamut.ts'
+import { maxChroma } from './gamut.ts'
 import { outdent } from './util.ts'
 
 export interface ContrastColor {
@@ -98,7 +98,7 @@ function buildBaseColorExpr<const OutputRef extends string>(
 	maxChromaExpr: ct.CalcExpression<string>,
 	output: OutputRef,
 ) {
-	return ct.oklch(lightnessRef, ct.multiply(maxChromaExpr, chromaRef), hue).asProperty(output)
+	return ct.oklch('lightness', ct.multiply(maxChromaExpr, 'chroma'), hue).asProperty(output)
 }
 
 /**
@@ -110,12 +110,12 @@ function buildYBackgroundExpr(slice: GamutSlice, coeffs: HueYCoefficients) {
 	const { fA, fB, fD } = correctionCoeffs(slice, coeffs)
 	return ct
 		.multiply(
-			ct.pow(lightnessRef, 3),
+			ct.pow('lightness', 3),
 			ct.add(
 				1,
-				ct.multiply(fA, chromaRef),
-				ct.multiply(fB, ct.pow(chromaRef, 2)),
-				ct.multiply(fD, ct.pow(chromaRef, 3)),
+				ct.multiply(fA, 'chroma'),
+				ct.multiply(fB, ct.pow('chroma', 2)),
+				ct.multiply(fD, ct.pow('chroma', 3)),
 			),
 		)
 		.asProperty('_ybg')
@@ -141,7 +141,7 @@ function buildCorrectedLightness(
 
 	// Approximate chroma at that lightness
 	const cApproxExpr = ct
-		.multiply(bindMaxChroma(lApproxExpr, slice), chromaRef)
+		.multiply(bindMaxChroma(lApproxExpr, slice), 'chroma')
 		.asProperty(`_ca-${label}`)
 
 	// Correction factor using k = C_approx / L_approx
@@ -176,7 +176,7 @@ function buildContrastColorExprSimple<
 	const yTargetExpr = contrastSolver
 		.bind({
 			yBg: yBackgroundExpr,
-			contrast: ct.reference(`contrast-${label}`),
+			contrast: `contrast-${label}`,
 		})
 		.asProperty(`_yt-${label}`)
 
@@ -185,7 +185,7 @@ function buildContrastColorExprSimple<
 
 	// Build the contrast color
 	return ct
-		.oklch(conLumExpr, ct.multiply(bindMaxChroma(conLumExpr, slice), chromaRef), hue)
+		.oklch(conLumExpr, ct.multiply(bindMaxChroma(conLumExpr, slice), 'chroma'), hue)
 		.asProperty(`${output}-${label}`)
 }
 
@@ -206,18 +206,13 @@ function buildContrastColorExprWithInversion<
 	yBackgroundExpr: ct.CalcExpression<string>,
 	output: OutputRef,
 ) {
-	const contrastInputRef = ct.reference(`contrast-${label}`)
-
-	// Absolute contrast magnitude
-	const contrastMagnitude = ct.abs(contrastInputRef)
+	const contrastBinding = { yBg: yBackgroundExpr, contrast: `contrast-${label}` }
 
 	// Clamp both to valid Y range [0, 1]
 	const yLightExpr = ct
-		.clamp(0, reversePolarity.bind({ yBg: yBackgroundExpr, contrastMagnitude }), 1)
+		.clamp(0, reversePolarity.bind(contrastBinding), 1)
 		.asProperty(`_yl-${label}`)
-	const yDarkExpr = ct
-		.clamp(0, normalPolarity.bind({ yBg: yBackgroundExpr, contrastMagnitude }), 1)
-		.asProperty(`_yd-${label}`)
+	const yDarkExpr = ct.clamp(0, normalPolarity.bind(contrastBinding), 1).asProperty(`_yd-${label}`)
 
 	// Measure achieved contrast for each clamped solution
 	const lcLightExpr = contrastMeasurementReverse
@@ -232,7 +227,7 @@ function buildContrastColorExprWithInversion<
 	const yTargetExpr = contrastSolverWithInversion
 		.bind({
 			yBg: yBackgroundExpr,
-			contrast: contrastInputRef,
+			contrast: `contrast-${label}`,
 			yLight: yLightExpr,
 			yDark: yDarkExpr,
 			lcLight: lcLightExpr,
@@ -245,7 +240,7 @@ function buildContrastColorExprWithInversion<
 
 	// Build the contrast color
 	return ct
-		.oklch(conLumExpr, ct.multiply(bindMaxChroma(conLumExpr, slice), chromaRef), hue)
+		.oklch(conLumExpr, ct.multiply(bindMaxChroma(conLumExpr, slice), 'chroma'), hue)
 		.asProperty(`${output}-${label}`)
 }
 
@@ -301,7 +296,7 @@ export function generateHueCss(definition: HueDefinition): string {
 	}
 
 	// Shared max chroma at base lightness (reused by base color and Y_bg)
-	const maxChromaExpr = bindMaxChroma(lightnessRef, slice).asProperty('_mc')
+	const maxChromaExpr = bindMaxChroma(ct.toExpression('lightness'), slice).asProperty('_mc')
 
 	// Build base color expression
 	mergeCss(buildBaseColorExpr(hue, maxChromaExpr, output).toCss())

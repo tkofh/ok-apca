@@ -1,7 +1,6 @@
 import type { CalcExpression } from '@ok-apca/calc-tree'
 import * as ct from '@ok-apca/calc-tree'
 import type { GamutSlice } from './color.ts'
-import { lightnessRef } from './gamut.ts'
 
 // =============================================================================
 // OKLab → CIE Y Conversion
@@ -64,11 +63,6 @@ export function hueYCoefficients(hue: number): HueYCoefficients {
 // Expression Trees
 // =============================================================================
 
-const yChromaRef = ct.reference('yChroma')
-const yCoeffARef = ct.reference('yCoeffA')
-const yCoeffBRef = ct.reference('yCoeffB')
-const yCoeffDRef = ct.reference('yCoeffD')
-
 /**
  * Exact CIE Y from OKLCH lightness and chroma at a fixed hue.
  *
@@ -80,10 +74,10 @@ const yCoeffDRef = ct.reference('yCoeffD')
  */
 export const exactY: CalcExpression<'lightness' | 'yChroma' | 'yCoeffA' | 'yCoeffB' | 'yCoeffD'> =
 	ct.add(
-		ct.pow(lightnessRef, 3),
-		ct.multiply(yCoeffARef, ct.multiply(ct.pow(lightnessRef, 2), yChromaRef)),
-		ct.multiply(yCoeffBRef, ct.multiply(lightnessRef, ct.pow(yChromaRef, 2))),
-		ct.multiply(yCoeffDRef, ct.pow(yChromaRef, 3)),
+		ct.pow('lightness', 3),
+		ct.multiply('yCoeffA', ct.multiply(ct.pow('lightness', 2), 'yChroma')),
+		ct.multiply('yCoeffB', ct.multiply('lightness', ct.pow('yChroma', 2))),
+		ct.multiply('yCoeffD', ct.pow('yChroma', 3)),
 	)
 
 // --- Y correction factor ---
@@ -104,8 +98,6 @@ export const exactY: CalcExpression<'lightness' | 'yChroma' | 'yCoeffA' | 'yCoef
 // This handles both left-half (exact) and right-half (good approximation,
 // since chroma decreases toward white making the correction smaller).
 
-const yCorrectionKRef = ct.reference('yCorrectionK')
-
 /**
  * Y correction factor: f = 1 + A·k + B·k² + D·k³
  *
@@ -115,9 +107,9 @@ const yCorrectionKRef = ct.reference('yCorrectionK')
 export const yCorrectionFactor: CalcExpression<'yCorrectionK' | 'yCoeffA' | 'yCoeffB' | 'yCoeffD'> =
 	ct.add(
 		1,
-		ct.multiply(yCoeffARef, yCorrectionKRef),
-		ct.multiply(yCoeffBRef, ct.pow(yCorrectionKRef, 2)),
-		ct.multiply(yCoeffDRef, ct.pow(yCorrectionKRef, 3)),
+		ct.multiply('yCoeffA', 'yCorrectionK'),
+		ct.multiply('yCoeffB', ct.pow('yCorrectionK', 2)),
+		ct.multiply('yCoeffD', ct.pow('yCorrectionK', 3)),
 	)
 
 // =============================================================================

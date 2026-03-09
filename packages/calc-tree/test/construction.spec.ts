@@ -8,7 +8,6 @@ import {
 	min,
 	multiply,
 	pow,
-	reference,
 	sign,
 	sin,
 	subtract,
@@ -35,26 +34,21 @@ describe('construction', () => {
 		})
 
 		it('passes expressions through unchanged', () => {
-			const original = reference('x')
+			const original = toExpression('x')
 			const expr = toExpression(original)
 			expect(expr).toBe(original)
 		})
 	})
 
-	describe('reference', () => {
+	describe('toExpression with strings', () => {
 		it('creates a reference expression', () => {
-			const expr = reference('x')
+			const expr = toExpression('x')
 			const result = expr.solve({ x: 5 })
 			expect(result).toBe(5)
 		})
 
 		it('throws for empty string', () => {
-			expect(() => reference('')).toThrow(TypeError)
-		})
-
-		it('throws for non-strings', () => {
-			// @ts-expect-error Testing runtime validation
-			expect(() => reference(42)).toThrow(TypeError)
+			expect(() => toExpression('')).toThrow(TypeError)
 		})
 	})
 
@@ -164,19 +158,19 @@ describe('construction', () => {
 		})
 
 		it('adds three expressions with references', () => {
-			const expr = add(reference('a'), reference('b'), reference('c'))
+			const expr = add('a', 'b', 'c')
 			const result = expr.solve({ a: 10, b: 20, c: 30 })
 			expect(result).toBe(60)
 		})
 
 		it('finds max with references', () => {
-			const expr = max(reference('x'), 0, reference('y'))
+			const expr = max('x', 0, 'y')
 			const result = expr.solve({ x: -5, y: 3 })
 			expect(result).toBe(3)
 		})
 
 		it('finds min with references', () => {
-			const expr = min(reference('x'), 100, reference('y'))
+			const expr = min('x', 100, 'y')
 			const result = expr.solve({ x: 50, y: 25 })
 			expect(result).toBe(25)
 		})
@@ -184,14 +178,14 @@ describe('construction', () => {
 
 	describe('reference merging', () => {
 		it('merges references from operations', () => {
-			const expr = add(reference('x'), reference('y'))
+			const expr = add('x', 'y')
 			// Needs both x and y to evaluate
 			const result = expr.solve({ x: 1, y: 2 })
 			expect(result).toBe(3)
 		})
 
 		it('deduplicates references', () => {
-			const x = reference('x')
+			const x = 'x'
 			const expr = add(x, x)
 			// Only needs x once
 			const result = expr.solve({ x: 5 })
@@ -199,10 +193,7 @@ describe('construction', () => {
 		})
 
 		it('merges references from nested operations', () => {
-			const expr = add(
-				multiply(reference('a'), reference('b')),
-				subtract(reference('c'), reference('d')),
-			)
+			const expr = add(multiply('a', 'b'), subtract('c', 'd'))
 			const result = expr.solve({
 				a: 2,
 				b: 3,

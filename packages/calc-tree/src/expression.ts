@@ -1,5 +1,5 @@
 import { type ExpressionInput, toExpression } from './constructors.ts'
-import { ConstantNode, PropertyNode } from './nodes.ts'
+import { PropertyNode } from './nodes.ts'
 import type { CalcNode, CSSResult } from './types.ts'
 
 function createCSSResult(expression: string, declarations: Record<string, string>): CSSResult {
@@ -23,17 +23,14 @@ function applyBindings(
 	}
 	const nodeBindings: Record<string, CalcNode> = {}
 	for (const [key, value] of Object.entries(bindings) as [string, ExpressionInput<never>][]) {
-		if (typeof value === 'number') {
-			nodeBindings[key] = new ConstantNode(value)
-		} else {
-			nodeBindings[key] = value.node
-		}
+		nodeBindings[key] = toExpression(value).node
 	}
 	return node.substitute(nodeBindings)
 }
 
 // Extract the union of all refs from values in a binding record
-type BindingRefs<T> = T extends Record<string, ExpressionInput<infer R>> ? R : never
+type ValueRefs<V> = V extends CalcExpression<infer R> ? R : V extends string ? V : never
+type BindingRefs<T> = T extends Record<string, infer V> ? ValueRefs<V> : never
 
 /**
  * Abstract base class for expression trees.

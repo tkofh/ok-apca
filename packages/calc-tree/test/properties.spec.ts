@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { add, multiply, pow, reference, toExpression } from '../src/index.ts'
+import { add, multiply, pow, toExpression } from '../src/index.ts'
 
 describe('property wrapping', () => {
 	describe('basic wrapping', () => {
 		it('wraps expression as property', () => {
-			const expr = multiply(reference('x'), 2)
+			const expr = multiply('x', 2)
 
 			// Evaluate before wrapping
 			const result = expr.solve({ x: 5 })
@@ -12,9 +12,7 @@ describe('property wrapping', () => {
 		})
 
 		it('includes property declaration in CSS output', () => {
-			const expr = multiply(reference('x'), 2)
-				.bind({ x: reference('runtime') })
-				.asProperty('doubled')
+			const expr = multiply('x', 2).bind({ x: 'runtime' }).asProperty('doubled')
 
 			const css = expr.toCss()
 
@@ -24,7 +22,7 @@ describe('property wrapping', () => {
 		})
 
 		it('leaves unbound references as CSS variables', () => {
-			const expr = add(reference('x'), reference('y')).asProperty('sum')
+			const expr = add('x', 'y').asProperty('sum')
 
 			const css = expr.toCss()
 
@@ -35,9 +33,7 @@ describe('property wrapping', () => {
 
 	describe('nested properties', () => {
 		it('handles nested properties', () => {
-			const inner = multiply(reference('x'), 2)
-				.bind({ x: reference('runtime') })
-				.asProperty('doubled')
+			const inner = multiply('x', 2).bind({ x: 'runtime' }).asProperty('doubled')
 			const outer = add(inner, 5).asProperty('result')
 
 			const css = outer.toCss()
@@ -50,8 +46,8 @@ describe('property wrapping', () => {
 		})
 
 		it('handles deeply nested properties', () => {
-			const xSquared = pow(reference('x'), 2).asProperty('x-squared')
-			const ySquared = pow(reference('y'), 2).asProperty('y-squared')
+			const xSquared = pow('x', 2).asProperty('x-squared')
+			const ySquared = pow('y', 2).asProperty('y-squared')
 			const distance = pow(add(xSquared, ySquared), 0.5).asProperty('distance')
 
 			const css = distance.toCss()
@@ -64,9 +60,7 @@ describe('property wrapping', () => {
 		})
 
 		it('collects declarations in correct order', () => {
-			const a = reference('x')
-				.bind({ x: reference('input') })
-				.asProperty('a')
+			const a = toExpression('x').bind({ x: 'input' }).asProperty('a')
 			const b = add(a, 1).asProperty('b')
 			const c = multiply(b, 2).asProperty('c')
 
@@ -81,8 +75,8 @@ describe('property wrapping', () => {
 
 	describe('property conflicts', () => {
 		it('throws on property name conflicts with different values', () => {
-			const prop1 = reference('x').asProperty('value')
-			const prop2 = reference('y').asProperty('value')
+			const prop1 = toExpression('x').asProperty('value')
+			const prop2 = toExpression('y').asProperty('value')
 			const expr = add(prop1, prop2)
 
 			expect(() => {
@@ -91,7 +85,7 @@ describe('property wrapping', () => {
 		})
 
 		it('allows same property with same value', () => {
-			const shared = reference('x').asProperty('shared')
+			const shared = toExpression('x').asProperty('shared')
 			const expr = add(shared, shared)
 
 			const css = expr.toCss()
@@ -113,8 +107,8 @@ describe('property wrapping', () => {
 
 	describe('binding with properties', () => {
 		it('binding works before property wrapping', () => {
-			const inner = add(reference('x'), reference('y')).bind({ x: 5, y: 10 }).asProperty('sum')
-			const expr = multiply(inner, reference('z'))
+			const inner = add('x', 'y').bind({ x: 5, y: 10 }).asProperty('sum')
+			const expr = multiply(inner, 'z')
 
 			const result = expr.solve({ z: 2 })
 
@@ -122,7 +116,7 @@ describe('property wrapping', () => {
 		})
 
 		it('binding updates property declarations', () => {
-			const inner = add(reference('x'), reference('y')).bind({ x: 5 }).asProperty('sum')
+			const inner = add('x', 'y').bind({ x: 5 }).asProperty('sum')
 			const expr = multiply(inner, 2)
 
 			const css = expr.toCss()
@@ -133,10 +127,10 @@ describe('property wrapping', () => {
 
 	describe('integration', () => {
 		it('generates CSS with complex nested properties', () => {
-			const xSquared = pow(reference('x'), 2).asProperty('x2')
-			const axSquared = multiply(reference('a'), xSquared).asProperty('ax2')
-			const bx = multiply(reference('b'), reference('x')).asProperty('bx')
-			const quadratic = add(axSquared, bx, reference('c')).asProperty('quadratic')
+			const xSquared = pow('x', 2).asProperty('x2')
+			const axSquared = multiply('a', xSquared).asProperty('ax2')
+			const bx = multiply('b', 'x').asProperty('bx')
+			const quadratic = add(axSquared, bx, 'c').asProperty('quadratic')
 
 			const css = quadratic.toCss()
 
