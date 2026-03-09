@@ -14,45 +14,19 @@ import {
 	APCA_SMOOTH_THRESHOLD,
 	APCA_SMOOTH_THRESHOLD_OFFSET,
 	COMPARISON_EPSILON,
-	GAMUT_SINE_CURVATURE_EXPONENT,
 	INVERSION_THRESHOLD,
 } from './constants.ts'
 
-export const lightnessRef = ct.reference('lightness')
-export const chromaRef = ct.reference('chroma')
+// --- References ---
+
 const contrastMagnitudeRef = ct.reference('contrastMagnitude')
 const yBgRef = ct.reference('yBg')
 const yFgRef = ct.reference('yFg')
 const contrastRef = ct.reference('contrast')
-const apexLRef = ct.reference('apexL')
-const apexCRef = ct.reference('apexC')
-const curvatureRef = ct.reference('curvature')
 export const yLightRef = ct.reference('yLight')
 export const yDarkRef = ct.reference('yDark')
 const lcLightRef = ct.reference('lcLight')
 const lcDarkRef = ct.reference('lcDark')
-
-// --- Max chroma (gamut boundary) ---
-
-const oneMinusApexL = ct.subtract(1, apexLRef)
-const gamutLeftHalf = ct.divide(ct.multiply(apexCRef, lightnessRef), apexLRef)
-const gamutT = ct.max(0, ct.divide(ct.subtract(lightnessRef, apexLRef), oneMinusApexL))
-const linearChroma = ct.divide(ct.multiply(apexCRef, ct.subtract(1, lightnessRef)), oneMinusApexL)
-const curvatureCorrection = ct.multiply(
-	ct.multiply(
-		curvatureRef,
-		ct.pow(ct.sin(ct.multiply(gamutT, Math.PI)), GAMUT_SINE_CURVATURE_EXPONENT),
-	),
-	apexCRef,
-)
-const gamutRightHalf = ct.add(linearChroma, curvatureCorrection)
-const isRightOfApex = ct.max(0, ct.sign(ct.subtract(lightnessRef, apexLRef)))
-
-export const maxChroma: CalcExpression<'lightness' | 'apexL' | 'apexC' | 'curvature'> = ct.lerp(
-	gamutLeftHalf,
-	gamutRightHalf,
-	isRightOfApex,
-)
 
 // --- Contrast polarity solver ---
 
@@ -111,6 +85,8 @@ export const contrastSolver: CalcExpression<'yBg' | 'contrast'> = ct.clamp(
 	),
 	1,
 )
+
+// --- Contrast measurement ---
 
 // Soft black clamp: Y + pow(max(0, threshold - Y), 1.414)
 // When Y >= threshold this is a no-op; when Y < threshold it bumps Y up

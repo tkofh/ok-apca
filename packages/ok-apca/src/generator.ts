@@ -1,16 +1,20 @@
 import * as ct from '@ok-apca/calc-tree'
-import { findGamutSlice, type GamutSlice } from './color.ts'
 import {
-	chromaRef,
 	contrastMeasurementNormal,
 	contrastMeasurementReverse,
 	contrastSolver,
 	contrastSolverWithInversion,
-	lightnessRef,
-	maxChroma,
 	normalPolarity,
 	reversePolarity,
-} from './expressions.ts'
+} from './apca.ts'
+import { findGamutSlice, type GamutSlice } from './color.ts'
+import {
+	correctionCoeffs,
+	type HueYCoefficients,
+	hueYCoefficients,
+	yCorrectionFactor,
+} from './correction.ts'
+import { chromaRef, lightnessRef, maxChroma } from './gamut.ts'
 import { outdent } from './util.ts'
 
 export interface ContrastColor {
@@ -50,7 +54,7 @@ function generatePropertyRules(
 	properties.push(color(output, true))
 
 	if (labels.length > 0) {
-		properties.push(numeric('_ybg'))
+		properties.push(numeric('_mc'), numeric('_ybg'))
 	}
 
 	for (const label of labels) {
@@ -68,6 +72,9 @@ function generatePropertyRules(
 
 		properties.push(
 			numeric(`_yt-${label}`),
+			numeric(`_la-${label}`),
+			numeric(`_ca-${label}`),
+			numeric(`_fo-${label}`),
 			numeric(`_cl-${label}`),
 			color(`${output}-${label}`, true),
 		)
@@ -76,29 +83,80 @@ function generatePropertyRules(
 	return properties.join('\n')
 }
 
-function buildBaseColorExpr<const OutputRef extends string>(
-	hue: number,
-	slice: GamutSlice,
-	output: OutputRef,
-) {
-	return ct
-		.oklch(
-			lightnessRef,
-			ct.multiply(
-				maxChroma.bind({
-					lightness: lightnessRef,
-					apexL: slice.apex.lightness,
-					apexC: slice.apex.chroma,
-					curvature: slice.curvature,
-				}),
-				chromaRef,
-			),
-			hue,
-		)
-		.asProperty(output)
+/** Bind maxChroma expression with gamut slice constants */
+function bindMaxChroma(lightnessExpr: ct.CalcExpression<string>, slice: GamutSlice) {
+	return maxChroma.bind({
+		lightness: lightnessExpr,
+		apexL: slice.apex.lightness,
+		apexC: slice.apex.chroma,
+		curvature: slice.curvature,
+	})
 }
 
-const yBackgroundExpr = ct.pow(lightnessRef, 3).asProperty('_ybg')
+function buildBaseColorExpr<const OutputRef extends string>(
+	hue: number,
+	maxChromaExpr: ct.CalcExpression<string>,
+	output: OutputRef,
+) {
+	return ct.oklch(lightnessRef, ct.multiply(maxChromaExpr, chromaRef), hue).asProperty(output)
+}
+
+/**
+ * Y_bg = L³ · f where f = 1 + fA·chroma + fB·chroma² + fD·chroma³.
+ * On the left half of the gamut tent this is exact; on the right half
+ * the base color's chroma is smaller so the correction is smaller too.
+ */
+function buildYBackgroundExpr(slice: GamutSlice, coeffs: HueYCoefficients) {
+	const { fA, fB, fD } = correctionCoeffs(slice, coeffs)
+	return ct
+		.multiply(
+			ct.pow(lightnessRef, 3),
+			ct.add(
+				1,
+				ct.multiply(fA, chromaRef),
+				ct.multiply(fB, ct.pow(chromaRef, 2)),
+				ct.multiply(fD, ct.pow(chromaRef, 3)),
+			),
+		)
+		.asProperty('_ybg')
+}
+
+/**
+ * Build the Y→L correction pipeline for a contrast color.
+ *
+ * Uses the multiplicative correction factor f = 1 + A·k + B·k² + D·k³
+ * where k = C_approx / L_approx. Then L = pow(Y / f, 1/3).
+ *
+ * Each step references its inputs once or via small var() references,
+ * keeping total expression size compact.
+ */
+function buildCorrectedLightness(
+	label: string,
+	yTargetExpr: ct.CalcExpression<string>,
+	slice: GamutSlice,
+	coeffs: HueYCoefficients,
+) {
+	// Approximate L from Y (cube root)
+	const lApproxExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(`_la-${label}`)
+
+	// Approximate chroma at that lightness
+	const cApproxExpr = ct
+		.multiply(bindMaxChroma(lApproxExpr, slice), chromaRef)
+		.asProperty(`_ca-${label}`)
+
+	// Correction factor using k = C_approx / L_approx
+	const fOutExpr = yCorrectionFactor
+		.bind({
+			yCorrectionK: ct.divide(cApproxExpr, lApproxExpr),
+			yCoeffA: coeffs.a,
+			yCoeffB: coeffs.b,
+			yCoeffD: coeffs.d,
+		})
+		.asProperty(`_fo-${label}`)
+
+	// Corrected lightness: L = pow(Y / f, 1/3)
+	return ct.pow(ct.divide(yTargetExpr, fOutExpr), 1 / 3).asProperty(`_cl-${label}`)
+}
 
 /**
  * Build contrast color expression tree for a single label (simple solver, no inversion).
@@ -106,7 +164,14 @@ const yBackgroundExpr = ct.pow(lightnessRef, 3).asProperty('_ybg')
 function buildContrastColorExprSimple<
 	const LabelRef extends string,
 	const OutputRef extends string,
->(label: LabelRef, hue: number, slice: GamutSlice, output: OutputRef) {
+>(
+	label: LabelRef,
+	hue: number,
+	slice: GamutSlice,
+	coeffs: HueYCoefficients,
+	yBackgroundExpr: ct.CalcExpression<string>,
+	output: OutputRef,
+) {
 	// Target Y from contrast solver
 	const yTargetExpr = contrastSolver
 		.bind({
@@ -115,24 +180,12 @@ function buildContrastColorExprSimple<
 		})
 		.asProperty(`_yt-${label}`)
 
-	// Convert Y to lightness
-	const conLumExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(`_cl-${label}`)
+	// Cardano-corrected lightness
+	const conLumExpr = buildCorrectedLightness(label, yTargetExpr, slice, coeffs)
 
 	// Build the contrast color
 	return ct
-		.oklch(
-			conLumExpr,
-			ct.multiply(
-				maxChroma.bind({
-					lightness: conLumExpr,
-					apexL: slice.apex.lightness,
-					apexC: slice.apex.chroma,
-					curvature: slice.curvature,
-				}),
-				chromaRef,
-			),
-			hue,
-		)
+		.oklch(conLumExpr, ct.multiply(bindMaxChroma(conLumExpr, slice), chromaRef), hue)
 		.asProperty(`${output}-${label}`)
 }
 
@@ -145,7 +198,14 @@ function buildContrastColorExprSimple<
 function buildContrastColorExprWithInversion<
 	const LabelRef extends string,
 	const OutputRef extends string,
->(label: LabelRef, hue: number, slice: GamutSlice, output: OutputRef) {
+>(
+	label: LabelRef,
+	hue: number,
+	slice: GamutSlice,
+	coeffs: HueYCoefficients,
+	yBackgroundExpr: ct.CalcExpression<string>,
+	output: OutputRef,
+) {
 	const contrastInputRef = ct.reference(`contrast-${label}`)
 
 	// Absolute contrast magnitude
@@ -180,24 +240,12 @@ function buildContrastColorExprWithInversion<
 		})
 		.asProperty(`_yt-${label}`)
 
-	// Convert Y to lightness
-	const conLumExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(`_cl-${label}`)
+	// Cardano-corrected lightness
+	const conLumExpr = buildCorrectedLightness(label, yTargetExpr, slice, coeffs)
 
 	// Build the contrast color
 	return ct
-		.oklch(
-			conLumExpr,
-			ct.multiply(
-				maxChroma.bind({
-					lightness: conLumExpr,
-					apexL: slice.apex.lightness,
-					apexC: slice.apex.chroma,
-					curvature: slice.curvature,
-				}),
-				chromaRef,
-			),
-			hue,
-		)
+		.oklch(conLumExpr, ct.multiply(bindMaxChroma(conLumExpr, slice), chromaRef), hue)
 		.asProperty(`${output}-${label}`)
 }
 
@@ -209,13 +257,15 @@ function buildContrastColorExpr(
 	label: string,
 	hue: number,
 	slice: GamutSlice,
+	coeffs: HueYCoefficients,
+	yBackgroundExpr: ct.CalcExpression<string>,
 	output: string,
 	noContrastInversion: boolean,
 ) {
 	if (noContrastInversion) {
-		return buildContrastColorExprSimple(label, hue, slice, output)
+		return buildContrastColorExprSimple(label, hue, slice, coeffs, yBackgroundExpr, output)
 	}
-	return buildContrastColorExprWithInversion(label, hue, slice, output)
+	return buildContrastColorExprWithInversion(label, hue, slice, coeffs, yBackgroundExpr, output)
 }
 
 /**
@@ -237,6 +287,7 @@ function buildContrastColorExpr(
 export function generateHueCss(definition: HueDefinition): string {
 	const { hue, selector, output, contrastColors, noContrastInversion } = definition
 	const slice = findGamutSlice(hue)
+	const coeffs = hueYCoefficients(hue)
 	const labels = contrastColors.map((c) => c.label)
 
 	const propertyRules = generatePropertyRules(output, labels, noContrastInversion)
@@ -249,17 +300,31 @@ export function generateHueCss(definition: HueDefinition): string {
 		Object.assign(declarations, css.declarations)
 	}
 
+	// Shared max chroma at base lightness (reused by base color and Y_bg)
+	const maxChromaExpr = bindMaxChroma(lightnessRef, slice).asProperty('_mc')
+
 	// Build base color expression
-	mergeCss(buildBaseColorExpr(hue, slice, output).toCss())
+	mergeCss(buildBaseColorExpr(hue, maxChromaExpr, output).toCss())
 
 	// Build Y background if we have contrast colors
 	if (contrastColors.length > 0) {
-		mergeCss(yBackgroundExpr.toCss())
-	}
+		const yBgExpr = buildYBackgroundExpr(slice, coeffs)
+		mergeCss(yBgExpr.toCss())
 
-	// Build contrast color expressions
-	for (const { label } of contrastColors) {
-		mergeCss(buildContrastColorExpr(label, hue, slice, output, noContrastInversion).toCss())
+		// Build contrast color expressions
+		for (const { label } of contrastColors) {
+			mergeCss(
+				buildContrastColorExpr(
+					label,
+					hue,
+					slice,
+					coeffs,
+					yBgExpr,
+					output,
+					noContrastInversion,
+				).toCss(),
+			)
+		}
 	}
 
 	const declarationBlock = Object.entries(declarations)

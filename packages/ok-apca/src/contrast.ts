@@ -1,14 +1,6 @@
 import { clamp } from '@ok-apca/calc-tree'
 import { getLuminance, OKLCH } from 'colorjs.io/fn'
 import {
-	type Color,
-	type ColorInput,
-	computeMaxChroma,
-	findGamutSlice,
-	gamutMap,
-	toColor,
-} from './color.ts'
-import {
 	contrastMeasurementNormal,
 	contrastMeasurementReverse,
 	contrastSolver,
@@ -17,7 +9,16 @@ import {
 	reversePolarity,
 	yDarkRef,
 	yLightRef,
-} from './expressions.ts'
+} from './apca.ts'
+import {
+	type Color,
+	type ColorInput,
+	computeMaxChroma,
+	findGamutSlice,
+	gamutMap,
+	toColor,
+} from './color.ts'
+import { exactY, hueYCoefficients, yCorrectionFactor } from './correction.ts'
 import { clampNumber } from './util.ts'
 
 /**
@@ -56,7 +57,21 @@ export function measureContrast(baseColor: ColorInput, contrastColor: ColorInput
  */
 export function computeContrastColor(color: ColorInput, contrast: number, invert = true): Color {
 	const { hue, lightness, chroma } = gamutMap(color)
-	const Y = lightness ** 3
+	const slice = findGamutSlice(hue)
+	const coeffs = hueYCoefficients(hue)
+	const maxChromaAtBase = computeMaxChroma(lightness, slice)
+	const actualChroma = chroma
+	const chromaRatio = maxChromaAtBase > 0 ? clampNumber(0, chroma / maxChromaAtBase, 1) : 0
+
+	// Exact Y using OKLab polynomial (replaces lightness³ approximation)
+	const Y = exactY.solve({
+		lightness,
+		yChroma: actualChroma,
+		yCoeffA: coeffs.a,
+		yCoeffB: coeffs.b,
+		yCoeffD: coeffs.d,
+	})
+
 	const clampedContrast = clampNumber(-1.08, contrast, 1.08)
 
 	const ySolver = invert
@@ -78,18 +93,22 @@ export function computeContrastColor(color: ColorInput, contrast: number, invert
 				yBg: Y,
 				contrast: clampedContrast,
 			})
-	const targetLightness = clampNumber(0, ySolver ** (1 / 3), 1)
 
-	// Preserve chroma percentage from base lightness to contrast lightness
-	// Use gamut-mapped chroma to compute percentage (matching CSS behavior)
-	const slice = findGamutSlice(hue)
-	const maxChromaAtBase = computeMaxChroma(lightness, slice)
+	// f-correction inverse: Y → L using approximate chroma
+	const lApprox = clampNumber(0, ySolver ** (1 / 3), 1)
+	const cApprox = computeMaxChroma(lApprox, slice) * chromaRatio
+	const kOut = lApprox > 0 ? cApprox / lApprox : 0
+	const fOut = yCorrectionFactor.solve({
+		yCorrectionK: kOut,
+		yCoeffA: coeffs.a,
+		yCoeffB: coeffs.b,
+		yCoeffD: coeffs.d,
+	})
+	const targetLightness = clampNumber(0, (ySolver / fOut) ** (1 / 3), 1)
 
 	return toColor({
 		lightness: targetLightness,
-		chroma:
-			computeMaxChroma(targetLightness, slice) *
-			(maxChromaAtBase > 0 ? clampNumber(0, chroma / maxChromaAtBase, 1) : 0),
+		chroma: computeMaxChroma(targetLightness, slice) * chromaRatio,
 		hue,
 	})
 }

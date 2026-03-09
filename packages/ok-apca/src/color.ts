@@ -1,6 +1,6 @@
 import { type Coords, inGamut, OKLCH, P3 } from 'colorjs.io/fn'
 import { GAMUT_SINE_CURVATURE_EXPONENT } from './constants.ts'
-import { maxChroma } from './expressions.ts'
+import { maxChroma } from './gamut.ts'
 import { clampNumber } from './util.ts'
 
 export interface GamutApex {

@@ -47,8 +47,8 @@ describe('computeContrastColor', () => {
 		})
 
 		it('returns darker color for negative contrast on light background', () => {
-			// Use L=0.7 where dark direction has more room than light
-			const input = { hue: 30, chroma: 0.15, lightness: 0.7 }
+			// Use L=0.75 where dark direction clearly has more room than light
+			const input = { hue: 30, chroma: 0.15, lightness: 0.75 }
 			const result = computeContrastColor(input, -0.6)
 
 			// Negative contrast from light background goes darker
@@ -493,8 +493,8 @@ describe('computeContrastColor + measureContrast integration', () => {
 		})
 
 		it('negative contrast produces darker color on light background', () => {
-			// Use L=0.7 where dark direction has more achievable contrast
-			const input = { hue: 30, chroma: 0.1, lightness: 0.7 }
+			// Use L=0.75 where dark direction clearly has more achievable contrast
+			const input = { hue: 30, chroma: 0.1, lightness: 0.75 }
 			const baseColor = gamutMap(input)
 			const contrastColor = computeContrastColor(input, -0.6)
 
