@@ -92,3 +92,34 @@ export const COMPARISON_EPSILON = 0.005 // ~0.5 Lc units
  * has inherent asymmetry that makes very low contrast comparisons unreliable.
  */
 export const INVERSION_THRESHOLD = 0.08 // ~8 Lc
+
+// =============================================================================
+// Soft Clamp Approximation Constants
+// =============================================================================
+
+/**
+ * Lp-norm approximation of the APCA soft black clamp for the solver input.
+ *
+ * The true soft clamp sc(Y) = Y + max(0, 0.022 - Y)^1.414 references Y twice,
+ * which doubles the DevTools expression expansion factor. The Lp-norm
+ * pow(pow(Y, p) + K^p, 1/p) approximates sc(Y) with a single reference to Y.
+ *
+ * Parameters optimized to minimize end-to-end Lc error when paired with
+ * the APCA unclamp on the output side (max ≈ 0.25 Lc, avg ≈ 0.01 Lc).
+ */
+export const LP_SOFT_CLAMP_P = 1.75
+export const LP_SOFT_CLAMP_K = 0.005
+export const LP_SOFT_CLAMP_KP = LP_SOFT_CLAMP_K ** LP_SOFT_CLAMP_P
+export const LP_SOFT_CLAMP_INV_P = 1 / LP_SOFT_CLAMP_P
+
+/**
+ * APCA unclamp constants from the reference implementation (reverseAPCA).
+ * Used in TypeScript runtime for accurate inverse when a conditional is cheap.
+ *
+ * Formula: pow((Y + mOffsetIn) * mFactor, mExp) / mFactor - mOffsetOut
+ * Only applied when Y < APCA_SMOOTH_THRESHOLD.
+ */
+export const APCA_UNCLAMP_FACTOR = 1.9468554433171
+export const APCA_UNCLAMP_OFFSET_IN = 0.0387393816571401
+export const APCA_UNCLAMP_EXP = 0.283343396420869 / APCA_BLACK_CLAMP
+export const APCA_UNCLAMP_OFFSET_OUT = 0.312865795870758

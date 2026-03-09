@@ -6,6 +6,8 @@ import {
 	contrastSolverWithInversion,
 	normalPolarity,
 	reversePolarity,
+	softClampApprox,
+	softUnclamp,
 } from './apca.ts'
 import { findGamutSlice, type GamutSlice } from './color.ts'
 import {
@@ -54,7 +56,7 @@ function generatePropertyRules(
 	properties.push(color(output, true))
 
 	if (labels.length > 0) {
-		properties.push(numeric('_mc'), numeric('_ybg'))
+		properties.push(numeric('_mc'), numeric('_ybg'), numeric('_sc'))
 	}
 
 	for (const label of labels) {
@@ -63,6 +65,8 @@ function generatePropertyRules(
 		// Inversion properties (only when inversion is enabled)
 		if (!noContrastInversion) {
 			properties.push(
+				numeric(`_ylr-${label}`),
+				numeric(`_ydr-${label}`),
 				numeric(`_yl-${label}`),
 				numeric(`_yd-${label}`),
 				numeric(`_lcl-${label}`),
@@ -71,6 +75,7 @@ function generatePropertyRules(
 		}
 
 		properties.push(
+			numeric(`_yr-${label}`),
 			numeric(`_yt-${label}`),
 			numeric(`_la-${label}`),
 			numeric(`_ca-${label}`),
@@ -169,16 +174,19 @@ function buildContrastColorExprSimple<
 	hue: number,
 	slice: GamutSlice,
 	coeffs: HueYCoefficients,
-	yBackgroundExpr: ct.CalcExpression<string>,
+	scYBackgroundExpr: ct.CalcExpression<string>,
 	output: OutputRef,
 ) {
-	// Target Y from contrast solver
-	const yTargetExpr = contrastSolver
+	// Solver operates in soft-clamped domain; output is sc_approx(Y_fg)
+	const yRawExpr = contrastSolver
 		.bind({
-			yBg: yBackgroundExpr,
+			yBg: scYBackgroundExpr,
 			contrast: `contrast-${label}`,
 		})
-		.asProperty(`_yt-${label}`)
+		.asProperty(`_yr-${label}`)
+
+	// Unclamp to recover actual Y_fg
+	const yTargetExpr = softUnclamp(yRawExpr).asProperty(`_yt-${label}`)
 
 	// Cardano-corrected lightness
 	const conLumExpr = buildCorrectedLightness(label, yTargetExpr, slice, coeffs)
@@ -204,17 +212,25 @@ function buildContrastColorExprWithInversion<
 	slice: GamutSlice,
 	coeffs: HueYCoefficients,
 	yBackgroundExpr: ct.CalcExpression<string>,
+	scYBackgroundExpr: ct.CalcExpression<string>,
 	output: OutputRef,
 ) {
-	const contrastBinding = { yBg: yBackgroundExpr, contrast: `contrast-${label}` }
+	// Solver uses soft-clamped Y_bg; outputs are in sc_approx domain
+	const contrastBinding = { yBg: scYBackgroundExpr, contrast: `contrast-${label}` }
 
-	// Clamp both to valid Y range [0, 1]
-	const yLightExpr = ct
+	// Raw solver outputs in soft-clamped domain
+	const yLightRawExpr = ct
 		.clamp(0, reversePolarity.bind(contrastBinding), 1)
-		.asProperty(`_yl-${label}`)
-	const yDarkExpr = ct.clamp(0, normalPolarity.bind(contrastBinding), 1).asProperty(`_yd-${label}`)
+		.asProperty(`_ylr-${label}`)
+	const yDarkRawExpr = ct
+		.clamp(0, normalPolarity.bind(contrastBinding), 1)
+		.asProperty(`_ydr-${label}`)
 
-	// Measure achieved contrast for each clamped solution
+	// Unclamp to recover actual Y values
+	const yLightExpr = softUnclamp(yLightRawExpr).asProperty(`_yl-${label}`)
+	const yDarkExpr = softUnclamp(yDarkRawExpr).asProperty(`_yd-${label}`)
+
+	// Measure achieved contrast using original Y_bg (measurement has its own true softClampY)
 	const lcLightExpr = contrastMeasurementReverse
 		.bind({ yBg: yBackgroundExpr, yFg: yLightExpr })
 		.asProperty(`_lcl-${label}`)
@@ -223,13 +239,16 @@ function buildContrastColorExprWithInversion<
 		.bind({ yBg: yBackgroundExpr, yFg: yDarkExpr })
 		.asProperty(`_lcd-${label}`)
 
-	// Use the inversion solver to select the best Y
+	// Inversion solver uses original Y_bg for zero-contrast fallback
+	// Raw values used for exhaustion detection (softUnclamp(1) < 1 would hide exhaustion)
 	const yTargetExpr = contrastSolverWithInversion
 		.bind({
 			yBg: yBackgroundExpr,
 			contrast: `contrast-${label}`,
 			yLight: yLightExpr,
 			yDark: yDarkExpr,
+			yLightRaw: yLightRawExpr,
+			yDarkRaw: yDarkRawExpr,
 			lcLight: lcLightExpr,
 			lcDark: lcDarkExpr,
 		})
@@ -254,13 +273,22 @@ function buildContrastColorExpr(
 	slice: GamutSlice,
 	coeffs: HueYCoefficients,
 	yBackgroundExpr: ct.CalcExpression<string>,
+	scYBackgroundExpr: ct.CalcExpression<string>,
 	output: string,
 	noContrastInversion: boolean,
 ) {
 	if (noContrastInversion) {
-		return buildContrastColorExprSimple(label, hue, slice, coeffs, yBackgroundExpr, output)
+		return buildContrastColorExprSimple(label, hue, slice, coeffs, scYBackgroundExpr, output)
 	}
-	return buildContrastColorExprWithInversion(label, hue, slice, coeffs, yBackgroundExpr, output)
+	return buildContrastColorExprWithInversion(
+		label,
+		hue,
+		slice,
+		coeffs,
+		yBackgroundExpr,
+		scYBackgroundExpr,
+		output,
+	)
 }
 
 /**
@@ -306,6 +334,10 @@ export function generateHueCss(definition: HueDefinition): string {
 		const yBgExpr = buildYBackgroundExpr(slice, coeffs)
 		mergeCss(yBgExpr.toCss())
 
+		// Soft-clamped Y_bg for the contrast solver (Lp-norm approximation)
+		const scYBgExpr = softClampApprox(yBgExpr).asProperty('_sc')
+		mergeCss(scYBgExpr.toCss())
+
 		// Build contrast color expressions
 		for (const { label } of contrastColors) {
 			mergeCss(
@@ -315,6 +347,7 @@ export function generateHueCss(definition: HueDefinition): string {
 					slice,
 					coeffs,
 					yBgExpr,
+					scYBgExpr,
 					output,
 					noContrastInversion,
 				).toCss(),

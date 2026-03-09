@@ -1,4 +1,4 @@
-import type { CalcExpression } from '@ok-apca/calc-tree'
+import type { CalcExpression, ExpressionInput } from '@ok-apca/calc-tree'
 import * as ct from '@ok-apca/calc-tree'
 import {
 	APCA_BG_EXP_NORMAL,
@@ -15,6 +15,9 @@ import {
 	APCA_SMOOTH_THRESHOLD_OFFSET,
 	COMPARISON_EPSILON,
 	INVERSION_THRESHOLD,
+	LP_SOFT_CLAMP_INV_P,
+	LP_SOFT_CLAMP_KP,
+	LP_SOFT_CLAMP_P,
 } from './constants.ts'
 
 // --- Contrast polarity solver ---
@@ -114,14 +117,39 @@ export const contrastMeasurementNormal: CalcExpression<'yBg' | 'yFg'> = ct.max(
 	),
 )
 
+// --- Soft clamp approximation for solver ---
+
+/**
+ * Lp-norm approximation of the APCA soft black clamp.
+ * Applied to Y_bg before feeding to the contrast solver.
+ *
+ * Formula: pow(pow(Y, p) + K^p, 1/p)
+ * References Y exactly once, avoiding DevTools expression expansion.
+ */
+export const softClampApprox = <R extends string>(y: ExpressionInput<R>) =>
+	ct.pow(ct.add(ct.pow(y, LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP), LP_SOFT_CLAMP_INV_P)
+
+/**
+ * Lp-norm inverse: approximate inverse of the soft black clamp.
+ * Applied to the solver output to recover the actual Y_fg.
+ *
+ * Formula: pow(max(0, pow(Y, p) - K^p), 1/p)
+ * References Y exactly once. Naturally approaches identity for Y >> K
+ * without needing a conditional branch, avoiding expression expansion.
+ */
+export const softUnclamp = <R extends string>(y: ExpressionInput<R>) =>
+	ct.pow(ct.max(0, ct.subtract(ct.pow(y, LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP)), LP_SOFT_CLAMP_INV_P)
+
 // --- Contrast solver with inversion ---
 
 // Detect whether the preferred direction's solution has been exhausted
-// (clamped to the boundary). sign(0)=0 and sign(x>0)=1, so:
-// darkNotExhausted = 1 when yDark > 0 (still has room to go darker)
-// lightNotExhausted = 1 when yLight < 1 (still has room to go lighter)
-const darkNotExhausted = ct.max(0, ct.sign('yDark'))
-const lightNotExhausted = ct.max(0, ct.sign(ct.subtract(1, 'yLight')))
+// (clamped to the boundary). Uses raw (pre-unclamp) values because
+// softUnclamp(1) < 1, which would prevent exhaustion detection.
+// sign(0)=0 and sign(x>0)=1, so:
+// darkNotExhausted = 1 when yDarkRaw > 0 (still has room to go darker)
+// lightNotExhausted = 1 when yLightRaw < 1 (still has room to go lighter)
+const darkNotExhausted = ct.max(0, ct.sign('yDarkRaw'))
+const lightNotExhausted = ct.max(0, ct.sign(ct.subtract(1, 'yLightRaw')))
 const preferredNotExhausted = ct.add(
 	ct.multiply(contrastPreferDark, darkNotExhausted),
 	ct.multiply(contrastPreferLight, lightNotExhausted),
@@ -170,7 +198,7 @@ const useDarkComparison = ct.max(darkWins, ct.multiply(isTie, contrastPreferDark
  * - Selection: preference when not exhausted, comparison when exhausted
  */
 export const contrastSolverWithInversion: CalcExpression<
-	'yBg' | 'contrast' | 'yLight' | 'yDark' | 'lcLight' | 'lcDark'
+	'yBg' | 'contrast' | 'yLight' | 'yDark' | 'yLightRaw' | 'yDarkRaw' | 'lcLight' | 'lcDark'
 > = ct.add(
 	ct.multiply(ct.lerp(useLightComparison, contrastPreferLight, usePreference), 'yLight'),
 	ct.multiply(ct.lerp(useDarkComparison, contrastPreferDark, usePreference), 'yDark'),

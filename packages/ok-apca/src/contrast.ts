@@ -7,6 +7,7 @@ import {
 	contrastSolverWithInversion,
 	normalPolarity,
 	reversePolarity,
+	softUnclamp,
 } from './apca.ts'
 import {
 	type Color,
@@ -16,8 +17,19 @@ import {
 	gamutMap,
 	toColor,
 } from './color.ts'
+import { LP_SOFT_CLAMP_INV_P, LP_SOFT_CLAMP_KP, LP_SOFT_CLAMP_P } from './constants.ts'
 import { exactY, hueYCoefficients, yCorrectionFactor } from './correction.ts'
 import { clampNumber } from './util.ts'
+
+/** Lp-norm soft clamp approximation (numeric). */
+function lpSoftClamp(y: number): number {
+	return (y ** LP_SOFT_CLAMP_P + LP_SOFT_CLAMP_KP) ** LP_SOFT_CLAMP_INV_P
+}
+
+/** Lp-norm inverse (numeric). Matches the CSS softUnclamp expression. */
+function lpSoftUnclamp(y: number): number {
+	return Math.max(0, y ** LP_SOFT_CLAMP_P - LP_SOFT_CLAMP_KP) ** LP_SOFT_CLAMP_INV_P
+}
 
 /**
  * Measure APCA contrast between colors.
@@ -71,23 +83,36 @@ export function computeContrastColor(color: ColorInput, contrast: number, invert
 	})
 
 	const clampedContrast = clampNumber(-1.08, contrast, 1.08)
+	const scY = lpSoftClamp(Y)
 
-	const ySolver = (
-		invert
-			? contrastSolverWithInversion
-					.bind({
-						lcLight: contrastMeasurementReverse.bind({ yFg: 'yLight' }),
-						lcDark: contrastMeasurementNormal.bind({ yFg: 'yDark' }),
-					})
-					.bind({
-						yLight: clamp(0, reversePolarity, 1),
-						yDark: clamp(0, normalPolarity, 1),
-					})
-			: contrastSolver
-	).solve({
-		yBg: Y,
-		contrast: clampedContrast,
-	})
+	const ySolver = invert
+		? contrastSolverWithInversion
+				.bind({
+					// Measurement uses original Y (it has its own true softClampY)
+					lcLight: contrastMeasurementReverse.bind({ yBg: Y, yFg: 'yLight' }),
+					lcDark: contrastMeasurementNormal.bind({ yBg: Y, yFg: 'yDark' }),
+				})
+				.bind({
+					// Unclamped Y values for selection
+					yLight: softUnclamp('yLightRaw'),
+					yDark: softUnclamp('yDarkRaw'),
+				})
+				.bind({
+					// Raw clamped values in soft-clamp domain (used for exhaustion detection)
+					yLightRaw: clamp(0, reversePolarity.bind({ yBg: scY }), 1),
+					yDarkRaw: clamp(0, normalPolarity.bind({ yBg: scY }), 1),
+				})
+				.solve({
+					// Remaining yBg is for the zero-contrast fallback
+					yBg: Y,
+					contrast: clampedContrast,
+				})
+		: lpSoftUnclamp(
+				contrastSolver.solve({
+					yBg: scY,
+					contrast: clampedContrast,
+				}),
+			)
 
 	// f-correction inverse: Y → L using approximate chroma
 	const lApprox = clampNumber(0, ySolver ** (1 / 3), 1)
