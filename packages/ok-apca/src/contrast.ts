@@ -17,7 +17,19 @@ import {
 	gamutMap,
 	toColor,
 } from './color.ts'
-import { LP_SOFT_CLAMP_INV_P, LP_SOFT_CLAMP_KP, LP_SOFT_CLAMP_P } from './constants.ts'
+import {
+	APCA_BG_EXP_NORMAL,
+	APCA_BG_EXP_REVERSE,
+	APCA_BLACK_CLAMP,
+	APCA_FG_EXP_NORMAL,
+	APCA_FG_EXP_REVERSE,
+	APCA_OFFSET,
+	APCA_SCALE,
+	APCA_SMOOTH_THRESHOLD,
+	LP_SOFT_CLAMP_INV_P,
+	LP_SOFT_CLAMP_KP,
+	LP_SOFT_CLAMP_P,
+} from './constants.ts'
 import { exactY, hueYCoefficients, yCorrectionFactor } from './correction.ts'
 import { clampNumber } from './util.ts'
 
@@ -31,12 +43,25 @@ function lpSoftUnclamp(y: number): number {
 	return Math.max(0, y ** LP_SOFT_CLAMP_P - LP_SOFT_CLAMP_KP) ** LP_SOFT_CLAMP_INV_P
 }
 
+/** True APCA soft black clamp: Y + max(0, threshold - Y)^1.414 */
+function trueSoftClamp(y: number): number {
+	return y + Math.max(0, APCA_SMOOTH_THRESHOLD - y) ** APCA_BLACK_CLAMP
+}
+
 /**
  * Measure APCA contrast between colors.
  * Returns signed Lc value: positive = dark on light, negative = light on dark.
  * Range: -1.08 to 1.08.
+ *
+ * By default uses the true APCA soft black clamp for accurate reference values.
+ * Pass `approximate: true` to use the Lp-norm approximation matching the
+ * generated CSS expressions.
  */
-export function measureContrast(baseColor: ColorInput, contrastColor: ColorInput): number {
+export function measureContrast(
+	baseColor: ColorInput,
+	contrastColor: ColorInput,
+	{ approximate = false }: { approximate?: boolean } = {},
+): number {
 	const yBg = getLuminance({ space: OKLCH, coords: toColor(baseColor).coords() })
 	const yFg = getLuminance({ space: OKLCH, coords: toColor(contrastColor).coords() })
 
@@ -48,9 +73,14 @@ export function measureContrast(baseColor: ColorInput, contrastColor: ColorInput
 		return 0
 	}
 
-	return yBg >= yFg
-		? contrastMeasurementNormal.solve({ yBg, yFg })
-		: -contrastMeasurementReverse.solve({ yBg, yFg })
+	const softClamp = approximate ? lpSoftClamp : trueSoftClamp
+	const scBg = softClamp(yBg)
+	const scFg = softClamp(yFg)
+
+	if (yBg >= yFg) {
+		return Math.max(0, APCA_SCALE * (scBg ** APCA_BG_EXP_NORMAL - scFg ** APCA_FG_EXP_NORMAL) - APCA_OFFSET)
+	}
+	return -Math.max(0, APCA_SCALE * (scFg ** APCA_FG_EXP_REVERSE - scBg ** APCA_BG_EXP_REVERSE) - APCA_OFFSET)
 }
 
 /**
@@ -88,7 +118,7 @@ export function computeContrastColor(color: ColorInput, contrast: number, invert
 	const ySolver = invert
 		? contrastSolverWithInversion
 				.bind({
-					// Measurement uses original Y (it has its own true softClampY)
+					// Measurement uses original Y (Lp-norm clamp is inside the expression)
 					lcLight: contrastMeasurementReverse.bind({ yBg: Y, yFg: 'yLight' }),
 					lcDark: contrastMeasurementNormal.bind({ yBg: Y, yFg: 'yDark' }),
 				})

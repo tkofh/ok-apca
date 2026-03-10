@@ -73,6 +73,7 @@ function generatePropertyRules(
 			numeric(`_yr-${label}`),
 			numeric(`_yt-${label}`),
 			numeric(`_cl-${label}`),
+			numeric(`_mc-${label}`),
 			color(`${output}-${label}`, true),
 		)
 	}
@@ -181,9 +182,12 @@ function buildContrastColorExprSimple<
 	// Cardano-corrected lightness
 	const conLumExpr = buildCorrectedLightness(label, yTargetExpr, slice, coeffs)
 
+	// Max chroma at contrast color's lightness
+	const conMaxChromaExpr = bindMaxChroma(conLumExpr, slice).asProperty(`_mc-${label}`)
+
 	// Build the contrast color
 	return ct
-		.oklch(conLumExpr, ct.multiply(bindMaxChroma(conLumExpr, slice), 'chroma'), hue)
+		.oklch(conLumExpr, ct.multiply(conMaxChromaExpr, 'chroma'), hue)
 		.asProperty(`${output}-${label}`)
 }
 
@@ -249,9 +253,12 @@ function buildContrastColorExprWithInversion<
 	// Cardano-corrected lightness
 	const conLumExpr = buildCorrectedLightness(label, yTargetExpr, slice, coeffs)
 
+	// Max chroma at contrast color's lightness
+	const conMaxChromaExpr = bindMaxChroma(conLumExpr, slice).asProperty(`_mc-${label}`)
+
 	// Build the contrast color
 	return ct
-		.oklch(conLumExpr, ct.multiply(bindMaxChroma(conLumExpr, slice), 'chroma'), hue)
+		.oklch(conLumExpr, ct.multiply(conMaxChromaExpr, 'chroma'), hue)
 		.asProperty(`${output}-${label}`)
 }
 

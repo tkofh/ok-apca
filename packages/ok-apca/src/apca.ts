@@ -3,7 +3,6 @@ import * as ct from '@ok-apca/calc-tree'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
-	APCA_BLACK_CLAMP,
 	APCA_FG_EXP_NORMAL,
 	APCA_FG_EXP_REVERSE,
 	APCA_NORMAL_INV_EXP,
@@ -72,55 +71,10 @@ export const contrastSolver: CalcExpression<'yBg' | 'contrast'> = ct.clamp(
 	1,
 )
 
-// --- Contrast measurement ---
-
-// Soft black clamp: Y + pow(max(0, threshold - Y), 1.414)
-// When Y >= threshold this is a no-op; when Y < threshold it bumps Y up
-const softClampY = <R extends string>(y: CalcExpression<R>) =>
-	ct.add(y, ct.pow(ct.max(0, ct.subtract(APCA_SMOOTH_THRESHOLD, y)), APCA_BLACK_CLAMP))
-
-const yBgClamped = softClampY(ct.toExpression('yBg'))
-const yFgClamped = softClampY(ct.toExpression('yFg'))
-
-/**
- * Measure achieved contrast for reverse polarity (light text on dark background).
- * Includes APCA soft black clamp for perceptual accuracy near Y=0.
- *
- * Formula: max(0, 1.14 * (clamp(Y_fg)^0.62 - clamp(Y_bg)^0.65) - 0.027)
- */
-export const contrastMeasurementReverse: CalcExpression<'yBg' | 'yFg'> = ct.max(
-	0,
-	ct.subtract(
-		ct.multiply(
-			APCA_SCALE,
-			ct.subtract(ct.pow(yFgClamped, APCA_FG_EXP_REVERSE), ct.pow(yBgClamped, APCA_BG_EXP_REVERSE)),
-		),
-		APCA_OFFSET,
-	),
-)
-
-/**
- * Measure achieved contrast for normal polarity (dark text on light background).
- * Includes APCA soft black clamp for perceptual accuracy near Y=0.
- *
- * Formula: max(0, 1.14 * (clamp(Y_bg)^0.56 - clamp(Y_fg)^0.57) - 0.027)
- */
-export const contrastMeasurementNormal: CalcExpression<'yBg' | 'yFg'> = ct.max(
-	0,
-	ct.subtract(
-		ct.multiply(
-			APCA_SCALE,
-			ct.subtract(ct.pow(yBgClamped, APCA_BG_EXP_NORMAL), ct.pow(yFgClamped, APCA_FG_EXP_NORMAL)),
-		),
-		APCA_OFFSET,
-	),
-)
-
-// --- Soft clamp approximation for solver ---
+// --- Soft clamp approximation ---
 
 /**
  * Lp-norm approximation of the APCA soft black clamp.
- * Applied to Y_bg before feeding to the contrast solver.
  *
  * Formula: pow(pow(Y, p) + K^p, 1/p)
  * References Y exactly once, avoiding DevTools expression expansion.
@@ -138,6 +92,47 @@ export const softClampApprox = <R extends string>(y: ExpressionInput<R>) =>
  */
 export const softUnclamp = <R extends string>(y: ExpressionInput<R>) =>
 	ct.pow(ct.max(0, ct.subtract(ct.pow(y, LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP)), LP_SOFT_CLAMP_INV_P)
+
+// --- Contrast measurement ---
+
+// Lp-norm soft clamp for measurement inputs. Uses the same approximation as the
+// solver so each Y input is referenced once instead of twice. Measurements are
+// only used for comparison (which direction achieved higher contrast), so the
+// monotonic Lp-norm preserves ranking while halving expansion.
+const yBgClamped = softClampApprox(ct.toExpression('yBg'))
+const yFgClamped = softClampApprox(ct.toExpression('yFg'))
+
+/**
+ * Measure achieved contrast for reverse polarity (light text on dark background).
+ *
+ * Formula: max(0, 1.14 * (clamp(Y_fg)^0.62 - clamp(Y_bg)^0.65) - 0.027)
+ */
+export const contrastMeasurementReverse: CalcExpression<'yBg' | 'yFg'> = ct.max(
+	0,
+	ct.subtract(
+		ct.multiply(
+			APCA_SCALE,
+			ct.subtract(ct.pow(yFgClamped, APCA_FG_EXP_REVERSE), ct.pow(yBgClamped, APCA_BG_EXP_REVERSE)),
+		),
+		APCA_OFFSET,
+	),
+)
+
+/**
+ * Measure achieved contrast for normal polarity (dark text on light background).
+ *
+ * Formula: max(0, 1.14 * (clamp(Y_bg)^0.56 - clamp(Y_fg)^0.57) - 0.027)
+ */
+export const contrastMeasurementNormal: CalcExpression<'yBg' | 'yFg'> = ct.max(
+	0,
+	ct.subtract(
+		ct.multiply(
+			APCA_SCALE,
+			ct.subtract(ct.pow(yBgClamped, APCA_BG_EXP_NORMAL), ct.pow(yFgClamped, APCA_FG_EXP_NORMAL)),
+		),
+		APCA_OFFSET,
+	),
+)
 
 // --- Contrast solver with inversion ---
 
