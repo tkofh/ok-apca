@@ -10,12 +10,7 @@ import {
 	softUnclamp,
 } from './apca.ts'
 import { findGamutSlice, type GamutSlice } from './color.ts'
-import {
-	correctionCoeffs,
-	type HueYCoefficients,
-	hueYCoefficients,
-	yCorrectionFactor,
-} from './correction.ts'
+import { correctionCoeffs, type HueYCoefficients, hueYCoefficients } from './correction.ts'
 import { maxChroma } from './gamut.ts'
 import { outdent } from './util.ts'
 
@@ -77,9 +72,6 @@ function generatePropertyRules(
 		properties.push(
 			numeric(`_yr-${label}`),
 			numeric(`_yt-${label}`),
-			numeric(`_la-${label}`),
-			numeric(`_ca-${label}`),
-			numeric(`_fo-${label}`),
 			numeric(`_cl-${label}`),
 			color(`${output}-${label}`, true),
 		)
@@ -89,7 +81,10 @@ function generatePropertyRules(
 }
 
 /** Bind maxChroma expression with gamut slice constants */
-function bindMaxChroma(lightnessExpr: ct.CalcExpression<string>, slice: GamutSlice) {
+function bindMaxChroma<const LightnessRefs extends string>(
+	lightnessExpr: ct.CalcExpression<LightnessRefs>,
+	slice: GamutSlice,
+) {
 	return maxChroma.bind({
 		lightness: lightnessExpr,
 		apexL: slice.apex.lightness,
@@ -129,11 +124,14 @@ function buildYBackgroundExpr(slice: GamutSlice, coeffs: HueYCoefficients) {
 /**
  * Build the Y→L correction pipeline for a contrast color.
  *
- * Uses the multiplicative correction factor f = 1 + A·k + B·k² + D·k³
- * where k = C_approx / L_approx. Then L = pow(Y / f, 1/3).
+ * Uses the pre-computed correction factor f = 1 + fA·chroma + fB·chroma² + fD·chroma³
+ * where fA, fB, fD are build-time constants from the hue's apex geometry.
+ * Then L = pow(Y / f, 1/3).
  *
- * Each step references its inputs once or via small var() references,
- * keeping total expression size compact.
+ * This is exact on the left half of the gamut tent (where k = apexC/apexL · chromaRatio
+ * is constant) and a close approximation on the right half (where chroma is smaller,
+ * making f closer to 1). Crucially, f depends only on `chroma` (a leaf input),
+ * not on the target Y, avoiding deep expression expansion through the solver chain.
  */
 function buildCorrectedLightness(
 	label: string,
@@ -141,26 +139,18 @@ function buildCorrectedLightness(
 	slice: GamutSlice,
 	coeffs: HueYCoefficients,
 ) {
-	// Approximate L from Y (cube root)
-	const lApproxExpr = ct.pow(yTargetExpr, 1 / 3).asProperty(`_la-${label}`)
+	const { fA, fB, fD } = correctionCoeffs(slice, coeffs)
 
-	// Approximate chroma at that lightness
-	const cApproxExpr = ct
-		.multiply(bindMaxChroma(lApproxExpr, slice), 'chroma')
-		.asProperty(`_ca-${label}`)
-
-	// Correction factor using k = C_approx / L_approx
-	const fOutExpr = yCorrectionFactor
-		.bind({
-			yCorrectionK: ct.divide(cApproxExpr, lApproxExpr),
-			yCoeffA: coeffs.a,
-			yCoeffB: coeffs.b,
-			yCoeffD: coeffs.d,
-		})
-		.asProperty(`_fo-${label}`)
+	// Pre-computed correction factor: depends only on chroma (a leaf input)
+	const fExpr = ct.add(
+		1,
+		ct.multiply(fA, 'chroma'),
+		ct.multiply(fB, ct.pow('chroma', 2)),
+		ct.multiply(fD, ct.pow('chroma', 3)),
+	)
 
 	// Corrected lightness: L = pow(Y / f, 1/3)
-	return ct.pow(ct.divide(yTargetExpr, fOutExpr), 1 / 3).asProperty(`_cl-${label}`)
+	return ct.pow(ct.divide(yTargetExpr, fExpr), 1 / 3).asProperty(`_cl-${label}`)
 }
 
 /**
@@ -206,13 +196,15 @@ function buildContrastColorExprSimple<
 function buildContrastColorExprWithInversion<
 	const LabelRef extends string,
 	const OutputRef extends string,
+	const YBgRefs extends string,
+	const ScYBgRefs extends string,
 >(
 	label: LabelRef,
 	hue: number,
 	slice: GamutSlice,
 	coeffs: HueYCoefficients,
-	yBackgroundExpr: ct.CalcExpression<string>,
-	scYBackgroundExpr: ct.CalcExpression<string>,
+	yBackgroundExpr: ct.CalcExpression<YBgRefs>,
+	scYBackgroundExpr: ct.CalcExpression<ScYBgRefs>,
 	output: OutputRef,
 ) {
 	// Solver uses soft-clamped Y_bg; outputs are in sc_approx domain

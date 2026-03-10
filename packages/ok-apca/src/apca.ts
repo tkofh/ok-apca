@@ -13,7 +13,6 @@ import {
 	APCA_SMOOTH_POWER,
 	APCA_SMOOTH_THRESHOLD,
 	APCA_SMOOTH_THRESHOLD_OFFSET,
-	COMPARISON_EPSILON,
 	INVERSION_THRESHOLD,
 	LP_SOFT_CLAMP_INV_P,
 	LP_SOFT_CLAMP_KP,
@@ -164,21 +163,16 @@ const belowInvertThreshold = ct.multiply(
 // or when both contrasts are below the inversion threshold
 const usePreference = ct.max(belowInvertThreshold, preferredNotExhausted)
 
-const lcDiff = ct.subtract('lcLight', 'lcDark')
-
-const outsideEpsilon = ct.subtract(
-	1,
-	ct.max(0, ct.sign(ct.subtract(COMPARISON_EPSILON, ct.abs(lcDiff)))),
+// Comparison with preference bias: when contrast difference is smaller than the
+// bias (~0.1 Lc), the preferred direction wins. This replaces epsilon-based
+// tie-breaking with fewer lcLight/lcDark references (2 each instead of 6).
+const preferBias = ct.subtract(
+	ct.multiply(contrastPreferLight, 0.001),
+	ct.multiply(contrastPreferDark, 0.001),
 )
-
-// Only declare a winner if difference is outside epsilon
-const lightWins = ct.multiply(outsideEpsilon, ct.max(0, ct.sign(lcDiff)))
-const darkWins = ct.multiply(outsideEpsilon, ct.max(0, ct.sign(ct.multiply(-1, lcDiff))))
-const isTie = ct.subtract(1, ct.max(lightWins, darkWins)) // 1 if within epsilon or equal
-
-// When preferred direction is exhausted: winner takes all with ties using preference
-const useLightComparison = ct.max(lightWins, ct.multiply(isTie, contrastPreferLight))
-const useDarkComparison = ct.max(darkWins, ct.multiply(isTie, contrastPreferDark))
+const compDiff = ct.add(ct.subtract('lcLight', 'lcDark'), preferBias)
+const useLightComparison = ct.max(0, ct.sign(compDiff))
+const useDarkComparison = ct.max(0, ct.sign(ct.multiply(-1, compDiff)))
 
 /**
  * Contrast solver with automatic polarity inversion.
