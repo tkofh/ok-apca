@@ -29,7 +29,7 @@ const smoothingBlend = ct.pow(
 
 const aboveSmoothThreshold = ct.max(0, ct.sign(ct.subtract(absContrast, APCA_SMOOTH_THRESHOLD)))
 
-export const normalPolarity: ct.CalcExpression<'yBg' | 'contrast'> = ct.lerp(
+export const normalPolarity: ct.NumberExpression<'yBg' | 'contrast'> = ct.lerp(
 	ct.lerp(
 		'yBg',
 		ct.signedPow(
@@ -42,7 +42,7 @@ export const normalPolarity: ct.CalcExpression<'yBg' | 'contrast'> = ct.lerp(
 	aboveSmoothThreshold,
 )
 
-export const reversePolarity: ct.CalcExpression<'yBg' | 'contrast'> = ct.lerp(
+export const reversePolarity: ct.NumberExpression<'yBg' | 'contrast'> = ct.lerp(
 	ct.lerp(
 		'yBg',
 		ct.pow(
@@ -60,7 +60,7 @@ const contrastPreferLight = ct.max(0, contrastSign)
 const contrastPreferDark = ct.max(0, ct.multiply(-1, contrastSign))
 const contrastIsZero = ct.subtract(1, ct.max(contrastPreferLight, contrastPreferDark))
 
-export const contrastSolver: ct.CalcExpression<'yBg' | 'contrast'> = ct.clamp(
+export const contrastSolver: ct.NumberExpression<'yBg' | 'contrast'> = ct.clamp(
 	0,
 	ct.add(
 		ct.multiply(contrastPreferLight, reversePolarity),
@@ -98,15 +98,15 @@ export const softUnclamp = <R extends string>(y: ct.ExpressionInput<R>) =>
 // solver so each Y input is referenced once instead of twice. Measurements are
 // only used for comparison (which direction achieved higher contrast), so the
 // monotonic Lp-norm preserves ranking while halving expansion.
-const yBgClamped = softClampApprox(ct.toExpression('yBg'))
-const yFgClamped = softClampApprox(ct.toExpression('yFg'))
+const yBgClamped = softClampApprox('yBg')
+const yFgClamped = softClampApprox('yFg')
 
 /**
  * Measure achieved contrast for reverse polarity (light text on dark background).
  *
  * Formula: max(0, 1.14 * (clamp(Y_fg)^0.62 - clamp(Y_bg)^0.65) - 0.027)
  */
-export const contrastMeasurementReverse: ct.CalcExpression<'yBg' | 'yFg'> = ct.max(
+export const contrastMeasurementReverse: ct.NumberExpression<'yBg' | 'yFg'> = ct.max(
 	0,
 	ct.subtract(
 		ct.multiply(
@@ -122,7 +122,7 @@ export const contrastMeasurementReverse: ct.CalcExpression<'yBg' | 'yFg'> = ct.m
  *
  * Formula: max(0, 1.14 * (clamp(Y_bg)^0.56 - clamp(Y_fg)^0.57) - 0.027)
  */
-export const contrastMeasurementNormal: ct.CalcExpression<'yBg' | 'yFg'> = ct.max(
+export const contrastMeasurementNormal: ct.NumberExpression<'yBg' | 'yFg'> = ct.max(
 	0,
 	ct.subtract(
 		ct.multiply(
@@ -185,7 +185,7 @@ const useDarkComparison = ct.max(0, ct.sign(ct.multiply(-1, compDiff)))
  * - Lc_dark: achieved contrast for dark solution
  * - Selection: preference when not exhausted, comparison when exhausted
  */
-export const contrastSolverWithInversion: ct.CalcExpression<
+export const contrastSolverWithInversion: ct.NumberExpression<
 	'yBg' | 'contrast' | 'yLight' | 'yDark' | 'yLightRaw' | 'yDarkRaw' | 'lcLight' | 'lcDark'
 > = ct.add(
 	ct.multiply(ct.lerp(useLightComparison, contrastPreferLight, usePreference), 'yLight'),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { add, multiply, toExpression } from '../src/index.ts'
+import { reference } from '../src/constructors.ts'
+import { add, multiply } from '../src/index.ts'
 
 describe('binding', () => {
 	describe('basic binding', () => {
@@ -50,7 +51,7 @@ describe('binding', () => {
 		})
 
 		it('adds new references when binding', () => {
-			const expr = toExpression('x')
+			const expr = reference('x')
 			const bound = expr.bind({ x: add('a', 'b') })
 
 			// Now requires both a and b

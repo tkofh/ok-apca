@@ -1,27 +1,39 @@
 import { type ExpressionInput, toExpression } from './constructors.ts'
-import { PropertyNode } from './nodes.ts'
-import type { CalcNode, CSSResult } from './types.ts'
+import type { CSSResult, ExpressionNode, PropertyRule } from './types.ts'
 
-function createCSSResult(expression: string, declarations: Record<string, string>): CSSResult {
+function createCSSResult(
+	expression: string,
+	declarations: Record<string, string>,
+	properties: Record<string, PropertyRule>,
+): CSSResult {
 	return {
 		expression,
 		declarations,
+		properties,
 		toDeclarationBlock() {
 			return Object.entries(declarations)
 				.map(([name, value]) => `${name}: ${value};`)
+				.join('\n')
+		},
+		toPropertyRules() {
+			return Object.entries(properties)
+				.map(
+					([name, rule]) =>
+						`@property ${name} {\n\tinherits: ${rule.inherits ? 'true' : 'false'};\n\tinitial-value: ${rule.initialValue};\n\tsyntax: '${rule.syntax}';\n}`,
+				)
 				.join('\n')
 		},
 	}
 }
 
 function applyBindings(
-	node: CalcNode,
+	node: ExpressionNode,
 	bindings: Record<string, ExpressionInput<never>> | undefined,
-): CalcNode {
+): ExpressionNode {
 	if (!bindings) {
 		return node
 	}
-	const nodeBindings: Record<string, CalcNode> = {}
+	const nodeBindings: Record<string, ExpressionNode> = {}
 	for (const [key, value] of Object.entries(bindings) as [string, ExpressionInput<never>][]) {
 		nodeBindings[key] = toExpression(value).node
 	}
@@ -29,18 +41,18 @@ function applyBindings(
 }
 
 // Extract the union of all refs from values in a binding record
-type ValueRefs<V> = V extends CalcExpression<infer R> ? R : V extends string ? V : never
+type ValueRefs<V> = V extends NumberExpression<infer R> ? R : V extends string ? V : never
 type BindingRefs<T> = T extends Record<string, infer V> ? ValueRefs<V> : never
 
 /**
  * Abstract base class for expression trees.
- * Provides shared functionality for binding, CSS generation, and property creation.
+ * Provides shared functionality for binding and CSS generation.
  */
 export abstract class BaseExpression<Refs extends string = never> {
-	readonly node: CalcNode
+	readonly node: ExpressionNode
 	readonly refs: ReadonlySet<string>
 
-	constructor(node: CalcNode, refs: ReadonlySet<string> = new Set()) {
+	constructor(node: ExpressionNode, refs: ReadonlySet<string> = new Set()) {
 		this.node = node
 		this.refs = refs
 	}
@@ -50,14 +62,14 @@ export abstract class BaseExpression<Refs extends string = never> {
 	 * Subclasses must implement this to return their own type.
 	 */
 	protected abstract create<R extends string>(
-		node: CalcNode,
+		node: ExpressionNode,
 		refs: ReadonlySet<string>,
 	): BaseExpression<R>
 
 	bind<B extends Partial<Record<Refs, ExpressionInput<string>>>>(
 		bindings: B,
 	): BaseExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>> {
-		const nodeBindings: Record<string, CalcNode> = {}
+		const nodeBindings: Record<string, ExpressionNode> = {}
 		const newRefs = new Set(this.refs)
 
 		for (const [key, val] of Object.entries(bindings) as [string, ExpressionInput<string>][]) {
@@ -75,10 +87,6 @@ export abstract class BaseExpression<Refs extends string = never> {
 		>
 	}
 
-	asProperty<const N extends string>(name: N): BaseExpression<N> {
-		return this.create(new PropertyNode(name, this.node), new Set([name]))
-	}
-
 	/**
 	 * Generate CSS from the expression.
 	 * Optionally accepts bindings to substitute before serialization.
@@ -86,9 +94,10 @@ export abstract class BaseExpression<Refs extends string = never> {
 	toCss(bindings?: Partial<Record<Refs, ExpressionInput<never>>>): CSSResult {
 		const substituted = applyBindings(this.node, bindings as Record<string, ExpressionInput<never>>)
 		const declarations: Record<string, string> = {}
-		const rawExpression = substituted.serialize(declarations)
+		const properties: Record<string, PropertyRule> = {}
+		const rawExpression = substituted.serialize(declarations, properties)
 		const expression = substituted.needsCalcWrap() ? `calc(${rawExpression})` : rawExpression
-		return createCSSResult(expression, declarations)
+		return createCSSResult(expression, declarations, properties)
 	}
 }
 
@@ -96,22 +105,18 @@ export abstract class BaseExpression<Refs extends string = never> {
  * Expression tree for numeric calculations.
  * Can be evaluated to a number or serialized to CSS calc().
  */
-export class CalcExpression<Refs extends string = never> extends BaseExpression<Refs> {
+export class NumberExpression<Refs extends string = never> extends BaseExpression<Refs> {
 	protected override create<R extends string>(
-		node: CalcNode,
+		node: ExpressionNode,
 		refs: ReadonlySet<string>,
-	): CalcExpression<R> {
-		return new CalcExpression<R>(node, refs)
+	): NumberExpression<R> {
+		return new NumberExpression<R>(node, refs)
 	}
 
 	override bind<const B extends Partial<Record<Refs, ExpressionInput<string>>>>(
 		bindings: B,
-	): CalcExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>> {
-		return super.bind(bindings) as CalcExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
-	}
-
-	override asProperty<const N extends string>(name: N): CalcExpression<N> {
-		return super.asProperty(name) as CalcExpression<N>
+	): NumberExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>> {
+		return super.bind(bindings) as NumberExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
 	}
 
 	/**
@@ -140,7 +145,7 @@ export class CalcExpression<Refs extends string = never> extends BaseExpression<
  */
 export class ColorExpression<Refs extends string = never> extends BaseExpression<Refs> {
 	protected override create<R extends string>(
-		node: CalcNode,
+		node: ExpressionNode,
 		refs: ReadonlySet<string>,
 	): ColorExpression<R> {
 		return new ColorExpression<R>(node, refs)
@@ -150,9 +155,5 @@ export class ColorExpression<Refs extends string = never> extends BaseExpression
 		bindings: B,
 	): ColorExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>> {
 		return super.bind(bindings) as ColorExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
-	}
-
-	override asProperty<const N extends string>(name: N): ColorExpression<N> {
-		return super.asProperty(name) as ColorExpression<N>
 	}
 }

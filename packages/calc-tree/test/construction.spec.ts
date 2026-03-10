@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { constant, reference } from '../src/constructors.ts'
 import {
 	abs,
 	add,
@@ -11,44 +12,37 @@ import {
 	sign,
 	sin,
 	subtract,
-	toExpression,
 } from '../src/index.ts'
 
 describe('construction', () => {
-	describe('toExpression', () => {
+	describe('constant', () => {
 		it('converts numbers to expressions', () => {
-			const expr = toExpression(42)
+			const expr = constant(42)
 			const result = expr.solve()
 			expect(result).toBe(42)
 		})
 
 		it('converts pi', () => {
-			const expr = toExpression(Math.PI)
+			const expr = constant(Math.PI)
 			const result = expr.solve()
 			expect(result).toBeCloseTo(Math.PI)
 		})
 
 		it('throws for non-finite numbers', () => {
-			expect(() => toExpression(Number.POSITIVE_INFINITY)).toThrow(TypeError)
-			expect(() => toExpression(Number.NaN)).toThrow(TypeError)
-		})
-
-		it('passes expressions through unchanged', () => {
-			const original = toExpression('x')
-			const expr = toExpression(original)
-			expect(expr).toBe(original)
+			expect(() => constant(Number.POSITIVE_INFINITY)).toThrow(TypeError)
+			expect(() => constant(Number.NaN)).toThrow(TypeError)
 		})
 	})
 
-	describe('toExpression with strings', () => {
+	describe('reference', () => {
 		it('creates a reference expression', () => {
-			const expr = toExpression('x')
+			const expr = reference('x')
 			const result = expr.solve({ x: 5 })
 			expect(result).toBe(5)
 		})
 
 		it('throws for empty string', () => {
-			expect(() => toExpression('')).toThrow(TypeError)
+			expect(() => reference('')).toThrow(TypeError)
 		})
 	})
 

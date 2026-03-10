@@ -10,12 +10,12 @@ export {
 	multiply,
 	oklch,
 	pow,
+	property,
 	sign,
 	signedPow,
 	sin,
 	subtract,
-	toExpression,
 } from './constructors.ts'
 
-export type { CalcExpression, ColorExpression } from './expression.ts'
-export type { CSSResult } from './types.ts'
+export type { ColorExpression, NumberExpression } from './expression.ts'
+export type { CSSResult, PropertyRule } from './types.ts'

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { constant, reference } from '../src/constructors.ts'
 import {
 	abs,
 	add,
@@ -11,55 +12,54 @@ import {
 	sign,
 	sin,
 	subtract,
-	toExpression,
 } from '../src/index.ts'
 
 describe('serialization', () => {
 	describe('constants', () => {
 		it('serializes integer constants', () => {
-			const css = toExpression(42).toCss()
+			const css = constant(42).toCss()
 			expect(css.expression).toBe('42')
 			expect(css.declarations).toEqual({})
 		})
 
 		it('serializes decimal constants', () => {
-			const css = toExpression(1.5).toCss()
+			const css = constant(1.5).toCss()
 			expect(css.expression).toBe('1.5')
 		})
 
 		it('serializes pi constant', () => {
-			const css = toExpression(Math.PI).toCss()
+			const css = constant(Math.PI).toCss()
 			expect(css.expression).toBe('pi')
 		})
 
 		it('formats numbers without trailing zeros', () => {
-			const css1 = toExpression(1.5).toCss()
+			const css1 = constant(1.5).toCss()
 			expect(css1.expression).toBe('1.5')
 
-			const css2 = toExpression(2.0).toCss()
+			const css2 = constant(2.0).toCss()
 			expect(css2.expression).toBe('2')
 		})
 
 		it('formats negative numbers', () => {
-			const css = toExpression(-42).toCss()
+			const css = constant(-42).toCss()
 			expect(css.expression).toBe('-42')
 		})
 
 		it('formats zero', () => {
-			const css = toExpression(0).toCss()
+			const css = constant(0).toCss()
 			expect(css.expression).toBe('0')
 		})
 	})
 
 	describe('references', () => {
 		it('serializes references as var()', () => {
-			const expr = toExpression('x')
+			const expr = reference('x')
 			const css = expr.toCss({ x: 'x' })
 			expect(css.expression).toBe('var(--x)')
 		})
 
 		it('serializes multi-word references', () => {
-			const expr = toExpression('my-variable')
+			const expr = reference('my-variable')
 			const css = expr.toCss({ 'my-variable': 'my-variable' })
 			expect(css.expression).toBe('var(--my-variable)')
 		})

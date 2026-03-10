@@ -1,4 +1,4 @@
-import type { CalcNode } from './types.ts'
+import type { ExpressionNode, PropertyRule } from './types.ts'
 
 function formatNumber(n: number): string {
 	if (Math.abs(n - Math.PI) < 1e-10) {
@@ -8,11 +8,11 @@ function formatNumber(n: number): string {
 	return formatted.replace(/\.?0+$/, '') || '0'
 }
 
-export class ConstantNode implements CalcNode {
+export class ConstantNode implements ExpressionNode {
 	readonly kind = 'constant'
 	readonly value: number
 
-	static is(node: CalcNode): node is ConstantNode {
+	static is(node: ExpressionNode): node is ConstantNode {
 		return node instanceof ConstantNode
 	}
 
@@ -20,7 +20,7 @@ export class ConstantNode implements CalcNode {
 		this.value = value
 	}
 
-	substitute(_bindings: Record<string, CalcNode>): CalcNode {
+	substitute(_bindings: Record<string, ExpressionNode>): ExpressionNode {
 		return this
 	}
 
@@ -32,7 +32,10 @@ export class ConstantNode implements CalcNode {
 		return this.value
 	}
 
-	serialize(_declarations: Record<string, string>): string {
+	serialize(
+		_declarations: Record<string, string>,
+		_properties?: Record<string, PropertyRule>,
+	): string {
 		return formatNumber(this.value)
 	}
 
@@ -41,7 +44,7 @@ export class ConstantNode implements CalcNode {
 	}
 }
 
-export class ReferenceNode implements CalcNode {
+export class ReferenceNode implements ExpressionNode {
 	readonly kind = 'reference'
 	readonly name: string
 
@@ -49,7 +52,7 @@ export class ReferenceNode implements CalcNode {
 		this.name = name
 	}
 
-	substitute(bindings: Record<string, CalcNode>): CalcNode {
+	substitute(bindings: Record<string, ExpressionNode>): ExpressionNode {
 		return bindings[this.name] ?? this
 	}
 
@@ -61,7 +64,10 @@ export class ReferenceNode implements CalcNode {
 		throw new Error(`Cannot evaluate non-constant reference: ${this.name}`)
 	}
 
-	serialize(_declarations: Record<string, string>): string {
+	serialize(
+		_declarations: Record<string, string>,
+		_properties?: Record<string, PropertyRule>,
+	): string {
 		return `var(--${this.name})`
 	}
 
@@ -70,19 +76,19 @@ export class ReferenceNode implements CalcNode {
 	}
 }
 
-abstract class UnaryNode implements CalcNode {
+abstract class UnaryNode implements ExpressionNode {
 	abstract readonly kind: string
-	readonly arg: CalcNode
+	readonly arg: ExpressionNode
 
-	constructor(arg: CalcNode) {
+	constructor(arg: ExpressionNode) {
 		this.arg = arg
 	}
 
 	protected abstract compute(x: number): number
 	protected abstract format(arg: string): string
-	protected abstract create(arg: CalcNode): CalcNode
+	protected abstract create(arg: ExpressionNode): ExpressionNode
 
-	substitute(bindings: Record<string, CalcNode>): CalcNode {
+	substitute(bindings: Record<string, ExpressionNode>): ExpressionNode {
 		const arg = this.arg.substitute(bindings)
 		if (ConstantNode.is(arg)) {
 			return new ConstantNode(this.compute(arg.value))
@@ -98,8 +104,11 @@ abstract class UnaryNode implements CalcNode {
 		return this.compute(this.arg.evaluateConstant())
 	}
 
-	serialize(declarations: Record<string, string>): string {
-		return this.format(this.arg.serialize(declarations))
+	serialize(
+		declarations: Record<string, string>,
+		properties?: Record<string, PropertyRule>,
+	): string {
+		return this.format(this.arg.serialize(declarations, properties))
 	}
 
 	needsCalcWrap(): boolean {
@@ -111,37 +120,37 @@ export class SinNode extends UnaryNode {
 	readonly kind = 'sin'
 	protected compute = Math.sin
 	protected format = (arg: string) => `sin(${arg})`
-	protected create = (arg: CalcNode) => new SinNode(arg)
+	protected create = (arg: ExpressionNode) => new SinNode(arg)
 }
 
 export class AbsNode extends UnaryNode {
 	readonly kind = 'abs'
 	protected compute = Math.abs
 	protected format = (arg: string) => `abs(${arg})`
-	protected create = (arg: CalcNode) => new AbsNode(arg)
+	protected create = (arg: ExpressionNode) => new AbsNode(arg)
 }
 
 export class SignNode extends UnaryNode {
 	readonly kind = 'sign'
 	protected compute = Math.sign
 	protected format = (arg: string) => `sign(${arg})`
-	protected create = (arg: CalcNode) => new SignNode(arg)
+	protected create = (arg: ExpressionNode) => new SignNode(arg)
 }
 
-abstract class NaryNode implements CalcNode {
+abstract class NaryNode implements ExpressionNode {
 	abstract readonly kind: string
-	readonly children: CalcNode[]
+	readonly children: ExpressionNode[]
 
-	constructor(children: CalcNode[]) {
+	constructor(children: ExpressionNode[]) {
 		this.children = children
 	}
 
 	protected abstract computeReduce(a: number, b: number): number
 	protected abstract readonly identity: number
 	protected abstract formatChildren(serialized: string[]): string
-	protected abstract create(children: CalcNode[]): CalcNode
+	protected abstract create(children: ExpressionNode[]): ExpressionNode
 
-	substitute(bindings: Record<string, CalcNode>): CalcNode {
+	substitute(bindings: Record<string, ExpressionNode>): ExpressionNode {
 		const children = this.children.map((c) => c.substitute(bindings))
 		if (children.every((c) => ConstantNode.is(c))) {
 			return new ConstantNode(
@@ -159,8 +168,11 @@ abstract class NaryNode implements CalcNode {
 		return this.children.map((c) => c.evaluateConstant()).reduce((a, b) => this.computeReduce(a, b))
 	}
 
-	serialize(declarations: Record<string, string>): string {
-		return this.formatChildren(this.children.map((c) => c.serialize(declarations)))
+	serialize(
+		declarations: Record<string, string>,
+		properties?: Record<string, PropertyRule>,
+	): string {
+		return this.formatChildren(this.children.map((c) => c.serialize(declarations, properties)))
 	}
 
 	needsCalcWrap(): boolean {
@@ -168,21 +180,21 @@ abstract class NaryNode implements CalcNode {
 	}
 }
 
-abstract class BinaryNode implements CalcNode {
+abstract class BinaryNode implements ExpressionNode {
 	abstract readonly kind: string
-	readonly left: CalcNode
-	readonly right: CalcNode
+	readonly left: ExpressionNode
+	readonly right: ExpressionNode
 
-	constructor(left: CalcNode, right: CalcNode) {
+	constructor(left: ExpressionNode, right: ExpressionNode) {
 		this.left = left
 		this.right = right
 	}
 
 	protected abstract compute(a: number, b: number): number
 	protected abstract format(left: string, right: string): string
-	protected abstract create(left: CalcNode, right: CalcNode): CalcNode
+	protected abstract create(left: ExpressionNode, right: ExpressionNode): ExpressionNode
 
-	substitute(bindings: Record<string, CalcNode>): CalcNode {
+	substitute(bindings: Record<string, ExpressionNode>): ExpressionNode {
 		const left = this.left.substitute(bindings)
 		const right = this.right.substitute(bindings)
 		if (ConstantNode.is(left) && ConstantNode.is(right)) {
@@ -199,8 +211,14 @@ abstract class BinaryNode implements CalcNode {
 		return this.compute(this.left.evaluateConstant(), this.right.evaluateConstant())
 	}
 
-	serialize(declarations: Record<string, string>): string {
-		return this.format(this.left.serialize(declarations), this.right.serialize(declarations))
+	serialize(
+		declarations: Record<string, string>,
+		properties?: Record<string, PropertyRule>,
+	): string {
+		return this.format(
+			this.left.serialize(declarations, properties),
+			this.right.serialize(declarations, properties),
+		)
 	}
 
 	needsCalcWrap(): boolean {
@@ -214,7 +232,7 @@ abstract class ArithmeticNode extends BinaryNode {
 	}
 }
 
-function hasNegativeCoefficient(node: CalcNode): boolean {
+function hasNegativeCoefficient(node: ExpressionNode): boolean {
 	if (ConstantNode.is(node) && node.value < 0) {
 		return true
 	}
@@ -225,7 +243,11 @@ function hasNegativeCoefficient(node: CalcNode): boolean {
 	return false
 }
 
-function serializeNegated(node: CalcNode, declarations: Record<string, string>): string {
+function serializeNegated(
+	node: ExpressionNode,
+	declarations: Record<string, string>,
+	properties?: Record<string, PropertyRule>,
+): string {
 	if (ConstantNode.is(node)) {
 		return formatNumber(-node.value)
 	}
@@ -235,7 +257,7 @@ function serializeNegated(node: CalcNode, declarations: Record<string, string>):
 		binary.kind === 'multiply'
 			? new MultiplyNode(negatedLeft, binary.right)
 			: new DivideNode(negatedLeft, binary.right)
-	return negated.serialize(declarations)
+	return negated.serialize(declarations, properties)
 }
 
 export class AddNode extends NaryNode {
@@ -243,17 +265,20 @@ export class AddNode extends NaryNode {
 	protected computeReduce = (a: number, b: number) => a + b
 	protected readonly identity = 0
 	protected formatChildren = (serialized: string[]) => serialized.join(' + ')
-	protected create = (children: CalcNode[]) => new AddNode(children)
+	protected create = (children: ExpressionNode[]) => new AddNode(children)
 
-	override serialize(declarations: Record<string, string>): string {
+	override serialize(
+		declarations: Record<string, string>,
+		properties?: Record<string, PropertyRule>,
+	): string {
 		const parts: string[] = []
 		for (const [index, child] of this.children.entries()) {
 			if (index === 0) {
-				parts.push(child.serialize(declarations))
+				parts.push(child.serialize(declarations, properties))
 			} else if (hasNegativeCoefficient(child)) {
-				parts.push(` - ${serializeNegated(child, declarations)}`)
+				parts.push(` - ${serializeNegated(child, declarations, properties)}`)
 			} else {
-				parts.push(` + ${child.serialize(declarations)}`)
+				parts.push(` + ${child.serialize(declarations, properties)}`)
 			}
 		}
 		return parts.join('')
@@ -268,31 +293,37 @@ export class SubtractNode extends ArithmeticNode {
 	readonly kind = 'subtract'
 	protected compute = (a: number, b: number) => a - b
 	protected format = (left: string, right: string) => `${left} - ${right}`
-	protected create = (left: CalcNode, right: CalcNode) => new SubtractNode(left, right)
+	protected create = (left: ExpressionNode, right: ExpressionNode) => new SubtractNode(left, right)
 
-	override serialize(declarations: Record<string, string>): string {
-		const left = this.left.serialize(declarations)
+	override serialize(
+		declarations: Record<string, string>,
+		properties?: Record<string, PropertyRule>,
+	): string {
+		const left = this.left.serialize(declarations, properties)
 		if (hasNegativeCoefficient(this.right)) {
-			return `${left} + ${serializeNegated(this.right, declarations)}`
+			return `${left} + ${serializeNegated(this.right, declarations, properties)}`
 		}
-		return `${left} - ${this.right.serialize(declarations)}`
+		return `${left} - ${this.right.serialize(declarations, properties)}`
 	}
 }
 
-function wrapIfNeeded(node: CalcNode, serialized: string): string {
+function wrapIfNeeded(node: ExpressionNode, serialized: string): string {
 	return node.kind === 'add' || node.kind === 'subtract' ? `(${serialized})` : serialized
 }
 
 export class MultiplyNode extends ArithmeticNode {
 	readonly kind = 'multiply'
 	protected compute = (a: number, b: number) => a * b
-	protected create = (left: CalcNode, right: CalcNode) => new MultiplyNode(left, right)
+	protected create = (left: ExpressionNode, right: ExpressionNode) => new MultiplyNode(left, right)
 
 	protected format = (left: string, right: string) => `${left} * ${right}`
 
-	override serialize(declarations: Record<string, string>): string {
-		const left = wrapIfNeeded(this.left, this.left.serialize(declarations))
-		const right = wrapIfNeeded(this.right, this.right.serialize(declarations))
+	override serialize(
+		declarations: Record<string, string>,
+		properties?: Record<string, PropertyRule>,
+	): string {
+		const left = wrapIfNeeded(this.left, this.left.serialize(declarations, properties))
+		const right = wrapIfNeeded(this.right, this.right.serialize(declarations, properties))
 		return `${left} * ${right}`
 	}
 }
@@ -300,13 +331,16 @@ export class MultiplyNode extends ArithmeticNode {
 export class DivideNode extends ArithmeticNode {
 	readonly kind = 'divide'
 	protected compute = (a: number, b: number) => a / b
-	protected create = (left: CalcNode, right: CalcNode) => new DivideNode(left, right)
+	protected create = (left: ExpressionNode, right: ExpressionNode) => new DivideNode(left, right)
 
 	protected format = (left: string, right: string) => `${left} / ${right}`
 
-	override serialize(declarations: Record<string, string>): string {
-		const left = wrapIfNeeded(this.left, this.left.serialize(declarations))
-		const right = wrapIfNeeded(this.right, this.right.serialize(declarations))
+	override serialize(
+		declarations: Record<string, string>,
+		properties?: Record<string, PropertyRule>,
+	): string {
+		const left = wrapIfNeeded(this.left, this.left.serialize(declarations, properties))
+		const right = wrapIfNeeded(this.right, this.right.serialize(declarations, properties))
 		return `${left} / ${right}`
 	}
 }
@@ -315,18 +349,21 @@ export class PowNode extends BinaryNode {
 	readonly kind = 'pow'
 	protected compute = (a: number, b: number) => a ** b
 	protected format = (base: string, exp: string) => `pow(${base}, ${exp})`
-	protected create = (left: CalcNode, right: CalcNode) => new PowNode(left, right)
+	protected create = (left: ExpressionNode, right: ExpressionNode) => new PowNode(left, right)
 }
 
 export class SignedPowNode extends BinaryNode {
 	readonly kind = 'signedPow'
 	protected compute = (a: number, b: number) => Math.abs(a) ** b * Math.sign(a)
 	protected format = (base: string, exp: string) => `pow(abs(${base}), ${exp}) * sign(${base})`
-	protected create = (left: CalcNode, right: CalcNode) => new SignedPowNode(left, right)
+	protected create = (left: ExpressionNode, right: ExpressionNode) => new SignedPowNode(left, right)
 
-	override serialize(declarations: Record<string, string>): string {
-		const base = this.left.serialize(declarations)
-		const exp = this.right.serialize(declarations)
+	override serialize(
+		declarations: Record<string, string>,
+		properties?: Record<string, PropertyRule>,
+	): string {
+		const base = this.left.serialize(declarations, properties)
+		const exp = this.right.serialize(declarations, properties)
 		return `pow(abs(${base}), ${exp}) * sign(${base})`
 	}
 
@@ -340,7 +377,7 @@ export class MaxNode extends NaryNode {
 	protected computeReduce = Math.max
 	protected readonly identity = -Number.POSITIVE_INFINITY
 	protected formatChildren = (serialized: string[]) => `max(${serialized.join(', ')})`
-	protected create = (children: CalcNode[]) => new MaxNode(children)
+	protected create = (children: ExpressionNode[]) => new MaxNode(children)
 }
 
 export class MinNode extends NaryNode {
@@ -348,22 +385,22 @@ export class MinNode extends NaryNode {
 	protected computeReduce = Math.min
 	protected readonly identity = Number.POSITIVE_INFINITY
 	protected formatChildren = (serialized: string[]) => `min(${serialized.join(', ')})`
-	protected create = (children: CalcNode[]) => new MinNode(children)
+	protected create = (children: ExpressionNode[]) => new MinNode(children)
 }
 
-export class ClampNode implements CalcNode {
+export class ClampNode implements ExpressionNode {
 	readonly kind = 'clamp'
-	readonly minimum: CalcNode
-	readonly value: CalcNode
-	readonly maximum: CalcNode
+	readonly minimum: ExpressionNode
+	readonly value: ExpressionNode
+	readonly maximum: ExpressionNode
 
-	constructor(minimum: CalcNode, value: CalcNode, maximum: CalcNode) {
+	constructor(minimum: ExpressionNode, value: ExpressionNode, maximum: ExpressionNode) {
 		this.minimum = minimum
 		this.value = value
 		this.maximum = maximum
 	}
 
-	substitute(bindings: Record<string, CalcNode>): CalcNode {
+	substitute(bindings: Record<string, ExpressionNode>): ExpressionNode {
 		const minimum = this.minimum.substitute(bindings)
 		const value = this.value.substitute(bindings)
 		const maximum = this.maximum.substitute(bindings)
@@ -384,10 +421,13 @@ export class ClampNode implements CalcNode {
 		return Math.max(min, Math.min(val, max))
 	}
 
-	serialize(declarations: Record<string, string>): string {
-		const min = this.minimum.serialize(declarations)
-		const val = this.value.serialize(declarations)
-		const max = this.maximum.serialize(declarations)
+	serialize(
+		declarations: Record<string, string>,
+		properties?: Record<string, PropertyRule>,
+	): string {
+		const min = this.minimum.serialize(declarations, properties)
+		const val = this.value.serialize(declarations, properties)
+		const max = this.maximum.serialize(declarations, properties)
 		return `clamp(${min}, ${val}, ${max})`
 	}
 
@@ -396,19 +436,19 @@ export class ClampNode implements CalcNode {
 	}
 }
 
-export class OklchNode implements CalcNode {
+export class OklchNode implements ExpressionNode {
 	readonly kind = 'oklch'
-	readonly lightness: CalcNode
-	readonly chroma: CalcNode
-	readonly hue: CalcNode
+	readonly lightness: ExpressionNode
+	readonly chroma: ExpressionNode
+	readonly hue: ExpressionNode
 
-	constructor(lightness: CalcNode, chroma: CalcNode, hue: CalcNode) {
+	constructor(lightness: ExpressionNode, chroma: ExpressionNode, hue: ExpressionNode) {
 		this.lightness = lightness
 		this.chroma = chroma
 		this.hue = hue
 	}
 
-	substitute(bindings: Record<string, CalcNode>): CalcNode {
+	substitute(bindings: Record<string, ExpressionNode>): ExpressionNode {
 		return new OklchNode(
 			this.lightness.substitute(bindings),
 			this.chroma.substitute(bindings),
@@ -424,10 +464,13 @@ export class OklchNode implements CalcNode {
 		throw new Error('Cannot evaluate oklch color as a number')
 	}
 
-	serialize(declarations: Record<string, string>): string {
-		const l = this.lightness.serialize(declarations)
-		const c = this.chroma.serialize(declarations)
-		const h = this.hue.serialize(declarations)
+	serialize(
+		declarations: Record<string, string>,
+		properties?: Record<string, PropertyRule>,
+	): string {
+		const l = this.lightness.serialize(declarations, properties)
+		const c = this.chroma.serialize(declarations, properties)
+		const h = this.hue.serialize(declarations, properties)
 
 		// Wrap in calc() if needed
 		const lExpr = this.lightness.needsCalcWrap() ? `calc(${l})` : l
@@ -442,50 +485,90 @@ export class OklchNode implements CalcNode {
 	}
 }
 
-export class PropertyNode implements CalcNode {
+function mergeDeclaration(declarations: Record<string, string>, name: string, value: string): void {
+	const existing = declarations[name]
+	if (existing !== undefined && existing !== value) {
+		throw new Error(`Property '${name}' defined multiple times with different values`)
+	}
+	declarations[name] = value
+}
+
+export class PropertyNode implements ExpressionNode {
 	readonly kind = 'property'
 	readonly name: string
-	readonly expr: CalcNode
+	readonly expr: ExpressionNode | null
+	readonly syntax: '<number>' | '<color>'
+	readonly inherits: boolean
 
-	constructor(name: string, expr: CalcNode) {
+	constructor(
+		name: string,
+		expr: ExpressionNode | null,
+		syntax: '<number>' | '<color>',
+		inherits: boolean,
+	) {
 		this.name = `--${name}`
 		this.expr = expr
+		this.syntax = syntax
+		this.inherits = inherits
 	}
 
-	substitute(bindings: Record<string, CalcNode>): CalcNode {
-		return new PropertyNode(this.name.slice(2), this.expr.substitute(bindings))
+	substitute(bindings: Record<string, ExpressionNode>): ExpressionNode {
+		if (!this.expr) {
+			// Input-only property: acts like a reference
+			const refName = this.name.slice(2)
+			const replacement = bindings[refName]
+			if (replacement) {
+				return replacement
+			}
+			return this
+		}
+		return new PropertyNode(
+			this.name.slice(2),
+			this.expr.substitute(bindings),
+			this.syntax,
+			this.inherits,
+		)
 	}
 
 	isConstant(): boolean {
-		return this.expr.isConstant()
+		return this.expr ? this.expr.isConstant() : false
 	}
 
 	evaluateConstant(): number {
+		if (!this.expr) {
+			throw new Error(`Cannot evaluate input property: ${this.name}`)
+		}
 		return this.expr.evaluateConstant()
 	}
 
-	serialize(declarations: Record<string, string>): string {
-		const innerDeclarations: Record<string, string> = {}
-		const value = this.expr.serialize(innerDeclarations)
-
-		// Wrap in calc() if the inner expression needs it
-		const wrappedValue = this.expr.needsCalcWrap() ? `calc(${value})` : value
-
-		// Merge inner declarations into outer declarations
-		for (const [key, val] of Object.entries(innerDeclarations)) {
-			const existing = declarations[key]
-			if (existing !== undefined && existing !== val) {
-				throw new Error(`Property '${key}' defined multiple times with different values`)
+	serialize(
+		declarations: Record<string, string>,
+		properties?: Record<string, PropertyRule>,
+	): string {
+		// Register @property rule
+		if (properties) {
+			const existing = properties[this.name]
+			if (existing && (existing.syntax !== this.syntax || existing.inherits !== this.inherits)) {
+				throw new Error(`Property '${this.name}' defined multiple times with different rules`)
 			}
-			declarations[key] = val
+			properties[this.name] = {
+				syntax: this.syntax,
+				inherits: this.inherits,
+				initialValue: this.syntax === '<color>' ? 'transparent' : '0',
+			}
 		}
 
-		const existing = declarations[this.name]
-		if (existing !== undefined && existing !== wrappedValue) {
-			throw new Error(`Property '${this.name}' defined multiple times with different values`)
+		if (this.expr) {
+			const innerDeclarations: Record<string, string> = {}
+			const value = this.expr.serialize(innerDeclarations, properties)
+			const wrappedValue = this.expr.needsCalcWrap() ? `calc(${value})` : value
+
+			for (const [key, val] of Object.entries(innerDeclarations)) {
+				mergeDeclaration(declarations, key, val)
+			}
+			mergeDeclaration(declarations, this.name, wrappedValue)
 		}
 
-		declarations[this.name] = wrappedValue
 		return `var(${this.name})`
 	}
 

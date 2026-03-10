@@ -1,6 +1,5 @@
 import * as ct from '@ok-apca/calc-tree'
-import { inGamut, OKLCH, P3 } from 'colorjs.io/fn'
-import { type Color, createColor } from './color.ts'
+import { type Color, createColor, inP3 } from './color.ts'
 import { GAMUT_SINE_CURVATURE_EXPONENT } from './constants.ts'
 import { clampNumber } from './util.ts'
 
@@ -30,6 +29,14 @@ export interface HueData {
 	readonly yCoeffB: number
 	/** Y polynomial coefficient for C³ term. */
 	readonly yCoeffD: number
+	/**
+	 * Pre-scaled Y correction coefficients for the k-polynomial.
+	 * k = (apexC / apexL) · chromaRatio, so the polynomial 1 + A·k + B·k² + D·k³
+	 * becomes 1 + fA·chroma + fB·chroma² + fD·chroma³.
+	 */
+	readonly fA: number
+	readonly fB: number
+	readonly fD: number
 }
 
 const hueDataCache = new Map<number, HueData>()
@@ -70,13 +77,22 @@ export function computeHueData(hue: number): HueData {
 	const kM = M_PRIME_KA * alpha + M_PRIME_KB * beta
 	const kS = S_PRIME_KA * alpha + S_PRIME_KB * beta
 
+	const yCoeffA = 3 * (Y_FROM_L * kL + Y_FROM_M * kM + Y_FROM_S * kS)
+	const yCoeffB = 3 * (Y_FROM_L * kL * kL + Y_FROM_M * kM * kM + Y_FROM_S * kS * kS)
+	const yCoeffD = Y_FROM_L * kL ** 3 + Y_FROM_M * kM ** 3 + Y_FROM_S * kS ** 3
+
+	const kScale = maxC / lightnessAtMaxChroma
+
 	const hueData: HueData = {
 		apexL: lightnessAtMaxChroma,
 		apexC: maxC,
 		curvature,
-		yCoeffA: 3 * (Y_FROM_L * kL + Y_FROM_M * kM + Y_FROM_S * kS),
-		yCoeffB: 3 * (Y_FROM_L * kL * kL + Y_FROM_M * kM * kM + Y_FROM_S * kS * kS),
-		yCoeffD: Y_FROM_L * kL ** 3 + Y_FROM_M * kM ** 3 + Y_FROM_S * kS ** 3,
+		yCoeffA,
+		yCoeffB,
+		yCoeffD,
+		fA: yCoeffA * kScale,
+		fB: yCoeffB * kScale ** 2,
+		fD: yCoeffD * kScale ** 3,
 	}
 
 	hueDataCache.set(hue, hueData)
@@ -94,7 +110,7 @@ function findMaxChromaAtLightness(hue: number, lightness: number): number {
 
 	while (high - low > tolerance) {
 		const mid = (low + high) / 2
-		if (inGamut({ space: OKLCH, coords: [lightness, mid, hue] }, P3)) {
+		if (inP3({ lightness, chroma: mid, hue })) {
 			low = mid
 		} else {
 			high = mid
@@ -152,7 +168,7 @@ const curvatureCorrection = ct.multiply(
 const gamutRightHalf = ct.add(linearChroma, curvatureCorrection)
 const isRightOfApex = ct.max(0, ct.sign(ct.subtract('lightness', 'apexL')))
 
-export const maxChromaExpr: ct.CalcExpression<'lightness' | 'apexL' | 'apexC' | 'curvature'> =
+export const maxChromaExpr: ct.NumberExpression<'lightness' | 'apexL' | 'apexC' | 'curvature'> =
 	ct.lerp(gamutLeftHalf, gamutRightHalf, isRightOfApex)
 
 // =============================================================================
@@ -242,7 +258,7 @@ const S_PRIME_KB = -1.2914855480194092
  * only on hue (precomputed at build time). For achromatic colors (C=0),
  * this reduces to Y = L³.
  */
-export const exactY: ct.CalcExpression<
+export const exactY: ct.NumberExpression<
 	'lightness' | 'yChroma' | 'yCoeffA' | 'yCoeffB' | 'yCoeffD'
 > = ct.add(
 	ct.pow('lightness', 3),
@@ -250,54 +266,3 @@ export const exactY: ct.CalcExpression<
 	ct.multiply('yCoeffB', ct.multiply('lightness', ct.pow('yChroma', 2))),
 	ct.multiply('yCoeffD', ct.pow('yChroma', 3)),
 )
-
-// --- Y correction factor ---
-//
-// On the left half of the gamut tent, C is proportional to L:
-//   C = (apexC / apexL) · L · chromaRatio = k · L
-//
-// Substituting into Y = L³ + A·L²·C + B·L·C² + D·C³:
-//   Y = L³ · (1 + A·k + B·k² + D·k³) = L³ · f
-//
-// where f depends only on hue and the ratio k = C/L (not on L itself).
-// This means:
-//   Forward:  Y = pow(L, 3) · f
-//   Inverse:  L = pow(Y / f, 1/3)
-//
-// For the inverse, we compute f using k = C_approx / L_approx, where
-// L_approx = Y^(1/3) and C_approx = maxChroma(L_approx) · chromaRatio.
-// This handles both left-half (exact) and right-half (good approximation,
-// since chroma decreases toward white making the correction smaller).
-
-/**
- * Y correction factor: f = 1 + A·k + B·k² + D·k³
- *
- * where k = C/L (the chroma-to-lightness ratio at a given point).
- * Multiply by L³ to get Y, or divide Y by f before taking the cube root to get L.
- */
-export const yCorrectionFactor: ct.CalcExpression<
-	'yCorrectionK' | 'yCoeffA' | 'yCoeffB' | 'yCoeffD'
-> = ct.add(
-	1,
-	ct.multiply('yCoeffA', 'yCorrectionK'),
-	ct.multiply('yCoeffB', ct.pow('yCorrectionK', 2)),
-	ct.multiply('yCoeffD', ct.pow('yCorrectionK', 3)),
-)
-
-// =============================================================================
-// CSS Generation Helpers
-// =============================================================================
-
-/**
- * Precompute the k-polynomial coefficients for the Y correction factor.
- * k = (apexC / apexL) · chromaRatio, so the polynomial 1 + A·k + B·k² + D·k³
- * becomes 1 + fA·chroma + fB·chroma² + fD·chroma³ with precomputed fA, fB, fD.
- */
-export function correctionCoeffs(hueData: HueData) {
-	const kScale = hueData.apexC / hueData.apexL
-	return {
-		fA: hueData.yCoeffA * kScale,
-		fB: hueData.yCoeffB * kScale ** 2,
-		fD: hueData.yCoeffD * kScale ** 3,
-	}
-}

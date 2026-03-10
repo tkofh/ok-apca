@@ -11,7 +11,6 @@ import {
 } from './apca.ts'
 import {
 	computeHueData,
-	correctionCoeffs,
 	type HueData,
 	maxChromaExpr as maxChroma,
 } from './gamut.ts'
@@ -29,64 +28,9 @@ export interface HueDefinition {
 	readonly noContrastInversion: boolean
 }
 
-function generatePropertyRules(
-	output: string,
-	labels: readonly string[],
-	noContrastInversion: boolean,
-): string {
-	const numeric = (name: string, inherits = false) => outdent`
-		@property --${name} {
-			inherits: ${inherits ? 'true' : 'false'};
-			initial-value: 0;
-			syntax: '<number>';
-		}
-	`
-	const color = (name: string, inherits = false) => outdent`
-		@property --${name} {
-			inherits: ${inherits ? 'true' : 'false'};
-			initial-value: transparent;
-			syntax: '<color>';
-		}
-	`
-
-	const properties: string[] = [numeric('lightness', true), numeric('chroma', true)]
-
-	properties.push(color(output, true))
-
-	if (labels.length > 0) {
-		properties.push(numeric('_mc'), numeric('_ybg'), numeric('_sc'))
-	}
-
-	for (const label of labels) {
-		properties.push(numeric(`contrast-${label}`, true))
-
-		// Inversion properties (only when inversion is enabled)
-		if (!noContrastInversion) {
-			properties.push(
-				numeric(`_ylr-${label}`),
-				numeric(`_ydr-${label}`),
-				numeric(`_yl-${label}`),
-				numeric(`_yd-${label}`),
-				numeric(`_lcl-${label}`),
-				numeric(`_lcd-${label}`),
-			)
-		}
-
-		properties.push(
-			numeric(`_yr-${label}`),
-			numeric(`_yt-${label}`),
-			numeric(`_cl-${label}`),
-			numeric(`_mc-${label}`),
-			color(`${output}-${label}`, true),
-		)
-	}
-
-	return properties.join('\n')
-}
-
 /** Bind maxChroma expression with gamut slice constants */
 function bindMaxChroma<const LightnessRefs extends string>(
-	lightnessExpr: ct.CalcExpression<LightnessRefs>,
+	lightnessExpr: ct.ExpressionInput<LightnessRefs>,
 	hueData: HueData,
 ) {
 	return maxChroma.bind({
@@ -99,10 +43,10 @@ function bindMaxChroma<const LightnessRefs extends string>(
 
 function buildBaseColorExpr<const OutputRef extends string>(
 	hue: number,
-	maxChromaExpr: ct.CalcExpression<string>,
+	maxChromaExpr: ct.NumberExpression<string>,
 	output: OutputRef,
 ) {
-	return ct.oklch('lightness', ct.multiply(maxChromaExpr, 'chroma'), hue).asProperty(output)
+	return ct.property(output, ct.oklch('lightness', ct.multiply(maxChromaExpr, 'chroma'), hue), true)
 }
 
 /**
@@ -111,18 +55,18 @@ function buildBaseColorExpr<const OutputRef extends string>(
  * the base color's chroma is smaller so the correction is smaller too.
  */
 function buildYBackgroundExpr(hueData: HueData) {
-	const { fA, fB, fD } = correctionCoeffs(hueData)
-	return ct
-		.multiply(
+	return ct.property(
+		'_ybg',
+		ct.multiply(
 			ct.pow('lightness', 3),
 			ct.add(
 				1,
-				ct.multiply(fA, 'chroma'),
-				ct.multiply(fB, ct.pow('chroma', 2)),
-				ct.multiply(fD, ct.pow('chroma', 3)),
+				ct.multiply(hueData.fA, 'chroma'),
+				ct.multiply(hueData.fB, ct.pow('chroma', 2)),
+				ct.multiply(hueData.fD, ct.pow('chroma', 3)),
 			),
-		)
-		.asProperty('_ybg')
+		),
+	)
 }
 
 /**
@@ -139,21 +83,19 @@ function buildYBackgroundExpr(hueData: HueData) {
  */
 function buildCorrectedLightness(
 	label: string,
-	yTargetExpr: ct.CalcExpression<string>,
+	yTargetExpr: ct.NumberExpression<string>,
 	hueData: HueData,
 ) {
-	const { fA, fB, fD } = correctionCoeffs(hueData)
-
 	// Pre-computed correction factor: depends only on chroma (a leaf input)
 	const fExpr = ct.add(
 		1,
-		ct.multiply(fA, 'chroma'),
-		ct.multiply(fB, ct.pow('chroma', 2)),
-		ct.multiply(fD, ct.pow('chroma', 3)),
+		ct.multiply(hueData.fA, 'chroma'),
+		ct.multiply(hueData.fB, ct.pow('chroma', 2)),
+		ct.multiply(hueData.fD, ct.pow('chroma', 3)),
 	)
 
 	// Corrected lightness: L = pow(Y / f, 1/3)
-	return ct.pow(ct.divide(yTargetExpr, fExpr), 1 / 3).asProperty(`_cl-${label}`)
+	return ct.property(`_cl-${label}`, ct.pow(ct.divide(yTargetExpr, fExpr), 1 / 3))
 }
 
 /**
@@ -166,30 +108,33 @@ function buildContrastColorExprSimple<
 	label: LabelRef,
 	hue: number,
 	hueData: HueData,
-	scYBackgroundExpr: ct.CalcExpression<string>,
+	scYBackgroundExpr: ct.NumberExpression<string>,
 	output: OutputRef,
 ) {
 	// Solver operates in soft-clamped domain; output is sc_approx(Y_fg)
-	const yRawExpr = contrastSolver
-		.bind({
+	const yRawExpr = ct.property(
+		`_yr-${label}`,
+		contrastSolver.bind({
 			yBg: scYBackgroundExpr,
 			contrast: `contrast-${label}`,
-		})
-		.asProperty(`_yr-${label}`)
+		}),
+	)
 
 	// Unclamp to recover actual Y_fg
-	const yTargetExpr = softUnclamp(yRawExpr).asProperty(`_yt-${label}`)
+	const yTargetExpr = ct.property(`_yt-${label}`, softUnclamp(yRawExpr))
 
 	// Cardano-corrected lightness
 	const conLumExpr = buildCorrectedLightness(label, yTargetExpr, hueData)
 
 	// Max chroma at contrast color's lightness
-	const conMaxChromaExpr = bindMaxChroma(conLumExpr, hueData).asProperty(`_mc-${label}`)
+	const conMaxChromaExpr = ct.property(`_mc-${label}`, bindMaxChroma(conLumExpr, hueData))
 
 	// Build the contrast color
-	return ct
-		.oklch(conLumExpr, ct.multiply(conMaxChromaExpr, 'chroma'), hue)
-		.asProperty(`${output}-${label}`)
+	return ct.property(
+		`${output}-${label}`,
+		ct.oklch(conLumExpr, ct.multiply(conMaxChromaExpr, 'chroma'), hue),
+		true,
+	)
 }
 
 /**
@@ -207,38 +152,43 @@ function buildContrastColorExprWithInversion<
 	label: LabelRef,
 	hue: number,
 	hueData: HueData,
-	yBackgroundExpr: ct.CalcExpression<YBgRefs>,
-	scYBackgroundExpr: ct.CalcExpression<ScYBgRefs>,
+	yBackgroundExpr: ct.NumberExpression<YBgRefs>,
+	scYBackgroundExpr: ct.NumberExpression<ScYBgRefs>,
 	output: OutputRef,
 ) {
 	// Solver uses soft-clamped Y_bg; outputs are in sc_approx domain
 	const contrastBinding = { yBg: scYBackgroundExpr, contrast: `contrast-${label}` }
 
 	// Raw solver outputs in soft-clamped domain
-	const yLightRawExpr = ct
-		.clamp(0, reversePolarity.bind(contrastBinding), 1)
-		.asProperty(`_ylr-${label}`)
-	const yDarkRawExpr = ct
-		.clamp(0, normalPolarity.bind(contrastBinding), 1)
-		.asProperty(`_ydr-${label}`)
+	const yLightRawExpr = ct.property(
+		`_ylr-${label}`,
+		ct.clamp(0, reversePolarity.bind(contrastBinding), 1),
+	)
+	const yDarkRawExpr = ct.property(
+		`_ydr-${label}`,
+		ct.clamp(0, normalPolarity.bind(contrastBinding), 1),
+	)
 
 	// Unclamp to recover actual Y values
-	const yLightExpr = softUnclamp(yLightRawExpr).asProperty(`_yl-${label}`)
-	const yDarkExpr = softUnclamp(yDarkRawExpr).asProperty(`_yd-${label}`)
+	const yLightExpr = ct.property(`_yl-${label}`, softUnclamp(yLightRawExpr))
+	const yDarkExpr = ct.property(`_yd-${label}`, softUnclamp(yDarkRawExpr))
 
 	// Measure achieved contrast using original Y_bg (measurement has its own true softClampY)
-	const lcLightExpr = contrastMeasurementReverse
-		.bind({ yBg: yBackgroundExpr, yFg: yLightExpr })
-		.asProperty(`_lcl-${label}`)
+	const lcLightExpr = ct.property(
+		`_lcl-${label}`,
+		contrastMeasurementReverse.bind({ yBg: yBackgroundExpr, yFg: yLightExpr }),
+	)
 
-	const lcDarkExpr = contrastMeasurementNormal
-		.bind({ yBg: yBackgroundExpr, yFg: yDarkExpr })
-		.asProperty(`_lcd-${label}`)
+	const lcDarkExpr = ct.property(
+		`_lcd-${label}`,
+		contrastMeasurementNormal.bind({ yBg: yBackgroundExpr, yFg: yDarkExpr }),
+	)
 
 	// Inversion solver uses original Y_bg for zero-contrast fallback
 	// Raw values used for exhaustion detection (softUnclamp(1) < 1 would hide exhaustion)
-	const yTargetExpr = contrastSolverWithInversion
-		.bind({
+	const yTargetExpr = ct.property(
+		`_yt-${label}`,
+		contrastSolverWithInversion.bind({
 			yBg: yBackgroundExpr,
 			contrast: `contrast-${label}`,
 			yLight: yLightExpr,
@@ -247,19 +197,21 @@ function buildContrastColorExprWithInversion<
 			yDarkRaw: yDarkRawExpr,
 			lcLight: lcLightExpr,
 			lcDark: lcDarkExpr,
-		})
-		.asProperty(`_yt-${label}`)
+		}),
+	)
 
 	// Cardano-corrected lightness
 	const conLumExpr = buildCorrectedLightness(label, yTargetExpr, hueData)
 
 	// Max chroma at contrast color's lightness
-	const conMaxChromaExpr = bindMaxChroma(conLumExpr, hueData).asProperty(`_mc-${label}`)
+	const conMaxChromaExpr = ct.property(`_mc-${label}`, bindMaxChroma(conLumExpr, hueData))
 
 	// Build the contrast color
-	return ct
-		.oklch(conLumExpr, ct.multiply(conMaxChromaExpr, 'chroma'), hue)
-		.asProperty(`${output}-${label}`)
+	return ct.property(
+		`${output}-${label}`,
+		ct.oklch(conLumExpr, ct.multiply(conMaxChromaExpr, 'chroma'), hue),
+		true,
+	)
 }
 
 /**
@@ -270,8 +222,8 @@ function buildContrastColorExpr(
 	label: string,
 	hue: number,
 	hueData: HueData,
-	yBackgroundExpr: ct.CalcExpression<string>,
-	scYBackgroundExpr: ct.CalcExpression<string>,
+	yBackgroundExpr: ct.NumberExpression<string>,
+	scYBackgroundExpr: ct.NumberExpression<string>,
 	output: string,
 	noContrastInversion: boolean,
 ) {
@@ -307,33 +259,41 @@ function buildContrastColorExpr(
 export function generateHueCss(definition: HueDefinition): string {
 	const { hue, selector, output, contrastColors, noContrastInversion } = definition
 	const hueData = computeHueData(hue)
-	const labels = contrastColors.map((c) => c.label)
 
-	const propertyRules = generatePropertyRules(output, labels, noContrastInversion)
+	// Declare input properties
+	const lightnessInput = ct.property('lightness', 'number', true)
+	const chromaInput = ct.property('chroma', 'number', true)
 
-	// Collect all declarations into a single object to deduplicate shared
-	// intermediate properties (e.g. --_ybg) that appear in multiple expressions
+	// Collect all declarations and properties into single objects
 	const declarations: Record<string, string> = {}
+	const properties: Record<string, ct.PropertyRule> = {}
+
+	// Helper to merge CSS result into the shared collections
+	const merge = (css: ct.CSSResult) => {
+		Object.assign(declarations, css.declarations)
+		Object.assign(properties, css.properties)
+	}
 
 	// Shared max chroma at base lightness (reused by base color and Y_bg)
-	const maxChromaExpr = bindMaxChroma(ct.toExpression('lightness'), hueData).asProperty('_mc')
+	const maxChromaExpr = ct.property('_mc', bindMaxChroma(lightnessInput, hueData))
 
 	// Build base color expression
-	Object.assign(declarations, buildBaseColorExpr(hue, maxChromaExpr, output).toCss().declarations)
+	merge(buildBaseColorExpr(hue, maxChromaExpr, output).toCss())
 
 	// Build Y background if we have contrast colors
 	if (contrastColors.length > 0) {
 		const yBgExpr = buildYBackgroundExpr(hueData)
-		Object.assign(declarations, yBgExpr.toCss().declarations)
+		merge(yBgExpr.toCss())
 
 		// Soft-clamped Y_bg for the contrast solver (Lp-norm approximation)
-		const scYBgExpr = softClampApprox(yBgExpr).asProperty('_sc')
-		Object.assign(declarations, scYBgExpr.toCss().declarations)
+		const scYBgExpr = ct.property('_sc', softClampApprox(yBgExpr))
+		merge(scYBgExpr.toCss())
 
-		// Build contrast color expressions
+		// Declare contrast input properties and build contrast color expressions
 		for (const { label } of contrastColors) {
-			Object.assign(
-				declarations,
+			merge(ct.property(`contrast-${label}`, 'number', true).toCss())
+
+			merge(
 				buildContrastColorExpr(
 					label,
 					hue,
@@ -342,10 +302,26 @@ export function generateHueCss(definition: HueDefinition): string {
 					scYBgExpr,
 					output,
 					noContrastInversion,
-				).toCss().declarations,
+				).toCss(),
 			)
 		}
 	}
+
+	// Ensure input properties are registered even if they weren't serialized
+	merge(lightnessInput.toCss())
+	merge(chromaInput.toCss())
+
+	const propertyRules = Object.entries(properties)
+		.map(
+			([name, rule]) => outdent`
+				@property ${name} {
+					inherits: ${rule.inherits ? 'true' : 'false'};
+					initial-value: ${rule.initialValue};
+					syntax: '${rule.syntax}';
+				}
+			`,
+		)
+		.join('\n')
 
 	const declarationBlock = Object.entries(declarations)
 		.map(([name, value]) => `${name}: ${value};`)

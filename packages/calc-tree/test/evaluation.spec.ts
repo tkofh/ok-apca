@@ -1,24 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { add, multiply, pow, toExpression } from '../src/index.ts'
+import { constant } from '../src/constructors.ts'
+import { add, multiply, pow } from '../src/index.ts'
 
 describe('evaluation', () => {
 	describe('constant evaluation', () => {
 		it('evaluates constants to numbers', () => {
-			const expr = toExpression(42)
+			const expr = constant(42)
 			const result = expr.solve()
 
 			expect(result).toBe(42)
 		})
 
 		it('evaluates negative constants', () => {
-			const expr = toExpression(-3.14)
+			const expr = constant(-3.14)
 			const result = expr.solve()
 
 			expect(result).toBeCloseTo(-3.14)
 		})
 
 		it('evaluates zero', () => {
-			const expr = toExpression(0)
+			const expr = constant(0)
 			const result = expr.solve()
 
 			expect(result).toBe(0)
@@ -99,7 +100,7 @@ describe('evaluation', () => {
 		})
 
 		it('constant expression css contains the value', () => {
-			const expr = toExpression(42)
+			const expr = constant(42)
 			const css = expr.toCss()
 
 			expect(css.expression).toBe('42')

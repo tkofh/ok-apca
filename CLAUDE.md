@@ -18,7 +18,7 @@ A standalone expression tree library for building CSS `calc()` expressions. It p
 - **Color construction**: `oklch(l, c, h)` returns a `ColorExpression`
 - **References**: String literals (e.g. `'lightness'`) used as function arguments become unbound variables tracked at the type level
 - **Two expression types**:
-  - `CalcExpression<Refs>` - numeric expressions that can be evaluated with `.solve()` or serialized to CSS
+  - `NumberExpression<Refs>` - numeric expressions that can be evaluated with `.solve()` or serialized to CSS
   - `ColorExpression<Refs>` - color expressions that can only be serialized to CSS (prevents misuse in arithmetic)
 - **Binding API**: `.bind({ key1: value1, key2: value2 })` substitutes references
 - **CSS output**: `.toCss()` returns `{ expression, declarations, toDeclarationBlock() }`
@@ -75,6 +75,7 @@ The generated CSS uses deeply nested `calc()` expressions with `@property` decla
 ### The metric that matters: fully-substituted expression size
 
 The critical metric is the **total size of the expression after all `var()` references are recursively replaced with their definitions**. This is the string that DevTools actually renders, and it is the only metric that matters when evaluating whether an expression tree change improves or worsens the DevTools situation. This is NOT about:
+
 - Character length of a single CSS declaration
 - Number of `var()` references in a single declaration
 - Number of intermediate `@property` declarations
@@ -88,6 +89,7 @@ If property A references `var(--x)` 3 times, and `--x` itself references `var(--
 ### Practical implications
 
 When modifying expression trees:
+
 - **Reducing references to a variable in an expression matters** only if that variable's own expansion is large
 - **Adding an intermediate property never reduces the fully-expanded size** — it's purely organizational
 - **The only way to shrink the fully-expanded tree** is to reduce the number of times large sub-expressions are referenced, or to use approximations that express the same computation with fewer variable references

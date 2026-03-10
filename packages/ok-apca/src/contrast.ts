@@ -1,5 +1,4 @@
 import { clamp } from '@ok-apca/calc-tree'
-import { getLuminance, OKLCH } from 'colorjs.io/fn'
 import {
 	contrastMeasurementNormal,
 	contrastMeasurementReverse,
@@ -9,7 +8,7 @@ import {
 	reversePolarity,
 	softUnclamp,
 } from './apca.ts'
-import { type Color, createColor } from './color.ts'
+import { type Color, createColor, getLuminance } from './color.ts'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
@@ -23,7 +22,7 @@ import {
 	LP_SOFT_CLAMP_KP,
 	LP_SOFT_CLAMP_P,
 } from './constants.ts'
-import { computeHueData, computeMaxChroma, exactY, gamutMap, yCorrectionFactor } from './gamut.ts'
+import { computeHueData, computeMaxChroma, exactY, gamutMap } from './gamut.ts'
 import { clampNumber } from './util.ts'
 
 /** Lp-norm soft clamp approximation (numeric). */
@@ -57,8 +56,8 @@ export function measureContrast(
 ): number {
 	const base = createColor(baseColor)
 	const fg = createColor(contrastColor)
-	const yBg = getLuminance({ space: OKLCH, coords: [base.lightness, base.chroma, base.hue] })
-	const yFg = getLuminance({ space: OKLCH, coords: [fg.lightness, fg.chroma, fg.hue] })
+	const yBg = getLuminance(base)
+	const yFg = getLuminance(fg)
 
 	if (
 		!(Number.isFinite(yFg) && Number.isFinite(yBg)) ||
@@ -148,12 +147,8 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 	const lApprox = clampNumber(0, ySolver ** (1 / 3), 1)
 	const cApprox = computeMaxChroma(lApprox, hueData) * chromaRatio
 	const kOut = lApprox > 0 ? cApprox / lApprox : 0
-	const fOut = yCorrectionFactor.solve({
-		yCorrectionK: kOut,
-		yCoeffA: hueData.yCoeffA,
-		yCoeffB: hueData.yCoeffB,
-		yCoeffD: hueData.yCoeffD,
-	})
+	const fOut =
+		1 + hueData.yCoeffA * kOut + hueData.yCoeffB * kOut ** 2 + hueData.yCoeffD * kOut ** 3
 	const targetLightness = clampNumber(0, (ySolver / fOut) ** (1 / 3), 1)
 
 	return createColor({
