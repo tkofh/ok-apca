@@ -9,11 +9,7 @@ import {
 	softClampApprox,
 	softUnclamp,
 } from './apca.ts'
-import {
-	computeHueData,
-	type HueData,
-	maxChromaExpr as maxChroma,
-} from './gamut.ts'
+import { computeHueData, type HueData, maxChromaExpr as maxChroma } from './gamut.ts'
 import { outdent } from './util.ts'
 
 export interface ContrastColor {
@@ -26,19 +22,6 @@ export interface HueDefinition {
 	readonly output: string
 	readonly contrastColors: readonly ContrastColor[]
 	readonly noContrastInversion: boolean
-}
-
-/** Bind maxChroma expression with gamut slice constants */
-function bindMaxChroma<const LightnessRefs extends string>(
-	lightnessExpr: ct.ExpressionInput<LightnessRefs>,
-	hueData: HueData,
-) {
-	return maxChroma.bind({
-		lightness: lightnessExpr,
-		apexL: hueData.apexL,
-		apexC: hueData.apexC,
-		curvature: hueData.curvature,
-	})
 }
 
 function buildBaseColorExpr<const OutputRef extends string>(
@@ -127,7 +110,10 @@ function buildContrastColorExprSimple<
 	const conLumExpr = buildCorrectedLightness(label, yTargetExpr, hueData)
 
 	// Max chroma at contrast color's lightness
-	const conMaxChromaExpr = ct.property(`_mc-${label}`, bindMaxChroma(conLumExpr, hueData))
+	const conMaxChromaExpr = ct.property(
+		`_mc-${label}`,
+		maxChroma.bind(hueData).bind({ lightness: conLumExpr }),
+	)
 
 	// Build the contrast color
 	return ct.property(
@@ -204,7 +190,10 @@ function buildContrastColorExprWithInversion<
 	const conLumExpr = buildCorrectedLightness(label, yTargetExpr, hueData)
 
 	// Max chroma at contrast color's lightness
-	const conMaxChromaExpr = ct.property(`_mc-${label}`, bindMaxChroma(conLumExpr, hueData))
+	const conMaxChromaExpr = ct.property(
+		`_mc-${label}`,
+		maxChroma.bind(hueData).bind({ lightness: conLumExpr }),
+	)
 
 	// Build the contrast color
 	return ct.property(
@@ -275,7 +264,10 @@ export function generateHueCss(definition: HueDefinition): string {
 	}
 
 	// Shared max chroma at base lightness (reused by base color and Y_bg)
-	const maxChromaExpr = ct.property('_mc', bindMaxChroma(lightnessInput, hueData))
+	const maxChromaExpr = ct.property(
+		'_mc',
+		maxChroma.bind(hueData).bind({ lightness: lightnessInput }),
+	)
 
 	// Build base color expression
 	merge(buildBaseColorExpr(hue, maxChromaExpr, output).toCss())

@@ -29,20 +29,32 @@ function createCSSResult(
 function applyBindings(
 	node: ExpressionNode,
 	bindings: Record<string, ExpressionInput<never>> | undefined,
+	refs: ReadonlySet<string>,
 ): ExpressionNode {
 	if (!bindings) {
 		return node
 	}
 	const nodeBindings: Record<string, ExpressionNode> = {}
 	for (const [key, value] of Object.entries(bindings) as [string, ExpressionInput<never>][]) {
-		nodeBindings[key] = toExpression(value).node
+		if (refs.has(key)) {
+			nodeBindings[key] = toExpression(value).node
+		}
 	}
 	return node.substitute(nodeBindings)
 }
 
 // Extract the union of all refs from values in a binding record
-type ValueRefs<V> = V extends NumberExpression<infer R> ? R : V extends string ? V : never
+type ValueRefs<V> = V extends NumberExpression<infer R>
+	? R
+	: V extends string
+		? string extends V
+			? never // exclude bare 'string' type — only track literal refs
+			: V
+		: never
 type BindingRefs<T> = T extends Record<string, infer V> ? ValueRefs<V> : never
+
+// Pick only the binding entries that match actual expression refs
+type RelevantBindingRefs<B, Refs extends string> = BindingRefs<Pick<B, Extract<keyof B & string, Refs>>>
 
 /**
  * Abstract base class for expression trees.
@@ -66,13 +78,16 @@ export abstract class BaseExpression<Refs extends string = never> {
 		refs: ReadonlySet<string>,
 	): BaseExpression<R>
 
-	bind<B extends Partial<Record<Refs, ExpressionInput<string>>>>(
-		bindings: B,
-	): BaseExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>> {
+	bind<B>(
+		bindings: B & Partial<Record<Refs, ExpressionInput<string>>>,
+	): BaseExpression<Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>> {
 		const nodeBindings: Record<string, ExpressionNode> = {}
 		const newRefs = new Set(this.refs)
 
-		for (const [key, val] of Object.entries(bindings) as [string, ExpressionInput<string>][]) {
+		for (const [key, val] of Object.entries(bindings as Record<string, ExpressionInput<string>>)) {
+			if (!this.refs.has(key)) {
+				continue
+			}
 			const expr = toExpression(val)
 			nodeBindings[key] = expr.node
 			newRefs.delete(key)
@@ -83,7 +98,7 @@ export abstract class BaseExpression<Refs extends string = never> {
 
 		const newNode = this.node.substitute(nodeBindings)
 		return this.create(newNode, newRefs) as BaseExpression<
-			Exclude<Refs, keyof B & Refs> | BindingRefs<B>
+			Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>
 		>
 	}
 
@@ -92,7 +107,11 @@ export abstract class BaseExpression<Refs extends string = never> {
 	 * Optionally accepts bindings to substitute before serialization.
 	 */
 	toCss(bindings?: Partial<Record<Refs, ExpressionInput<never>>>): CSSResult {
-		const substituted = applyBindings(this.node, bindings as Record<string, ExpressionInput<never>>)
+		const substituted = applyBindings(
+			this.node,
+			bindings as Record<string, ExpressionInput<never>>,
+			this.refs,
+		)
 		const declarations: Record<string, string> = {}
 		const properties: Record<string, PropertyRule> = {}
 		const rawExpression = substituted.serialize(declarations, properties)
@@ -113,22 +132,28 @@ export class NumberExpression<Refs extends string = never> extends BaseExpressio
 		return new NumberExpression<R>(node, refs)
 	}
 
-	override bind<const B extends Partial<Record<Refs, ExpressionInput<string>>>>(
-		bindings: B,
-	): NumberExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>> {
-		return super.bind(bindings) as NumberExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
+	override bind<const B>(
+		bindings: B & Partial<Record<Refs, ExpressionInput<string>>>,
+	): NumberExpression<Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>> {
+		return super.bind(bindings) as NumberExpression<
+			Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>
+		>
 	}
 
 	/**
 	 * Evaluate the expression to a numeric value.
 	 * Throws if the expression contains unbound references after applying bindings.
 	 */
-	solve(
+	solve<B = Record<string, never>>(
 		bindings: [Refs] extends [never]
 			? Record<string, never> | undefined
-			: Record<Refs, ExpressionInput<never>> = {} as Record<string, never>,
+			: B & Record<Refs, ExpressionInput<never>> = {} as never,
 	): number {
-		const substituted = applyBindings(this.node, bindings as Record<string, ExpressionInput<never>>)
+		const substituted = applyBindings(
+			this.node,
+			bindings as Record<string, ExpressionInput<never>>,
+			this.refs,
+		)
 
 		if (!substituted.isConstant()) {
 			throw new Error('Cannot convert expression to number: unbound references remain')
@@ -151,9 +176,11 @@ export class ColorExpression<Refs extends string = never> extends BaseExpression
 		return new ColorExpression<R>(node, refs)
 	}
 
-	override bind<B extends Partial<Record<Refs, ExpressionInput<string>>>>(
-		bindings: B,
-	): ColorExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>> {
-		return super.bind(bindings) as ColorExpression<Exclude<Refs, keyof B & Refs> | BindingRefs<B>>
+	override bind<B>(
+		bindings: B & Partial<Record<Refs, ExpressionInput<string>>>,
+	): ColorExpression<Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>> {
+		return super.bind(bindings) as ColorExpression<
+			Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>
+		>
 	}
 }

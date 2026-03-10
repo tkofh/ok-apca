@@ -170,4 +170,42 @@ describe('binding', () => {
 			expect(css.expression).toBe('calc(6 + var(--runtime))')
 		})
 	})
+
+	describe('excess properties', () => {
+		it('bind ignores excess properties', () => {
+			const expr = add('x', 'y')
+			const bound = expr.bind({ x: 10, y: 20, extra: 99 })
+			const result = bound.solve()
+			expect(result).toBe(30)
+		})
+
+		it('solve ignores excess properties', () => {
+			const expr = multiply('a', 'b')
+			const result = expr.solve({ a: 3, b: 7, extra: 999 })
+			expect(result).toBe(21)
+		})
+
+		it('bind with object spread filters to relevant refs', () => {
+			const data = { apexL: 0.6, apexC: 0.3, curvature: -0.1, unrelated: 42 }
+			const expr = add('apexL', 'apexC')
+			const bound = expr.bind(data)
+			const result = bound.solve()
+			expect(result).toBeCloseTo(0.9)
+		})
+
+		it('solve with object spread filters to relevant refs', () => {
+			const data = { x: 5, y: 10, z: 100 }
+			const expr = add('x', 'y')
+			const result = expr.solve(data)
+			expect(result).toBe(15)
+		})
+
+		it('partial bind with excess properties preserves remaining refs', () => {
+			const expr = add('x', 'y', 'z')
+			const data = { x: 1, extra: 99 }
+			const bound = expr.bind(data)
+			const result = bound.solve({ y: 2, z: 3 })
+			expect(result).toBe(6)
+		})
+	})
 })
