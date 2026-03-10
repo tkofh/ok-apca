@@ -9,14 +9,7 @@ import {
 	reversePolarity,
 	softUnclamp,
 } from './apca.ts'
-import {
-	type Color,
-	type ColorInput,
-	computeMaxChroma,
-	findGamutSlice,
-	gamutMap,
-	toColor,
-} from './color.ts'
+import { type Color, createColor } from './color.ts'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
@@ -30,7 +23,7 @@ import {
 	LP_SOFT_CLAMP_KP,
 	LP_SOFT_CLAMP_P,
 } from './constants.ts'
-import { exactY, hueYCoefficients, yCorrectionFactor } from './correction.ts'
+import { computeHueData, computeMaxChroma, exactY, gamutMap, yCorrectionFactor } from './gamut.ts'
 import { clampNumber } from './util.ts'
 
 /** Lp-norm soft clamp approximation (numeric). */
@@ -58,12 +51,14 @@ function trueSoftClamp(y: number): number {
  * generated CSS expressions.
  */
 export function measureContrast(
-	baseColor: ColorInput,
-	contrastColor: ColorInput,
+	baseColor: Color,
+	contrastColor: Color,
 	{ approximate = false }: { approximate?: boolean } = {},
 ): number {
-	const yBg = getLuminance({ space: OKLCH, coords: toColor(baseColor).coords() })
-	const yFg = getLuminance({ space: OKLCH, coords: toColor(contrastColor).coords() })
+	const base = createColor(baseColor)
+	const fg = createColor(contrastColor)
+	const yBg = getLuminance({ space: OKLCH, coords: [base.lightness, base.chroma, base.hue] })
+	const yFg = getLuminance({ space: OKLCH, coords: [fg.lightness, fg.chroma, fg.hue] })
 
 	if (
 		!(Number.isFinite(yFg) && Number.isFinite(yBg)) ||
@@ -78,9 +73,15 @@ export function measureContrast(
 	const scFg = softClamp(yFg)
 
 	if (yBg >= yFg) {
-		return Math.max(0, APCA_SCALE * (scBg ** APCA_BG_EXP_NORMAL - scFg ** APCA_FG_EXP_NORMAL) - APCA_OFFSET)
+		return Math.max(
+			0,
+			APCA_SCALE * (scBg ** APCA_BG_EXP_NORMAL - scFg ** APCA_FG_EXP_NORMAL) - APCA_OFFSET,
+		)
 	}
-	return -Math.max(0, APCA_SCALE * (scFg ** APCA_FG_EXP_REVERSE - scBg ** APCA_BG_EXP_REVERSE) - APCA_OFFSET)
+	return -Math.max(
+		0,
+		APCA_SCALE * (scFg ** APCA_FG_EXP_REVERSE - scBg ** APCA_BG_EXP_REVERSE) - APCA_OFFSET,
+	)
 }
 
 /**
@@ -95,11 +96,10 @@ export function measureContrast(
  * and selects the one that achieves higher absolute contrast. The signed contrast
  * value acts as a preference that breaks ties when both directions achieve equal contrast.
  */
-export function computeContrastColor(color: ColorInput, contrast: number, invert = true): Color {
+export function computeContrastColor(color: Color, contrast: number, invert = true): Color {
 	const { hue, lightness, chroma } = gamutMap(color)
-	const slice = findGamutSlice(hue)
-	const coeffs = hueYCoefficients(hue)
-	const maxChromaAtBase = computeMaxChroma(lightness, slice)
+	const hueData = computeHueData(hue)
+	const maxChromaAtBase = computeMaxChroma(lightness, hueData)
 	const actualChroma = chroma
 	const chromaRatio = maxChromaAtBase > 0 ? clampNumber(0, chroma / maxChromaAtBase, 1) : 0
 
@@ -107,9 +107,9 @@ export function computeContrastColor(color: ColorInput, contrast: number, invert
 	const Y = exactY.solve({
 		lightness,
 		yChroma: actualChroma,
-		yCoeffA: coeffs.a,
-		yCoeffB: coeffs.b,
-		yCoeffD: coeffs.d,
+		yCoeffA: hueData.yCoeffA,
+		yCoeffB: hueData.yCoeffB,
+		yCoeffD: hueData.yCoeffD,
 	})
 
 	const clampedContrast = clampNumber(-1.08, contrast, 1.08)
@@ -146,19 +146,19 @@ export function computeContrastColor(color: ColorInput, contrast: number, invert
 
 	// f-correction inverse: Y → L using approximate chroma
 	const lApprox = clampNumber(0, ySolver ** (1 / 3), 1)
-	const cApprox = computeMaxChroma(lApprox, slice) * chromaRatio
+	const cApprox = computeMaxChroma(lApprox, hueData) * chromaRatio
 	const kOut = lApprox > 0 ? cApprox / lApprox : 0
 	const fOut = yCorrectionFactor.solve({
 		yCorrectionK: kOut,
-		yCoeffA: coeffs.a,
-		yCoeffB: coeffs.b,
-		yCoeffD: coeffs.d,
+		yCoeffA: hueData.yCoeffA,
+		yCoeffB: hueData.yCoeffB,
+		yCoeffD: hueData.yCoeffD,
 	})
 	const targetLightness = clampNumber(0, (ySolver / fOut) ** (1 / 3), 1)
 
-	return toColor({
+	return createColor({
 		lightness: targetLightness,
-		chroma: computeMaxChroma(targetLightness, slice) * chromaRatio,
+		chroma: computeMaxChroma(targetLightness, hueData) * chromaRatio,
 		hue,
 	})
 }

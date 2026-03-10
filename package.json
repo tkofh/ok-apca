@@ -11,7 +11,7 @@
 		"check:report": "biome check  .",
 		"deps:reinstall": "pnpm dlx rimraf --glob node_modules packages/*/node_modules pnpm-lock.yaml && pnpm install",
 		"deps:upgrade": "pnpm update --recursive --latest && pnpm dedupe",
-		"dev": "turbo watch dev --filter=playground...",
+		"dev": "turbo run dev --filter=playground...",
 		"format": "biome format --write .",
 		"preview": "turbo watch preview",
 		"test": "turbo run test",

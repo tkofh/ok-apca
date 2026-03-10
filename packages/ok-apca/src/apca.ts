@@ -1,4 +1,3 @@
-import type { CalcExpression, ExpressionInput } from '@ok-apca/calc-tree'
 import * as ct from '@ok-apca/calc-tree'
 import {
 	APCA_BG_EXP_NORMAL,
@@ -30,7 +29,7 @@ const smoothingBlend = ct.pow(
 
 const aboveSmoothThreshold = ct.max(0, ct.sign(ct.subtract(absContrast, APCA_SMOOTH_THRESHOLD)))
 
-export const normalPolarity: CalcExpression<'yBg' | 'contrast'> = ct.lerp(
+export const normalPolarity: ct.CalcExpression<'yBg' | 'contrast'> = ct.lerp(
 	ct.lerp(
 		'yBg',
 		ct.signedPow(
@@ -43,7 +42,7 @@ export const normalPolarity: CalcExpression<'yBg' | 'contrast'> = ct.lerp(
 	aboveSmoothThreshold,
 )
 
-export const reversePolarity: CalcExpression<'yBg' | 'contrast'> = ct.lerp(
+export const reversePolarity: ct.CalcExpression<'yBg' | 'contrast'> = ct.lerp(
 	ct.lerp(
 		'yBg',
 		ct.pow(
@@ -61,7 +60,7 @@ const contrastPreferLight = ct.max(0, contrastSign)
 const contrastPreferDark = ct.max(0, ct.multiply(-1, contrastSign))
 const contrastIsZero = ct.subtract(1, ct.max(contrastPreferLight, contrastPreferDark))
 
-export const contrastSolver: CalcExpression<'yBg' | 'contrast'> = ct.clamp(
+export const contrastSolver: ct.CalcExpression<'yBg' | 'contrast'> = ct.clamp(
 	0,
 	ct.add(
 		ct.multiply(contrastPreferLight, reversePolarity),
@@ -79,7 +78,7 @@ export const contrastSolver: CalcExpression<'yBg' | 'contrast'> = ct.clamp(
  * Formula: pow(pow(Y, p) + K^p, 1/p)
  * References Y exactly once, avoiding DevTools expression expansion.
  */
-export const softClampApprox = <R extends string>(y: ExpressionInput<R>) =>
+export const softClampApprox = <R extends string>(y: ct.ExpressionInput<R>) =>
 	ct.pow(ct.add(ct.pow(y, LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP), LP_SOFT_CLAMP_INV_P)
 
 /**
@@ -90,7 +89,7 @@ export const softClampApprox = <R extends string>(y: ExpressionInput<R>) =>
  * References Y exactly once. Naturally approaches identity for Y >> K
  * without needing a conditional branch, avoiding expression expansion.
  */
-export const softUnclamp = <R extends string>(y: ExpressionInput<R>) =>
+export const softUnclamp = <R extends string>(y: ct.ExpressionInput<R>) =>
 	ct.pow(ct.max(0, ct.subtract(ct.pow(y, LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP)), LP_SOFT_CLAMP_INV_P)
 
 // --- Contrast measurement ---
@@ -107,7 +106,7 @@ const yFgClamped = softClampApprox(ct.toExpression('yFg'))
  *
  * Formula: max(0, 1.14 * (clamp(Y_fg)^0.62 - clamp(Y_bg)^0.65) - 0.027)
  */
-export const contrastMeasurementReverse: CalcExpression<'yBg' | 'yFg'> = ct.max(
+export const contrastMeasurementReverse: ct.CalcExpression<'yBg' | 'yFg'> = ct.max(
 	0,
 	ct.subtract(
 		ct.multiply(
@@ -123,7 +122,7 @@ export const contrastMeasurementReverse: CalcExpression<'yBg' | 'yFg'> = ct.max(
  *
  * Formula: max(0, 1.14 * (clamp(Y_bg)^0.56 - clamp(Y_fg)^0.57) - 0.027)
  */
-export const contrastMeasurementNormal: CalcExpression<'yBg' | 'yFg'> = ct.max(
+export const contrastMeasurementNormal: ct.CalcExpression<'yBg' | 'yFg'> = ct.max(
 	0,
 	ct.subtract(
 		ct.multiply(
@@ -186,7 +185,7 @@ const useDarkComparison = ct.max(0, ct.sign(ct.multiply(-1, compDiff)))
  * - Lc_dark: achieved contrast for dark solution
  * - Selection: preference when not exhausted, comparison when exhausted
  */
-export const contrastSolverWithInversion: CalcExpression<
+export const contrastSolverWithInversion: ct.CalcExpression<
 	'yBg' | 'contrast' | 'yLight' | 'yDark' | 'yLightRaw' | 'yDarkRaw' | 'lcLight' | 'lcDark'
 > = ct.add(
 	ct.multiply(ct.lerp(useLightComparison, contrastPreferLight, usePreference), 'yLight'),

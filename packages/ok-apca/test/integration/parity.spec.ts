@@ -12,8 +12,8 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { getMaxChroma } from '../../src/color.ts'
 import { computeContrastColor } from '../../src/contrast.ts'
+import { getMaxChroma } from '../../src/gamut.ts'
 import { cleanupAll, createTestHarness } from './harness.ts'
 
 /**

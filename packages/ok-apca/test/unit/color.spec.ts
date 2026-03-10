@@ -1,7 +1,7 @@
 import Color from 'colorjs.io'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { findGamutSlice, gamutMap } from '../../src/color.ts'
+import { computeHueData, gamutMap } from '../../src/gamut.ts'
 
 // Arbitraries for OKLCH color components
 const hueArb = fc.double({ min: -720, max: 720, noNaN: true })
@@ -100,10 +100,10 @@ describe('gamutMap', () => {
 		it('allows higher chroma at apex than at extremes', () => {
 			fc.assert(
 				fc.property(fc.integer({ min: 0, max: 359 }), (hue) => {
-					const { apex } = findGamutSlice(hue)
+					const hueData = computeHueData(hue)
 
 					// At apex lightness, chroma should be preserved (or clamped to max)
-					const atApex = gamutMap({ hue, chroma: 0.4, lightness: apex.lightness })
+					const atApex = gamutMap({ hue, chroma: 0.4, lightness: hueData.apexL })
 
 					// Near black and white, chroma should be reduced more
 					const nearBlack = gamutMap({ hue, chroma: 0.4, lightness: 0.05 })
@@ -119,23 +119,23 @@ describe('gamutMap', () => {
 		it('left half is linear, right half has curvature correction', () => {
 			fc.assert(
 				fc.property(fc.integer({ min: 0, max: 359 }), (hue) => {
-					const { apex, curvature } = findGamutSlice(hue)
+					const hueData = computeHueData(hue)
 
 					// Curvature can be positive (gamut bulges out) or negative (curves in)
 					// depending on the hue - this models the real P3 gamut shape
-					expect(typeof curvature).toBe('number')
-					expect(Number.isFinite(curvature)).toBe(true)
+					expect(typeof hueData.curvature).toBe('number')
+					expect(Number.isFinite(hueData.curvature)).toBe(true)
 
 					// Left half: linear from L=0 to apex
 					// Right half: linear + curvature correction from apex to L=1
 					// The correction uses sin(t * π)^0.95 as the basis
 					const t = 0.5 // midpoint of right half
-					const L = apex.lightness + (1 - apex.lightness) * t
+					const L = hueData.apexL + (1 - hueData.apexL) * t
 					const result = gamutMap({ hue, chroma: 0.4, lightness: L })
 
 					// The result should still have valid chroma
 					expect(result.chroma).toBeGreaterThanOrEqual(0)
-					expect(result.chroma).toBeLessThanOrEqual(apex.chroma)
+					expect(result.chroma).toBeLessThanOrEqual(hueData.apexC)
 				}),
 				{ numRuns },
 			)

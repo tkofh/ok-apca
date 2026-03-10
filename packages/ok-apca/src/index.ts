@@ -4,7 +4,7 @@
 
 import { type ContrastColor, generateHueCss } from './generator.ts'
 
-export { type Color, gamutMap, getMaxChroma } from './color.ts'
+export type { Color } from './color.ts'
 export { computeContrastColor, measureContrast } from './contrast.ts'
 export type { ContrastColor, HueDefinition } from './generator.ts'
 
