@@ -2,6 +2,7 @@ import * as ct from '@ok-apca/calc-tree'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
+	APCA_BLACK_CLAMP,
 	APCA_FG_EXP_NORMAL,
 	APCA_FG_EXP_REVERSE,
 	APCA_NORMAL_INV_EXP,
@@ -16,8 +17,6 @@ import {
 	LP_SOFT_CLAMP_KP,
 	LP_SOFT_CLAMP_P,
 } from './constants.ts'
-
-// --- Contrast polarity solver ---
 
 const absContrast = ct.abs('contrast')
 const contrastDelta = ct.divide(ct.add(absContrast, APCA_OFFSET), APCA_SCALE)
@@ -70,7 +69,14 @@ export const contrastSolver: ct.NumberExpression<'yBg' | 'contrast'> = ct.clamp(
 	1,
 )
 
-// --- Soft clamp approximation ---
+/**
+ * True APCA soft black clamp: Y + max(0, threshold - Y)^1.414.
+ * Used for accurate reference values in the TypeScript runtime.
+ */
+export const trueSoftClamp: ct.NumberExpression<'y'> = ct.add(
+	'y',
+	ct.pow(ct.max(0, ct.subtract(APCA_SMOOTH_THRESHOLD, 'y')), APCA_BLACK_CLAMP),
+)
 
 /**
  * Lp-norm approximation of the APCA soft black clamp.
@@ -78,8 +84,10 @@ export const contrastSolver: ct.NumberExpression<'yBg' | 'contrast'> = ct.clamp(
  * Formula: pow(pow(Y, p) + K^p, 1/p)
  * References Y exactly once, avoiding DevTools expression expansion.
  */
-export const softClampApprox = <R extends string>(y: ct.ExpressionInput<R>) =>
-	ct.pow(ct.add(ct.pow(y, LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP), LP_SOFT_CLAMP_INV_P)
+export const softClampApprox: ct.NumberExpression<'y'> = ct.pow(
+	ct.add(ct.pow('y', LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP),
+	LP_SOFT_CLAMP_INV_P,
+)
 
 /**
  * Lp-norm inverse: approximate inverse of the soft black clamp.
@@ -89,8 +97,10 @@ export const softClampApprox = <R extends string>(y: ct.ExpressionInput<R>) =>
  * References Y exactly once. Naturally approaches identity for Y >> K
  * without needing a conditional branch, avoiding expression expansion.
  */
-export const softUnclamp = <R extends string>(y: ct.ExpressionInput<R>) =>
-	ct.pow(ct.max(0, ct.subtract(ct.pow(y, LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP)), LP_SOFT_CLAMP_INV_P)
+export const softUnclamp: ct.NumberExpression<'y'> = ct.pow(
+	ct.max(0, ct.subtract(ct.pow('y', LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP)),
+	LP_SOFT_CLAMP_INV_P,
+)
 
 // --- Contrast measurement ---
 
@@ -98,8 +108,8 @@ export const softUnclamp = <R extends string>(y: ct.ExpressionInput<R>) =>
 // solver so each Y input is referenced once instead of twice. Measurements are
 // only used for comparison (which direction achieved higher contrast), so the
 // monotonic Lp-norm preserves ranking while halving expansion.
-const yBgClamped = softClampApprox('yBg')
-const yFgClamped = softClampApprox('yFg')
+const yBgClamped = softClampApprox.bind({ y: 'yBg' })
+const yFgClamped = softClampApprox.bind({ y: 'yFg' })
 
 /**
  * Measure achieved contrast for reverse polarity (light text on dark background).
@@ -133,40 +143,26 @@ export const contrastMeasurementNormal: ct.NumberExpression<'yBg' | 'yFg'> = ct.
 	),
 )
 
-// --- Contrast solver with inversion ---
-
-// Detect whether the preferred direction's solution has been exhausted
-// (clamped to the boundary). Uses raw (pre-unclamp) values because
-// softUnclamp(1) < 1, which would prevent exhaustion detection.
-// sign(0)=0 and sign(x>0)=1, so:
-// darkNotExhausted = 1 when yDarkRaw > 0 (still has room to go darker)
-// lightNotExhausted = 1 when yLightRaw < 1 (still has room to go lighter)
-const darkNotExhausted = ct.max(0, ct.sign('yDarkRaw'))
-const lightNotExhausted = ct.max(0, ct.sign(ct.subtract(1, 'yLightRaw')))
-const preferredNotExhausted = ct.add(
-	ct.multiply(contrastPreferDark, darkNotExhausted),
-	ct.multiply(contrastPreferLight, lightNotExhausted),
-)
-
-const belowInvertThreshold = ct.multiply(
-	ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, 'lcLight'))),
-	ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, 'lcDark'))),
-) // 1 if both below threshold
-
 // Use preference when the preferred direction still has headroom,
 // or when both contrasts are below the inversion threshold
-const usePreference = ct.max(belowInvertThreshold, preferredNotExhausted)
+const usePreference = ct.max(
+	ct.multiply(
+		ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, 'lcLight'))),
+		ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, 'lcDark'))),
+	),
+	ct.add(
+		ct.multiply(contrastPreferDark, ct.max(0, ct.sign('yDarkRaw'))),
+		ct.multiply(contrastPreferLight, ct.max(0, ct.sign(ct.subtract(1, 'yLightRaw')))),
+	),
+)
 
 // Comparison with preference bias: when contrast difference is smaller than the
 // bias (~0.1 Lc), the preferred direction wins. This replaces epsilon-based
 // tie-breaking with fewer lcLight/lcDark references (2 each instead of 6).
-const preferBias = ct.subtract(
-	ct.multiply(contrastPreferLight, 0.001),
-	ct.multiply(contrastPreferDark, 0.001),
+const compDiff = ct.add(
+	ct.subtract('lcLight', 'lcDark'),
+	ct.subtract(ct.multiply(contrastPreferLight, 0.001), ct.multiply(contrastPreferDark, 0.001)),
 )
-const compDiff = ct.add(ct.subtract('lcLight', 'lcDark'), preferBias)
-const useLightComparison = ct.max(0, ct.sign(compDiff))
-const useDarkComparison = ct.max(0, ct.sign(ct.multiply(-1, compDiff)))
 
 /**
  * Contrast solver with automatic polarity inversion.
@@ -188,7 +184,10 @@ const useDarkComparison = ct.max(0, ct.sign(ct.multiply(-1, compDiff)))
 export const contrastSolverWithInversion: ct.NumberExpression<
 	'yBg' | 'contrast' | 'yLight' | 'yDark' | 'yLightRaw' | 'yDarkRaw' | 'lcLight' | 'lcDark'
 > = ct.add(
-	ct.multiply(ct.lerp(useLightComparison, contrastPreferLight, usePreference), 'yLight'),
-	ct.multiply(ct.lerp(useDarkComparison, contrastPreferDark, usePreference), 'yDark'),
+	ct.multiply(ct.lerp(ct.max(0, ct.sign(compDiff)), contrastPreferLight, usePreference), 'yLight'),
+	ct.multiply(
+		ct.lerp(ct.max(0, ct.sign(ct.multiply(-1, compDiff))), contrastPreferDark, usePreference),
+		'yDark',
+	),
 	ct.multiply(contrastIsZero, 'yBg'),
 )

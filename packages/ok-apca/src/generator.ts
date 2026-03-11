@@ -104,7 +104,7 @@ function buildContrastColorExprSimple<
 	)
 
 	// Unclamp to recover actual Y_fg
-	const yTargetExpr = ct.property(`_yt-${label}`, softUnclamp(yRawExpr))
+	const yTargetExpr = ct.property(`_yt-${label}`, softUnclamp.bind({ y: yRawExpr }))
 
 	// Cardano-corrected lightness
 	const conLumExpr = buildCorrectedLightness(label, yTargetExpr, hueData)
@@ -156,8 +156,8 @@ function buildContrastColorExprWithInversion<
 	)
 
 	// Unclamp to recover actual Y values
-	const yLightExpr = ct.property(`_yl-${label}`, softUnclamp(yLightRawExpr))
-	const yDarkExpr = ct.property(`_yd-${label}`, softUnclamp(yDarkRawExpr))
+	const yLightExpr = ct.property(`_yl-${label}`, softUnclamp.bind({ y: yLightRawExpr }))
+	const yDarkExpr = ct.property(`_yd-${label}`, softUnclamp.bind({ y: yDarkRawExpr }))
 
 	// Measure achieved contrast using original Y_bg (measurement has its own true softClampY)
 	const lcLightExpr = ct.property(
@@ -278,7 +278,7 @@ export function generateHueCss(definition: HueDefinition): string {
 		merge(yBgExpr.toCss())
 
 		// Soft-clamped Y_bg for the contrast solver (Lp-norm approximation)
-		const scYBgExpr = ct.property('_sc', softClampApprox(yBgExpr))
+		const scYBgExpr = ct.property('_sc', softClampApprox.bind({ y: yBgExpr }))
 		merge(scYBgExpr.toCss())
 
 		// Declare contrast input properties and build contrast color expressions

@@ -20,12 +20,26 @@ import {
 
 export type ExpressionInput<Refs extends string = never> = NumberExpression<Refs> | number | string
 
-export type InferRefs<T> = T extends NumberExpression<infer R> ? R : T extends string ? T : never
+export type InferRefs<T> = T extends NumberExpression<infer R>
+	? R
+	: T extends string
+		? string extends T
+			? never
+			: T
+		: never
+
+class ConstantValueTypeError extends TypeError {
+	readonly value: unknown
+	constructor(value: unknown) {
+		super(`Constant value must be a finite number, got ${value}`)
+		this.value = value
+	}
+}
 
 export function constant(value: number | string): NumberExpression<never> {
 	const num = typeof value === 'string' ? Number(value) : value
 	if (!Number.isFinite(num)) {
-		throw new TypeError('Constant value must be a finite number')
+		throw new ConstantValueTypeError(value)
 	}
 	return new NumberExpression(new ConstantNode(num))
 }

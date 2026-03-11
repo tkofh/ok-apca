@@ -6,39 +6,21 @@ import {
 	contrastSolverWithInversion,
 	normalPolarity,
 	reversePolarity,
+	softClampApprox,
 	softUnclamp,
+	trueSoftClamp,
 } from './apca.ts'
 import { type Color, createColor, getLuminance } from './color.ts'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
-	APCA_BLACK_CLAMP,
 	APCA_FG_EXP_NORMAL,
 	APCA_FG_EXP_REVERSE,
 	APCA_OFFSET,
 	APCA_SCALE,
-	APCA_SMOOTH_THRESHOLD,
-	LP_SOFT_CLAMP_INV_P,
-	LP_SOFT_CLAMP_KP,
-	LP_SOFT_CLAMP_P,
 } from './constants.ts'
 import { computeHueData, computeMaxChroma, exactY, gamutMap } from './gamut.ts'
 import { clampNumber } from './util.ts'
-
-/** Lp-norm soft clamp approximation (numeric). */
-function lpSoftClamp(y: number): number {
-	return (y ** LP_SOFT_CLAMP_P + LP_SOFT_CLAMP_KP) ** LP_SOFT_CLAMP_INV_P
-}
-
-/** Lp-norm inverse (numeric). Matches the CSS softUnclamp expression. */
-function lpSoftUnclamp(y: number): number {
-	return Math.max(0, y ** LP_SOFT_CLAMP_P - LP_SOFT_CLAMP_KP) ** LP_SOFT_CLAMP_INV_P
-}
-
-/** True APCA soft black clamp: Y + max(0, threshold - Y)^1.414 */
-function trueSoftClamp(y: number): number {
-	return y + Math.max(0, APCA_SMOOTH_THRESHOLD - y) ** APCA_BLACK_CLAMP
-}
 
 /**
  * Measure APCA contrast between colors.
@@ -67,9 +49,16 @@ export function measureContrast(
 		return 0
 	}
 
-	const softClamp = approximate ? lpSoftClamp : trueSoftClamp
-	const scBg = softClamp(yBg)
-	const scFg = softClamp(yFg)
+	if (approximate) {
+		// Use expression trees directly to ensure alignment with the CSS implementation
+		if (yBg >= yFg) {
+			return contrastMeasurementNormal.solve({ yBg, yFg })
+		}
+		return -contrastMeasurementReverse.solve({ yBg, yFg })
+	}
+
+	const scBg = trueSoftClamp.solve({ y: yBg })
+	const scFg = trueSoftClamp.solve({ y: yFg })
 
 	if (yBg >= yFg) {
 		return Math.max(
@@ -99,20 +88,13 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 	const { hue, lightness, chroma } = gamutMap(color)
 	const hueData = computeHueData(hue)
 	const maxChromaAtBase = computeMaxChroma(lightness, hueData)
-	const actualChroma = chroma
 	const chromaRatio = maxChromaAtBase > 0 ? clampNumber(0, chroma / maxChromaAtBase, 1) : 0
 
 	// Exact Y using OKLab polynomial (replaces lightness³ approximation)
-	const Y = exactY.solve({
-		lightness,
-		yChroma: actualChroma,
-		yCoeffA: hueData.yCoeffA,
-		yCoeffB: hueData.yCoeffB,
-		yCoeffD: hueData.yCoeffD,
-	})
+	const Y = exactY.bind(hueData).solve({ lightness, yChroma: chroma })
 
 	const clampedContrast = clampNumber(-1.08, contrast, 1.08)
-	const scY = lpSoftClamp(Y)
+	const scY = softClampApprox.solve({ y: Y })
 
 	const ySolver = invert
 		? contrastSolverWithInversion
@@ -123,8 +105,8 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 				})
 				.bind({
 					// Unclamped Y values for selection
-					yLight: softUnclamp('yLightRaw'),
-					yDark: softUnclamp('yDarkRaw'),
+					yLight: softUnclamp.bind({ y: 'yLightRaw' }),
+					yDark: softUnclamp.bind({ y: 'yDarkRaw' }),
 				})
 				.bind({
 					// Raw clamped values in soft-clamp domain (used for exhaustion detection)
@@ -136,12 +118,12 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 					yBg: Y,
 					contrast: clampedContrast,
 				})
-		: lpSoftUnclamp(
-				contrastSolver.solve({
+		: softUnclamp.solve({
+				y: contrastSolver.solve({
 					yBg: scY,
 					contrast: clampedContrast,
 				}),
-			)
+			})
 
 	// f-correction inverse: Y → L using approximate chroma
 	const lApprox = clampNumber(0, ySolver ** (1 / 3), 1)
