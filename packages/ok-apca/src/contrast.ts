@@ -1,5 +1,11 @@
 import * as ct from '@ok-apca/calc-tree'
 import {
+	APCA_BG_EXP_NORMAL,
+	APCA_BG_EXP_REVERSE,
+	APCA_FG_EXP_NORMAL,
+	APCA_FG_EXP_REVERSE,
+	APCA_OFFSET,
+	APCA_SCALE,
 	contrastMeasurementNormal,
 	contrastMeasurementReverse,
 	contrastSolver,
@@ -11,14 +17,6 @@ import {
 	trueSoftClamp,
 } from './apca.ts'
 import { type Color, createColor, getLuminance } from './color.ts'
-import {
-	APCA_BG_EXP_NORMAL,
-	APCA_BG_EXP_REVERSE,
-	APCA_FG_EXP_NORMAL,
-	APCA_FG_EXP_REVERSE,
-	APCA_OFFSET,
-	APCA_SCALE,
-} from './constants.ts'
 import { computeHueData, computeMaxChroma, gamutMap } from './gamut.ts'
 import { clampNumber } from './util.ts'
 
@@ -59,9 +57,8 @@ export const yBackground: ct.NumberExpression<'lightness' | 'chroma' | 'fA' | 'f
  *
  * Unbound refs: `yTarget`, `chroma`, `fA`, `fB`, `fD`.
  */
-export const correctedLightness: ct.NumberExpression<
-	'yTarget' | 'chroma' | 'fA' | 'fB' | 'fD'
-> = ct.pow(ct.divide('yTarget', fCorrection), 1 / 3)
+export const correctedLightness: ct.NumberExpression<'yTarget' | 'chroma' | 'fA' | 'fB' | 'fD'> =
+	ct.pow(ct.divide('yTarget', fCorrection), 1 / 3)
 
 // =============================================================================
 // Contrast Target Lightness Factories
@@ -118,14 +115,8 @@ export function contrastTargetLightnessWithInversion<const Label extends string>
 	const yDark = ct.property(`_yd-${label}`, softUnclamp.bind({ y: yDarkRaw }))
 
 	// Measure achieved contrast using original Y_bg (yBg ref, not scYBg)
-	const lcLight = ct.property(
-		`_lcl-${label}`,
-		contrastMeasurementReverse.bind({ yFg: yLight }),
-	)
-	const lcDark = ct.property(
-		`_lcd-${label}`,
-		contrastMeasurementNormal.bind({ yFg: yDark }),
-	)
+	const lcLight = ct.property(`_lcl-${label}`, contrastMeasurementReverse.bind({ yFg: yLight }))
+	const lcDark = ct.property(`_lcd-${label}`, contrastMeasurementNormal.bind({ yFg: yDark }))
 
 	// Inversion solver uses original Y_bg for zero-contrast fallback
 	const yTarget = ct.property(
@@ -233,9 +224,7 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 			.solve({
 				lightness,
 				chroma: chromaRatio,
-				fA: hueData.fA,
-				fB: hueData.fB,
-				fD: hueData.fD,
+				...hueData,
 				'contrast-_': clampedContrast,
 			}),
 		1,

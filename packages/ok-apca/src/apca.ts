@@ -1,22 +1,57 @@
 import * as ct from '@ok-apca/calc-tree'
-import {
-	APCA_BG_EXP_NORMAL,
-	APCA_BG_EXP_REVERSE,
-	APCA_BLACK_CLAMP,
-	APCA_FG_EXP_NORMAL,
-	APCA_FG_EXP_REVERSE,
-	APCA_NORMAL_INV_EXP,
-	APCA_OFFSET,
-	APCA_REVERSE_INV_EXP,
-	APCA_SCALE,
-	APCA_SMOOTH_POWER,
-	APCA_SMOOTH_THRESHOLD,
-	APCA_SMOOTH_THRESHOLD_OFFSET,
-	INVERSION_THRESHOLD,
-	LP_SOFT_CLAMP_INV_P,
-	LP_SOFT_CLAMP_KP,
-	LP_SOFT_CLAMP_P,
-} from './constants.ts'
+
+// =============================================================================
+// APCA Algorithm Constants
+// =============================================================================
+
+/** Exponents for Y (luminance) in APCA contrast formula. */
+export const APCA_BG_EXP_NORMAL = 0.56
+export const APCA_FG_EXP_NORMAL = 0.57
+export const APCA_FG_EXP_REVERSE = 0.62
+export const APCA_BG_EXP_REVERSE = 0.65
+
+/** Inverse exponents for solving target Y from contrast. */
+const APCA_NORMAL_INV_EXP = 1 / APCA_FG_EXP_NORMAL
+const APCA_REVERSE_INV_EXP = 1 / APCA_FG_EXP_REVERSE
+
+/** APCA offset and scaling constants. */
+export const APCA_OFFSET = 0.027
+export const APCA_SCALE = 1.14
+
+/** Threshold below which we use smoothing instead of direct APCA formula. */
+const APCA_SMOOTH_THRESHOLD = 0.022
+
+/**
+ * Soft clamp exponent for near-black luminance values.
+ * When Y < APCA_SMOOTH_THRESHOLD, Y is replaced with Y + (threshold - Y)^BLACK_CLAMP.
+ */
+// biome-ignore lint/suspicious/noApproximativeNumericConstant: w3 spec uses 1.414
+const APCA_BLACK_CLAMP = 1.414
+
+/** Pre-computed threshold offset: (APCA_SMOOTH_THRESHOLD + APCA_OFFSET) / APCA_SCALE */
+const APCA_SMOOTH_THRESHOLD_OFFSET = (APCA_SMOOTH_THRESHOLD + APCA_OFFSET) / APCA_SCALE
+
+/** Power for sine-based smoothing below threshold. */
+const APCA_SMOOTH_POWER = 2.46
+
+/**
+ * Minimum contrast threshold for inversion consideration.
+ * Below this, we respect the user's polarity preference rather than
+ * trying to maximize contrast.
+ */
+const INVERSION_THRESHOLD = 0.08 // ~8 Lc
+
+// =============================================================================
+// Soft Clamp Approximation Constants
+// =============================================================================
+
+/**
+ * Lp-norm approximation of the APCA soft black clamp.
+ * pow(pow(Y, p) + K^p, 1/p) approximates sc(Y) with a single reference to Y.
+ */
+const LP_SOFT_CLAMP_P = 1.75
+const LP_SOFT_CLAMP_KP = 0.005 ** LP_SOFT_CLAMP_P
+const LP_SOFT_CLAMP_INV_P = 1 / LP_SOFT_CLAMP_P
 
 const absContrast = ct.abs('contrast')
 const contrastDelta = ct.divide(ct.add(absContrast, APCA_OFFSET), APCA_SCALE)

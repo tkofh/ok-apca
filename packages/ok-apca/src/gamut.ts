@@ -1,7 +1,14 @@
 import * as ct from '@ok-apca/calc-tree'
 import { type Color, createColor, inP3 } from './color.ts'
-import { GAMUT_SINE_CURVATURE_EXPONENT } from './constants.ts'
 import { clampNumber } from './util.ts'
+
+/**
+ * Exponent for sine-based curvature correction on the right half of the
+ * gamut boundary tent function.
+ *
+ * Value 0.95 was determined empirically by testing across all 360 hues.
+ */
+const GAMUT_SINE_CURVATURE_EXPONENT = 0.95
 
 // =============================================================================
 // Hue Data
