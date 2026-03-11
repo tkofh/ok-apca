@@ -2,16 +2,19 @@
  * ok-apca - OKLCH color utilities with APCA-based contrast
  */
 
-import { type ContrastColor, generateHueCss } from './generator.ts'
+import {
+	type ContrastColor,
+	type ContrastColorWithSelector,
+	generateHueCss,
+	type HueDefinition,
+} from './generator.ts'
 
 export type { Color } from './color.ts'
 export { computeContrastColor, measureContrast } from './contrast.ts'
-export type { ContrastColor, HueDefinition } from './generator.ts'
+export type { ContrastColor, ContrastColorWithSelector, HueDefinition } from './generator.ts'
 
-export interface HueOptions {
+export type HueOptions = {
 	readonly hue: number
-	readonly selector: string
-	readonly contrastColors?: readonly ContrastColor[]
 	/**
 	 * Base name for the output CSS custom properties.
 	 * @default 'color'
@@ -28,7 +31,16 @@ export interface HueOptions {
 	 * @default false
 	 */
 	readonly noContrastInversion?: boolean
-}
+} & (
+	| {
+			readonly selector: string
+			readonly contrastColors?: readonly ContrastColor[]
+	  }
+	| {
+			readonly selector?: never
+			readonly contrastColors: readonly ContrastColorWithSelector[]
+	  }
+)
 
 export interface Hue {
 	readonly hue: number
@@ -77,7 +89,6 @@ export function defineHue(options: HueOptions): Hue {
 	const contrastColors: readonly ContrastColor[] = options.contrastColors ?? []
 	const output = options.output ?? 'color'
 	const noContrastInversion = options.noContrastInversion ?? false
-	const selector = options.selector
 
 	const labels = contrastColors.map((c) => c.label)
 	for (const label of labels) {
@@ -85,13 +96,39 @@ export function defineHue(options: HueOptions): Hue {
 	}
 	validateUniqueLabels(labels)
 
-	const css = generateHueCss({
-		hue,
-		selector,
-		output,
-		contrastColors,
-		noContrastInversion,
-	})
+	if (!options.selector) {
+		for (const cc of contrastColors) {
+			if (!cc.selector) {
+				throw new Error(
+					'When no main selector is provided, all contrast colors must have a selector.',
+				)
+			}
+		}
+	}
+
+	let definition: HueDefinition
+	if (options.selector) {
+		definition = {
+			hue,
+			selector: options.selector,
+			output,
+			contrastColors,
+			noContrastInversion,
+		}
+	} else {
+		definition = {
+			hue,
+			output,
+			contrastColors: contrastColors as readonly ContrastColorWithSelector[],
+			noContrastInversion,
+		}
+	}
+
+	const css = generateHueCss(definition)
+
+	const selector =
+		options.selector ??
+		`:is(${[...new Set(contrastColors.flatMap((cc) => (cc.selector ? [cc.selector] : [])))].join(', ')})`
 
 	return {
 		hue,

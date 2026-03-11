@@ -353,8 +353,12 @@ describe('computeContrastColor', () => {
 					contrastArb,
 					(input, contrast) => {
 						const result = computeContrastColor(input, contrast)
-						const maxAtInput = computeGamutSlice(input.hue).maxChroma.solve({ lightness: input.lightness })
-						const maxAtResult = computeGamutSlice(result.hue).maxChroma.solve({ lightness: result.lightness })
+						const maxAtInput = computeGamutSlice(input.hue).maxChroma.solve({
+							lightness: input.lightness,
+						})
+						const maxAtResult = computeGamutSlice(result.hue).maxChroma.solve({
+							lightness: result.lightness,
+						})
 						if (maxAtInput <= 0 || maxAtResult <= 0) {
 							return
 						}

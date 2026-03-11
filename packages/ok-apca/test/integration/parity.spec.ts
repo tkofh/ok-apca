@@ -145,7 +145,8 @@ describe('computeContrastColor parity with CSS', () => {
 			expect(tsResult.lightness).toBeCloseTo(cssLightness, 1)
 
 			// Compare chroma - CSS computes: maxChroma(contrastL) * chromaPct
-			const expectedContrastChroma = computeGamutSlice(hue).maxChroma.solve({ lightness: cssLightness }) * chroma
+			const expectedContrastChroma =
+				computeGamutSlice(hue).maxChroma.solve({ lightness: cssLightness }) * chroma
 			expect(cssChroma).toBeCloseTo(expectedContrastChroma, 1)
 
 			harness.cleanup()

@@ -10,14 +10,50 @@ import { outdent } from './util.ts'
 
 export interface ContrastColor {
 	readonly label: string
+	readonly selector?: string
 }
 
-export interface HueDefinition {
-	readonly hue: number
+export interface ContrastColorWithSelector {
+	readonly label: string
 	readonly selector: string
+}
+
+export type HueDefinition = {
+	readonly hue: number
 	readonly output: string
-	readonly contrastColors: readonly ContrastColor[]
 	readonly noContrastInversion: boolean
+} & (
+	| {
+			readonly selector: string
+			readonly contrastColors: readonly ContrastColor[]
+	  }
+	| {
+			readonly selector?: never
+			readonly contrastColors: readonly ContrastColorWithSelector[]
+	  }
+)
+
+function groupContrastDeclarations(
+	contrastColors: readonly ContrastColor[],
+	contrastDeclarationsByLabel: Map<string, Record<string, string>>,
+	sharedDeclarations: Record<string, string>,
+	mainBlockDecls: Record<string, string>,
+): Map<string, Record<string, string>> {
+	const selectorGroups = new Map<string, Record<string, string>>()
+	for (const cc of contrastColors) {
+		const decls = contrastDeclarationsByLabel.get(cc.label) ?? {}
+		if (cc.selector) {
+			const existing = selectorGroups.get(cc.selector)
+			if (existing) {
+				Object.assign(existing, decls)
+			} else {
+				selectorGroups.set(cc.selector, { ...sharedDeclarations, ...decls })
+			}
+		} else {
+			Object.assign(mainBlockDecls, decls)
+		}
+	}
+	return selectorGroups
 }
 
 /**
@@ -37,20 +73,39 @@ export interface HueDefinition {
  * enabling proper type checking, animation support, and initial values.
  */
 export function generateHueCss(definition: HueDefinition): string {
-	const { hue, selector, output, contrastColors, noContrastInversion } = definition
+	const { hue, output, contrastColors, noContrastInversion } = definition
 	const slice = computeGamutSlice(hue)
 
 	// Declare input properties
 	const lightnessInput = ct.property('lightness', 'number', true)
 	const chromaInput = ct.property('chroma', 'number', true)
 
-	// Collect all declarations and properties into single objects
-	const declarations: Record<string, string> = {}
+	// Base declarations (only in main selector)
+	const baseDeclarations: Record<string, string> = {}
+	// Shared intermediate declarations (main selector + contrast selector blocks)
+	const sharedDeclarations: Record<string, string> = {}
+	// Per-contrast declarations, keyed by label
+	const contrastDeclarationsByLabel = new Map<string, Record<string, string>>()
+	// All @property rules
 	const properties: Record<string, ct.PropertyRule> = {}
 
-	// Helper to merge CSS result into the shared collections
-	const merge = (css: ct.CSSResult) => {
-		Object.assign(declarations, css.declarations)
+	const mergeBase = (css: ct.CSSResult) => {
+		Object.assign(baseDeclarations, css.declarations)
+		Object.assign(properties, css.properties)
+	}
+
+	const mergeShared = (css: ct.CSSResult) => {
+		Object.assign(sharedDeclarations, css.declarations)
+		Object.assign(properties, css.properties)
+	}
+
+	const mergeContrast = (label: string, css: ct.CSSResult) => {
+		let decls = contrastDeclarationsByLabel.get(label)
+		if (!decls) {
+			decls = {}
+			contrastDeclarationsByLabel.set(label, decls)
+		}
+		Object.assign(decls, css.declarations)
 		Object.assign(properties, css.properties)
 	}
 
@@ -58,7 +113,7 @@ export function generateHueCss(definition: HueDefinition): string {
 	const maxChromaExpr = ct.property('_mc', slice.maxChroma.bind({ lightness: lightnessInput }))
 
 	// Build base color expression
-	merge(
+	mergeBase(
 		ct
 			.property(output, ct.oklch('lightness', ct.multiply(maxChromaExpr, 'chroma'), hue), true)
 			.toCss(),
@@ -68,20 +123,20 @@ export function generateHueCss(definition: HueDefinition): string {
 	if (contrastColors.length > 0) {
 		// Y_bg with hue-dependent correction bound
 		const yBgExpr = ct.property('_ybg', yBackground.bind(slice))
-		merge(yBgExpr.toCss())
+		mergeShared(yBgExpr.toCss())
 
 		// Soft-clamped Y_bg for the contrast solver
 		const scYBgExpr = ct.property('_sc', softClampApprox.bind({ y: yBgExpr }))
-		merge(scYBgExpr.toCss())
+		mergeShared(scYBgExpr.toCss())
 
-		for (const { label } of contrastColors) {
+		for (const cc of contrastColors) {
 			// Declare contrast input property
-			merge(ct.property(`contrast-${label}`, 'number', true).toCss())
+			mergeContrast(cc.label, ct.property(`contrast-${cc.label}`, 'number', true).toCss())
 
 			// Get corrected lightness from shared factory, bind Y_bg refs and fA/fB/fD
 			const conLExpr = noContrastInversion
-				? contrastTargetLightness(label)
-				: contrastTargetLightnessWithInversion(label)
+				? contrastTargetLightness(cc.label)
+				: contrastTargetLightnessWithInversion(cc.label)
 			const boundConL = conLExpr.bind({
 				...slice,
 				yBg: yBgExpr,
@@ -90,15 +145,16 @@ export function generateHueCss(definition: HueDefinition): string {
 
 			// Max chroma at contrast color's lightness
 			const conMaxChroma = ct.property(
-				`_mc-${label}`,
+				`_mc-${cc.label}`,
 				slice.maxChroma.bind({ lightness: boundConL }),
 			)
 
 			// Build the contrast color
-			merge(
+			mergeContrast(
+				cc.label,
 				ct
 					.property(
-						`${output}-${label}`,
+						`${output}-${cc.label}`,
 						ct.oklch(boundConL, ct.multiply(conMaxChroma, 'chroma'), hue),
 						true,
 					)
@@ -108,8 +164,24 @@ export function generateHueCss(definition: HueDefinition): string {
 	}
 
 	// Ensure input properties are registered even if they weren't serialized
-	merge(lightnessInput.toCss())
-	merge(chromaInput.toCss())
+	mergeShared(lightnessInput.toCss())
+	mergeShared(chromaInput.toCss())
+
+	// Determine main selector
+	const mainSelector =
+		definition.selector ??
+		`:is(${[...new Set(contrastColors.flatMap((cc) => (cc.selector ? [cc.selector] : [])))].join(', ')})`
+
+	// Build main block: base + shared + contrast colors without own selector
+	const mainBlockDecls: Record<string, string> = { ...sharedDeclarations, ...baseDeclarations }
+
+	// Group contrast colors by selector, or merge into main block
+	const selectorGroups = groupContrastDeclarations(
+		contrastColors,
+		contrastDeclarationsByLabel,
+		sharedDeclarations,
+		mainBlockDecls,
+	)
 
 	const propertyRules = Object.entries(properties)
 		.map(
@@ -123,15 +195,29 @@ export function generateHueCss(definition: HueDefinition): string {
 		)
 		.join('\n')
 
-	const declarationBlock = Object.entries(declarations)
-		.map(([name, value]) => `${name}: ${value};`)
-		.join('\n')
+	const formatDeclarationBlock = (decls: Record<string, string>) =>
+		Object.entries(decls)
+			.map(([name, value]) => `${name}: ${value};`)
+			.join('\n')
+
+	const blocks = [
+		outdent`
+			${mainSelector} {
+				${formatDeclarationBlock(mainBlockDecls)}
+			}
+		`,
+		...[...selectorGroups].map(
+			([selector, decls]) => outdent`
+				${selector} {
+					${formatDeclarationBlock(decls)}
+				}
+			`,
+		),
+	]
 
 	return outdent`
 		${propertyRules}
 
-		${selector} {
-			${declarationBlock}
-		}
+		${blocks.join('\n\n')}
 	`
 }
