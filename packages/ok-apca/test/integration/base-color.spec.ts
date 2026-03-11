@@ -26,29 +26,29 @@ describe('Base color computation', () => {
 	})
 
 	it('updates lightness when --lightness variable changes', () => {
-		harness.setVar('lightness', 20)
+		harness.setVar('lightness', 0.2)
 		const lowLightness = harness.getColor().get('oklch.l')
 
-		harness.setVar('lightness', 80)
+		harness.setVar('lightness', 0.8)
 		const highLightness = harness.getColor().get('oklch.l')
 
 		expect(highLightness).toBeGreaterThan(lowLightness)
 	})
 
 	it('updates chroma when --chroma variable changes', () => {
-		harness.setVar('lightness', 50)
+		harness.setVar('lightness', 0.5)
 
-		harness.setVar('chroma', 10)
+		harness.setVar('chroma', 0.1)
 		const lowChroma = harness.getColor().get('oklch.c')
 
-		harness.setVar('chroma', 90)
+		harness.setVar('chroma', 0.9)
 		const highChroma = harness.getColor().get('oklch.c')
 
 		expect(highChroma).toBeGreaterThan(lowChroma)
 	})
 
 	it('maintains correct hue across lightness values', () => {
-		for (const lightness of [20, 40, 60, 80]) {
+		for (const lightness of [0.2, 0.4, 0.6, 0.8]) {
 			harness.setVar('lightness', lightness)
 			const hue = harness.getColor().get('oklch.h')
 			expect(hue).toBeCloseTo(240, 0)
@@ -56,8 +56,8 @@ describe('Base color computation', () => {
 	})
 
 	it('clamps chroma to gamut boundary', () => {
-		harness.setVar('lightness', 50)
-		harness.setVar('chroma', 100)
+		harness.setVar('lightness', 0.5)
+		harness.setVar('chroma', 1)
 
 		const color = harness.getColor()
 		// Color should be valid (within Display P3 gamut - the library's target)

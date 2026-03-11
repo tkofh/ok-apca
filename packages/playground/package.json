@@ -9,13 +9,13 @@
 		"preview": "nuxt preview"
 	},
 	"dependencies": {
-		"nuxt": "^4.3.0",
+		"nuxt": "^4.3.1",
 		"ok-apca": "workspace:*",
-		"vue": "^3.5.27",
-		"vue-router": "^4.6.4"
+		"vue": "^3.5.29",
+		"vue-router": "^5.0.3"
 	},
 	"devDependencies": {
-		"@vueuse/core": "^14.1.0",
-		"@vueuse/nuxt": "^14.1.0"
+		"@vueuse/core": "^14.2.1",
+		"@vueuse/nuxt": "^14.2.1"
 	}
 }

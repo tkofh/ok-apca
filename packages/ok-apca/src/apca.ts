@@ -1,58 +1,228 @@
-import {
-	clamp,
-	createContrastSolver,
-	createNormalPolaritySolver,
-	createReversePolaritySolver,
-} from './expressions.ts'
+import * as ct from '@ok-apca/calc-tree'
 
-interface ApcaSolution {
-	readonly targetY: number
-	readonly inGamut: boolean
-}
+// =============================================================================
+// APCA Algorithm Constants
+// =============================================================================
+
+/** Exponents for Y (luminance) in APCA contrast formula. */
+export const APCA_BG_EXP_NORMAL = 0.56
+export const APCA_FG_EXP_NORMAL = 0.57
+export const APCA_FG_EXP_REVERSE = 0.62
+export const APCA_BG_EXP_REVERSE = 0.65
+
+/** Inverse exponents for solving target Y from contrast. */
+const APCA_NORMAL_INV_EXP = 1 / APCA_FG_EXP_NORMAL
+const APCA_REVERSE_INV_EXP = 1 / APCA_FG_EXP_REVERSE
+
+/** APCA offset and scaling constants. */
+export const APCA_OFFSET = 0.027
+export const APCA_SCALE = 1.14
+
+/** Threshold below which we use smoothing instead of direct APCA formula. */
+const APCA_SMOOTH_THRESHOLD = 0.022
 
 /**
- * Solve for normal polarity (darker contrast color).
- * Uses the shared expression tree from expressions.ts.
+ * Soft clamp exponent for near-black luminance values.
+ * When Y < APCA_SMOOTH_THRESHOLD, Y is replaced with Y + (threshold - Y)^BLACK_CLAMP.
  */
-function solveApcaNormal(Y: number, x: number): ApcaSolution {
-	const rawY = createNormalPolaritySolver().toNumber({ yBg: Y, x })
+// biome-ignore lint/suspicious/noApproximativeNumericConstant: w3 spec uses 1.414
+const APCA_BLACK_CLAMP = 1.414
 
-	const targetY = clamp(0, rawY, 1)
-	const epsilon = 0.0001
-	const inGamut = rawY >= -epsilon && rawY <= 1 + epsilon
+/** Pre-computed threshold offset: (APCA_SMOOTH_THRESHOLD + APCA_OFFSET) / APCA_SCALE */
+const APCA_SMOOTH_THRESHOLD_OFFSET = (APCA_SMOOTH_THRESHOLD + APCA_OFFSET) / APCA_SCALE
 
-	return { targetY, inGamut }
-}
+/** Power for sine-based smoothing below threshold. */
+const APCA_SMOOTH_POWER = 2.46
 
 /**
- * Solve for reverse polarity (lighter contrast color).
- * Uses the shared expression tree from expressions.ts.
+ * Minimum contrast threshold for inversion consideration.
+ * Below this, we respect the user's polarity preference rather than
+ * trying to maximize contrast.
  */
-function solveApcaReverse(Y: number, x: number): ApcaSolution {
-	const rawY = createReversePolaritySolver().toNumber({ yBg: Y, x })
+const INVERSION_THRESHOLD = 0.08 // ~8 Lc
 
-	const targetY = clamp(0, rawY, 1)
-	const epsilon = 0.0001
-	const inGamut = rawY >= -epsilon && rawY <= 1 + epsilon
-
-	return { targetY, inGamut }
-}
+// =============================================================================
+// Soft Clamp Approximation Constants
+// =============================================================================
 
 /**
- * Solve for target Y given signed contrast value.
- * Positive contrast = lighter text, negative = darker text.
- * The result is clamped to the gamut boundary [0, 1].
+ * Lp-norm approximation of the APCA soft black clamp.
+ * pow(pow(Y, p) + K^p, 1/p) approximates sc(Y) with a single reference to Y.
+ */
+const LP_SOFT_CLAMP_P = 1.75
+const LP_SOFT_CLAMP_KP = 0.005 ** LP_SOFT_CLAMP_P
+const LP_SOFT_CLAMP_INV_P = 1 / LP_SOFT_CLAMP_P
+
+const absContrast = ct.abs('contrast')
+const contrastDelta = ct.divide(ct.add(absContrast, APCA_OFFSET), APCA_SCALE)
+
+const smoothingBlend = ct.pow(
+	ct.sin(ct.multiply(ct.min(ct.divide(absContrast, APCA_SMOOTH_THRESHOLD), 1), Math.PI / 2)),
+	APCA_SMOOTH_POWER,
+)
+
+const aboveSmoothThreshold = ct.max(0, ct.sign(ct.subtract(absContrast, APCA_SMOOTH_THRESHOLD)))
+
+export const normalPolarity: ct.NumberExpression<'yBg' | 'contrast'> = ct.lerp(
+	ct.lerp(
+		'yBg',
+		ct.signedPow(
+			ct.subtract(ct.pow('yBg', APCA_BG_EXP_NORMAL), APCA_SMOOTH_THRESHOLD_OFFSET),
+			APCA_NORMAL_INV_EXP,
+		),
+		smoothingBlend,
+	),
+	ct.signedPow(ct.subtract(ct.pow('yBg', APCA_BG_EXP_NORMAL), contrastDelta), APCA_NORMAL_INV_EXP),
+	aboveSmoothThreshold,
+)
+
+export const reversePolarity: ct.NumberExpression<'yBg' | 'contrast'> = ct.lerp(
+	ct.lerp(
+		'yBg',
+		ct.pow(
+			ct.add(ct.pow('yBg', APCA_BG_EXP_REVERSE), APCA_SMOOTH_THRESHOLD_OFFSET),
+			APCA_REVERSE_INV_EXP,
+		),
+		smoothingBlend,
+	),
+	ct.pow(ct.add(ct.pow('yBg', APCA_BG_EXP_REVERSE), contrastDelta), APCA_REVERSE_INV_EXP),
+	aboveSmoothThreshold,
+)
+
+const contrastSign = ct.sign('contrast')
+const contrastPreferLight = ct.max(0, contrastSign)
+const contrastPreferDark = ct.max(0, ct.multiply(-1, contrastSign))
+const contrastIsZero = ct.subtract(1, ct.max(contrastPreferLight, contrastPreferDark))
+
+export const contrastSolver: ct.NumberExpression<'yBg' | 'contrast'> = ct.clamp(
+	0,
+	ct.add(
+		ct.multiply(contrastPreferLight, reversePolarity),
+		ct.multiply(contrastPreferDark, normalPolarity),
+		ct.multiply(contrastIsZero, 'yBg'),
+	),
+	1,
+)
+
+/**
+ * True APCA soft black clamp: Y + max(0, threshold - Y)^1.414.
+ * Used for accurate reference values in the TypeScript runtime.
+ */
+export const trueSoftClamp: ct.NumberExpression<'y'> = ct.add(
+	'y',
+	ct.pow(ct.max(0, ct.subtract(APCA_SMOOTH_THRESHOLD, 'y')), APCA_BLACK_CLAMP),
+)
+
+/**
+ * Lp-norm approximation of the APCA soft black clamp.
  *
- * Uses the shared expression tree from expressions.ts to ensure parity
- * with CSS generation.
+ * Formula: pow(pow(Y, p) + K^p, 1/p)
+ * References Y exactly once, avoiding DevTools expression expansion.
  */
-export function solveTargetY(Y: number, signedContrast: number): number {
-	return createContrastSolver().toNumber({
-		yBg: Y,
-		signedContrast,
-		contrastScale: 100,
-	})
-}
+export const softClampApprox: ct.NumberExpression<'y'> = ct.pow(
+	ct.add(ct.pow('y', LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP),
+	LP_SOFT_CLAMP_INV_P,
+)
 
-// Keep individual solvers available for testing/debugging
-export { solveApcaNormal, solveApcaReverse }
+/**
+ * Lp-norm inverse: approximate inverse of the soft black clamp.
+ * Applied to the solver output to recover the actual Y_fg.
+ *
+ * Formula: pow(max(0, pow(Y, p) - K^p), 1/p)
+ * References Y exactly once. Naturally approaches identity for Y >> K
+ * without needing a conditional branch, avoiding expression expansion.
+ */
+export const softUnclamp: ct.NumberExpression<'y'> = ct.pow(
+	ct.max(0, ct.subtract(ct.pow('y', LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP)),
+	LP_SOFT_CLAMP_INV_P,
+)
+
+// --- Contrast measurement ---
+
+// Lp-norm soft clamp for measurement inputs. Uses the same approximation as the
+// solver so each Y input is referenced once instead of twice. Measurements are
+// only used for comparison (which direction achieved higher contrast), so the
+// monotonic Lp-norm preserves ranking while halving expansion.
+const yBgClamped = softClampApprox.bind({ y: 'yBg' })
+const yFgClamped = softClampApprox.bind({ y: 'yFg' })
+
+/**
+ * Measure achieved contrast for reverse polarity (light text on dark background).
+ *
+ * Formula: max(0, 1.14 * (clamp(Y_fg)^0.62 - clamp(Y_bg)^0.65) - 0.027)
+ */
+export const contrastMeasurementReverse: ct.NumberExpression<'yBg' | 'yFg'> = ct.max(
+	0,
+	ct.subtract(
+		ct.multiply(
+			APCA_SCALE,
+			ct.subtract(ct.pow(yFgClamped, APCA_FG_EXP_REVERSE), ct.pow(yBgClamped, APCA_BG_EXP_REVERSE)),
+		),
+		APCA_OFFSET,
+	),
+)
+
+/**
+ * Measure achieved contrast for normal polarity (dark text on light background).
+ *
+ * Formula: max(0, 1.14 * (clamp(Y_bg)^0.56 - clamp(Y_fg)^0.57) - 0.027)
+ */
+export const contrastMeasurementNormal: ct.NumberExpression<'yBg' | 'yFg'> = ct.max(
+	0,
+	ct.subtract(
+		ct.multiply(
+			APCA_SCALE,
+			ct.subtract(ct.pow(yBgClamped, APCA_BG_EXP_NORMAL), ct.pow(yFgClamped, APCA_FG_EXP_NORMAL)),
+		),
+		APCA_OFFSET,
+	),
+)
+
+// Use preference when the preferred direction still has headroom,
+// or when both contrasts are below the inversion threshold
+const usePreference = ct.max(
+	ct.multiply(
+		ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, 'lcLight'))),
+		ct.max(0, ct.sign(ct.subtract(INVERSION_THRESHOLD, 'lcDark'))),
+	),
+	ct.add(
+		ct.multiply(contrastPreferDark, ct.max(0, ct.sign('yDarkRaw'))),
+		ct.multiply(contrastPreferLight, ct.max(0, ct.sign(ct.subtract(1, 'yLightRaw')))),
+	),
+)
+
+// Comparison with preference bias: when contrast difference is smaller than the
+// bias (~0.1 Lc), the preferred direction wins. This replaces epsilon-based
+// tie-breaking with fewer lcLight/lcDark references (2 each instead of 6).
+const compDiff = ct.add(
+	ct.subtract('lcLight', 'lcDark'),
+	ct.subtract(ct.multiply(contrastPreferLight, 0.001), ct.multiply(contrastPreferDark, 0.001)),
+)
+
+/**
+ * Contrast solver with automatic polarity inversion.
+ *
+ * Uses the preferred polarity direction as long as it has headroom (hasn't
+ * been clamped to the Y boundary). Only when the preferred direction is
+ * exhausted does it compare achieved contrasts to pick the better one.
+ *
+ * At low contrast values (both < INVERSION_THRESHOLD), preference is used
+ * directly because APCA formula asymmetry makes comparisons unreliable.
+ *
+ * Property chain:
+ * - Y_light: clamped reverse polarity result (lighter)
+ * - Y_dark: clamped normal polarity result (darker)
+ * - Lc_light: achieved contrast for light solution
+ * - Lc_dark: achieved contrast for dark solution
+ * - Selection: preference when not exhausted, comparison when exhausted
+ */
+export const contrastSolverWithInversion: ct.NumberExpression<
+	'yBg' | 'contrast' | 'yLight' | 'yDark' | 'yLightRaw' | 'yDarkRaw' | 'lcLight' | 'lcDark'
+> = ct.add(
+	ct.multiply(ct.lerp(ct.max(0, ct.sign(compDiff)), contrastPreferLight, usePreference), 'yLight'),
+	ct.multiply(
+		ct.lerp(ct.max(0, ct.sign(ct.multiply(-1, compDiff))), contrastPreferDark, usePreference),
+		'yDark',
+	),
+	ct.multiply(contrastIsZero, 'yBg'),
+)

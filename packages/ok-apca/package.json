@@ -7,8 +7,6 @@
 		"url": "https://tkofh.dev"
 	},
 	"type": "module",
-	"main": "./dist/index.js",
-	"module": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"exports": {
 		".": "./dist/index.js",
@@ -32,7 +30,7 @@
 	"devDependencies": {
 		"@vitest/browser-playwright": "^4.0.18",
 		"fast-check": "^4.5.3",
-		"tsdown": "0.20.1",
+		"tsdown": "0.21.0",
 		"vitest": "^4.0.18"
 	},
 	"publishConfig": {

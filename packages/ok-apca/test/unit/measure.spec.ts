@@ -1,6 +1,6 @@
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { measureContrast } from '../../src/measure.ts'
+import { measureContrast } from '../../src/contrast.ts'
 
 // Arbitraries for OKLCH color components
 const hueArb = fc.double({ min: 0, max: 360, noNaN: true })
@@ -17,9 +17,9 @@ describe('measureContrast', () => {
 	it('produces documented APCA values for black/white', () => {
 		const white = { hue: 0, chroma: 0, lightness: 1 }
 		const black = { hue: 0, chroma: 0, lightness: 0 }
-		// APCA reference values: black on white = 106.04, white on black = -107.88
-		expect(measureContrast(white, black)).toBeCloseTo(106.04, 1)
-		expect(measureContrast(black, white)).toBeCloseTo(-107.88, 1)
+		// APCA reference values: black on white = 1.0604, white on black = -1.0788
+		expect(measureContrast(white, black)).toBeCloseTo(1.0604, 3)
+		expect(measureContrast(black, white)).toBeCloseTo(-1.0788, 3)
 	})
 
 	it('identical colors produce zero contrast', () => {
@@ -44,12 +44,12 @@ describe('measureContrast', () => {
 		)
 	})
 
-	it('contrast is bounded to -108..106', () => {
+	it('contrast is bounded to -1.08..1.061', () => {
 		fc.assert(
 			fc.property(oklchColorArb, oklchColorArb, (color1, color2) => {
 				const LC = measureContrast(color1, color2)
-				expect(LC).toBeGreaterThanOrEqual(-108)
-				expect(LC).toBeLessThanOrEqual(106.1)
+				expect(LC).toBeGreaterThanOrEqual(-1.08)
+				expect(LC).toBeLessThanOrEqual(1.061)
 			}),
 			{ numRuns },
 		)

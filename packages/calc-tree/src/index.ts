@@ -1,20 +1,21 @@
-export type { ExpressionInput } from './constructors.ts'
+export type { ExpressionInput, InferRefs } from './constructors.ts'
 export {
 	abs,
 	add,
 	clamp,
 	divide,
+	lerp,
 	max,
 	min,
 	multiply,
 	oklch,
-	power,
-	reference,
+	pow,
+	property,
 	sign,
+	signedPow,
 	sin,
 	subtract,
-	toExpression,
 } from './constructors.ts'
 
-export type { CalcExpression, ColorExpression } from './expression.ts'
-export type { CSSResult } from './types.ts'
+export type { ColorExpression, NumberExpression } from './expression.ts'
+export type { CSSResult, PropertyRule } from './types.ts'

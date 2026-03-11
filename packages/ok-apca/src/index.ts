@@ -2,12 +2,39 @@
  * ok-apca - OKLCH color utilities with APCA-based contrast
  */
 
-import { generateHueCss } from './generator.ts'
-import type { ContrastColor, Hue, HueOptions, InputMode } from './types.ts'
+import { type ContrastColor, generateHueCss } from './generator.ts'
 
-export { createColor, gamutMap, getMaxChroma } from './color.ts'
-export { applyContrast } from './contrast.ts'
-export type { Color, ContrastColor, Hue, HueOptions, InputMode } from './types.ts'
+export type { Color } from './color.ts'
+export { computeContrastColor, measureContrast } from './contrast.ts'
+export type { ContrastColor, HueDefinition } from './generator.ts'
+
+export interface HueOptions {
+	readonly hue: number
+	readonly selector: string
+	readonly contrastColors?: readonly ContrastColor[]
+	/**
+	 * Base name for the output CSS custom properties.
+	 * @default 'color'
+	 */
+	readonly output?: string
+	/**
+	 * Disables automatic contrast polarity inversion.
+	 *
+	 * By default, when the preferred polarity direction cannot achieve as much
+	 * contrast as the opposite direction, the system automatically inverts to
+	 * maximize contrast. Set this to `true` to always use the preferred polarity
+	 * direction, clamping to black/white if necessary.
+	 *
+	 * @default false
+	 */
+	readonly noContrastInversion?: boolean
+}
+
+export interface Hue {
+	readonly hue: number
+	readonly selector: string
+	readonly css: string
+}
 
 const LABEL_REGEX = /^[a-z][a-z0-9_-]*$/i
 
@@ -49,7 +76,7 @@ export function defineHue(options: HueOptions): Hue {
 	const hue = ((options.hue % 360) + 360) % 360
 	const contrastColors: readonly ContrastColor[] = options.contrastColors ?? []
 	const output = options.output ?? 'color'
-	const inputMode: InputMode = options.inputMode ?? 'percentage'
+	const noContrastInversion = options.noContrastInversion ?? false
 	const selector = options.selector
 
 	const labels = contrastColors.map((c) => c.label)
@@ -58,7 +85,13 @@ export function defineHue(options: HueOptions): Hue {
 	}
 	validateUniqueLabels(labels)
 
-	const css = generateHueCss({ hue, selector, output, contrastColors, inputMode })
+	const css = generateHueCss({
+		hue,
+		selector,
+		output,
+		contrastColors,
+		noContrastInversion,
+	})
 
 	return {
 		hue,

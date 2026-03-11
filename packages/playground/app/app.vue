@@ -9,6 +9,7 @@ const state = reactive({
 	chroma: 50,
 	lightness: 50,
 	contrast: 60,
+	noContrastInversion: false,
 })
 
 // Apply query string values
@@ -31,7 +32,7 @@ const generatedCss = computed(() => defineHue({
 		hue: state.hue,
 		selector: '.preview',
 		contrastColors: [{ label: 'text' }],
-		inputMode: 'normalized',
+		noContrastInversion: state.noContrastInversion,
 	}).css)
 
 useHead({
@@ -48,6 +49,15 @@ const previewStyle = computed(() => ({
 	'--chroma': Math.max(0, Math.min(state.chroma, 100)) / 100,
 	'--contrast-text': Math.max(-108, Math.min(state.contrast, 108)) / 100,
 }))
+
+const copied = ref(false)
+async function copyCss() {
+	await navigator.clipboard.writeText(generatedCss.value)
+	copied.value = true
+	setTimeout(() => {
+		copied.value = false
+	}, 2000)
+}
 </script>
 
 <template>
@@ -56,29 +66,39 @@ const previewStyle = computed(() => ({
 			<div class="controls">
 				<label>
 					Hue
-					<input v-model.number="state.hue" type="number" min="0" max="360" step="0.1" />
-					<input v-model.number="state.hue" type="range" min="0" max="360" step="0.1" />
+					<input v-model.number="state.hue" type="number" min="0" max="360" step="1" />
+					<input v-model.number="state.hue" type="range" min="0" max="360" step="1" />
 				</label>
 
 				<label>
 					Chroma (% of max)
-					<input v-model.number="state.chroma" type="number" min="0" max="100" step="0.1" />
-					<input v-model.number="state.chroma" type="range" min="0" max="100" step="0.1" />
+					<input v-model.number="state.chroma" type="number" min="0" max="100" step="1" />
+					<input v-model.number="state.chroma" type="range" min="0" max="100" step="1" />
 					<span class="hint">Percentage of maximum chroma available at current lightness</span>
 				</label>
 
 				<label>
 					Lightness
-					<input v-model.number="state.lightness" type="number" min="0" max="100" step="0.1" />
-					<input v-model.number="state.lightness" type="range" min="0" max="100" step="0.1" />
+					<input v-model.number="state.lightness" type="number" min="0" max="100" step="1" />
+					<input v-model.number="state.lightness" type="range" min="0" max="100" step="1" />
 				</label>
 
 				<label>
 					Contrast (signed)
-					<input v-model.number="state.contrast" type="number" min="-108" max="108" step="0.1" />
-					<input v-model.number="state.contrast" type="range" min="-108" max="108" step="0.1" />
+					<input v-model.number="state.contrast" type="number" min="-108" max="108" step="1" />
+					<input v-model.number="state.contrast" type="range" min="-108" max="108" step="1" />
 					<span class="hint">Positive = light text, Negative = dark text</span>
 				</label>
+
+				<label>
+					<input v-model="state.noContrastInversion" type="checkbox" />
+					Disable contrast inversion
+					<span class="hint">When checked, always follow requested polarity (may result in lower contrast)</span>
+				</label>
+
+				<button class="copy-button" @click="copyCss" type="button">
+					{{ copied ? 'Copied!' : 'Copy CSS' }}
+				</button>
 			</div>
 		</div>
 
@@ -184,6 +204,28 @@ body {
 	color: #707070;
 	font-weight: 400;
 	margin-top: 0.125rem;
+}
+
+.copy-button {
+	padding: 0.75rem 1rem;
+	font-size: 0.875rem;
+	font-weight: 500;
+	background: #3a3a3a;
+	border: 1px solid #4a4a4a;
+	border-radius: 4px;
+	color: #f0f0f0;
+	cursor: pointer;
+	transition: background 0.15s, border-color 0.15s;
+	margin-top: 0.5rem;
+}
+
+.copy-button:hover {
+	background: #4a4a4a;
+	border-color: #5a5a5a;
+}
+
+.copy-button:active {
+	background: #5a5a5a;
 }
 
 .preview {

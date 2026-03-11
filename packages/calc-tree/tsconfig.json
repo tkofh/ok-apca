@@ -23,6 +23,6 @@
 		"noImplicitOverride": true,
 		"forceConsistentCasingInFileNames": true
 	},
-	"include": ["src/**/*"],
+	"include": ["src", "test"],
 	"exclude": ["node_modules", "dist"]
 }
