@@ -20,13 +20,14 @@ import {
 
 export type ExpressionInput<Refs extends string = never> = NumberExpression<Refs> | number | string
 
-export type InferRefs<T> = T extends NumberExpression<infer R>
-	? R
-	: T extends string
-		? string extends T
-			? never
-			: T
-		: never
+export type InferRefs<T> =
+	T extends NumberExpression<infer R>
+		? R
+		: T extends string
+			? string extends T
+				? never
+				: T
+			: never
 
 class ConstantValueTypeError extends TypeError {
 	readonly value: unknown

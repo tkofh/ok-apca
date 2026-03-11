@@ -44,17 +44,20 @@ function applyBindings(
 }
 
 // Extract the union of all refs from values in a binding record
-type ValueRefs<V> = V extends NumberExpression<infer R>
-	? R
-	: V extends string
-		? string extends V
-			? never // exclude bare 'string' type — only track literal refs
-			: V
-		: never
+type ValueRefs<V> =
+	V extends NumberExpression<infer R>
+		? R
+		: V extends string
+			? string extends V
+				? never // exclude bare 'string' type — only track literal refs
+				: V
+			: never
 type BindingRefs<T> = T extends Record<string, infer V> ? ValueRefs<V> : never
 
 // Pick only the binding entries that match actual expression refs
-type RelevantBindingRefs<B, Refs extends string> = BindingRefs<Pick<B, Extract<keyof B & string, Refs>>>
+type RelevantBindingRefs<B, Refs extends string> = BindingRefs<
+	Pick<B, Extract<keyof B & string, Refs>>
+>
 
 /**
  * Abstract base class for expression trees.
