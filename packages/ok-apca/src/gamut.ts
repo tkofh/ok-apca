@@ -16,9 +16,11 @@ const GAMUT_SINE_CURVATURE_EXPONENT = 0.95
 
 /**
  * All hue-dependent data: gamut boundary geometry and Y correction coefficients.
- * Computed once per hue and cached.
+ * Computed once per hue and cached. Use {@link computeGamutSlice} to create.
  */
-export interface HueData {
+export interface GamutSlice {
+	/** The hue angle (0–360). */
+	readonly hue: number
 	/** Lightness at the gamut boundary apex (maximum chroma point). */
 	readonly apexL: number
 	/** Maximum chroma at the apex lightness. */
@@ -44,16 +46,18 @@ export interface HueData {
 	readonly fA: number
 	readonly fB: number
 	readonly fD: number
+	/** Max chroma expression tree pre-bound to this slice's geometry. */
+	readonly maxChroma: ct.NumberExpression<'lightness'>
 }
 
-const hueDataCache = new Map<number, HueData>()
+const gamutSliceCache = new Map<number, GamutSlice>()
 
 /**
  * Compute all hue-dependent data: gamut boundary and Y correction coefficients.
  * Results are cached by hue.
  */
-export function computeHueData(hue: number): HueData {
-	const cached = hueDataCache.get(hue)
+export function computeGamutSlice(hue: number): GamutSlice {
+	const cached = gamutSliceCache.get(hue)
 	if (cached !== undefined) {
 		return cached
 	}
@@ -90,7 +94,8 @@ export function computeHueData(hue: number): HueData {
 
 	const kScale = maxC / lightnessAtMaxChroma
 
-	const hueData: HueData = {
+	const slice: GamutSlice = {
+		hue,
 		apexL: lightnessAtMaxChroma,
 		apexC: maxC,
 		curvature,
@@ -100,10 +105,15 @@ export function computeHueData(hue: number): HueData {
 		fA: yCoeffA * kScale,
 		fB: yCoeffB * kScale ** 2,
 		fD: yCoeffD * kScale ** 3,
+		maxChroma: maxChromaExpr.bind({
+			apexL: lightnessAtMaxChroma,
+			apexC: maxC,
+			curvature,
+		}),
 	}
 
-	hueDataCache.set(hue, hueData)
-	return hueData
+	gamutSliceCache.set(hue, slice)
+	return slice
 }
 
 // =============================================================================
@@ -162,56 +172,30 @@ function fitCurvature(hue: number, apexL: number, apexC: number): number {
 // =============================================================================
 
 const oneMinusApexL = ct.subtract(1, 'apexL')
-const gamutLeftHalf = ct.divide(ct.multiply('apexC', 'lightness'), 'apexL')
-const gamutT = ct.max(0, ct.divide(ct.subtract('lightness', 'apexL'), oneMinusApexL))
-const linearChroma = ct.divide(ct.multiply('apexC', ct.subtract(1, 'lightness')), oneMinusApexL)
-const curvatureCorrection = ct.multiply(
-	ct.multiply(
-		'curvature',
-		ct.pow(ct.sin(ct.multiply(gamutT, Math.PI)), GAMUT_SINE_CURVATURE_EXPONENT),
-	),
-	'apexC',
-)
-const gamutRightHalf = ct.add(linearChroma, curvatureCorrection)
-const isRightOfApex = ct.max(0, ct.sign(ct.subtract('lightness', 'apexL')))
 
 export const maxChromaExpr: ct.NumberExpression<'lightness' | 'apexL' | 'apexC' | 'curvature'> =
-	ct.lerp(gamutLeftHalf, gamutRightHalf, isRightOfApex)
-
-// =============================================================================
-// Max Chroma Runtime
-// =============================================================================
-
-/**
- * Compute the maximum chroma at a given lightness using the tent function
- * with sine-based curvature correction on the right half.
- *
- * Uses the shared expression tree to ensure parity with CSS generation.
- */
-export function computeMaxChroma(lightness: number, hueData: HueData): number {
-	// Edge cases not handled by the expression (division by zero)
-	if (lightness <= 0 || lightness >= 1) {
-		return 0
-	}
-	if (hueData.apexL <= 0 || hueData.apexL >= 1) {
-		return 0
-	}
-
-	return maxChromaExpr.solve({
-		lightness,
-		apexL: hueData.apexL,
-		apexC: hueData.apexC,
-		curvature: hueData.curvature,
-	})
-}
-
-/**
- * Compute the maximum in-gamut chroma at a given lightness for a hue.
- * Uses the tent function with sine-based curvature correction.
- */
-export function getMaxChroma(lightness: number, hue: number): number {
-	return computeMaxChroma(lightness, computeHueData(hue))
-}
+	ct.lerp(
+		ct.divide(ct.multiply('apexC', 'lightness'), 'apexL'),
+		ct.add(
+			ct.divide(ct.multiply('apexC', ct.subtract(1, 'lightness')), oneMinusApexL),
+			ct.multiply(
+				ct.multiply(
+					'curvature',
+					ct.pow(
+						ct.sin(
+							ct.multiply(
+								ct.max(0, ct.divide(ct.subtract('lightness', 'apexL'), oneMinusApexL)),
+								Math.PI,
+							),
+						),
+						GAMUT_SINE_CURVATURE_EXPONENT,
+					),
+				),
+				'apexC',
+			),
+		),
+		ct.max(0, ct.sign(ct.subtract('lightness', 'apexL'))),
+	)
 
 /**
  * Clamp chroma to Display P3 gamut boundary using tent function
@@ -219,11 +203,11 @@ export function getMaxChroma(lightness: number, hue: number): number {
  */
 export function gamutMap(color: Color): Color {
 	const { hue, chroma, lightness } = createColor(color)
-	const hueData = computeHueData(hue)
+	const slice = computeGamutSlice(hue)
 
 	return createColor({
 		hue,
-		chroma: clampNumber(0, chroma, computeMaxChroma(lightness, hueData)),
+		chroma: clampNumber(0, chroma, slice.maxChroma.solve({ lightness })),
 		lightness,
 	})
 }

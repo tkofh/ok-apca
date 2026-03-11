@@ -5,7 +5,7 @@ import {
 	contrastTargetLightnessWithInversion,
 	yBackground,
 } from './contrast.ts'
-import { computeHueData, maxChromaExpr as maxChroma } from './gamut.ts'
+import { computeGamutSlice } from './gamut.ts'
 import { outdent } from './util.ts'
 
 export interface ContrastColor {
@@ -38,7 +38,7 @@ export interface HueDefinition {
  */
 export function generateHueCss(definition: HueDefinition): string {
 	const { hue, selector, output, contrastColors, noContrastInversion } = definition
-	const hueData = computeHueData(hue)
+	const slice = computeGamutSlice(hue)
 
 	// Declare input properties
 	const lightnessInput = ct.property('lightness', 'number', true)
@@ -55,22 +55,19 @@ export function generateHueCss(definition: HueDefinition): string {
 	}
 
 	// Shared max chroma at base lightness (reused by base color and Y_bg)
-	const maxChromaExpr = ct.property(
-		'_mc',
-		maxChroma.bind(hueData).bind({ lightness: lightnessInput }),
-	)
+	const maxChromaExpr = ct.property('_mc', slice.maxChroma.bind({ lightness: lightnessInput }))
 
 	// Build base color expression
 	merge(
-		ct.property(output, ct.oklch('lightness', ct.multiply(maxChromaExpr, 'chroma'), hue), true).toCss(),
+		ct
+			.property(output, ct.oklch('lightness', ct.multiply(maxChromaExpr, 'chroma'), hue), true)
+			.toCss(),
 	)
 
 	// Build contrast colors if any
 	if (contrastColors.length > 0) {
-		const hueDataBindings = { fA: hueData.fA, fB: hueData.fB, fD: hueData.fD }
-
 		// Y_bg with hue-dependent correction bound
-		const yBgExpr = ct.property('_ybg', yBackground.bind(hueDataBindings))
+		const yBgExpr = ct.property('_ybg', yBackground.bind(slice))
 		merge(yBgExpr.toCss())
 
 		// Soft-clamped Y_bg for the contrast solver
@@ -86,7 +83,7 @@ export function generateHueCss(definition: HueDefinition): string {
 				? contrastTargetLightness(label)
 				: contrastTargetLightnessWithInversion(label)
 			const boundConL = conLExpr.bind({
-				...hueDataBindings,
+				...slice,
 				yBg: yBgExpr,
 				scYBg: scYBgExpr,
 			})
@@ -94,7 +91,7 @@ export function generateHueCss(definition: HueDefinition): string {
 			// Max chroma at contrast color's lightness
 			const conMaxChroma = ct.property(
 				`_mc-${label}`,
-				maxChroma.bind(hueData).bind({ lightness: boundConL }),
+				slice.maxChroma.bind({ lightness: boundConL }),
 			)
 
 			// Build the contrast color

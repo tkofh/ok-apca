@@ -1,7 +1,7 @@
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { computeContrastColor, measureContrast } from '../../src/contrast.ts'
-import { gamutMap, getMaxChroma } from '../../src/gamut.ts'
+import { computeGamutSlice, gamutMap } from '../../src/gamut.ts'
 
 // Arbitraries for OKLCH color components
 const hueArb = fc.double({ min: 0, max: 360, noNaN: true })
@@ -353,8 +353,8 @@ describe('computeContrastColor', () => {
 					contrastArb,
 					(input, contrast) => {
 						const result = computeContrastColor(input, contrast)
-						const maxAtInput = getMaxChroma(input.lightness, input.hue)
-						const maxAtResult = getMaxChroma(result.lightness, result.hue)
+						const maxAtInput = computeGamutSlice(input.hue).maxChroma.solve({ lightness: input.lightness })
+						const maxAtResult = computeGamutSlice(result.hue).maxChroma.solve({ lightness: result.lightness })
 						if (maxAtInput <= 0 || maxAtResult <= 0) {
 							return
 						}

@@ -17,7 +17,7 @@ import {
 	trueSoftClamp,
 } from './apca.ts'
 import { type Color, createColor, getLuminance } from './color.ts'
-import { computeHueData, computeMaxChroma, gamutMap } from './gamut.ts'
+import { computeGamutSlice, gamutMap } from './gamut.ts'
 import { clampNumber } from './util.ts'
 
 // =============================================================================
@@ -205,8 +205,8 @@ export function measureContrast(
  */
 export function computeContrastColor(color: Color, contrast: number, invert = true): Color {
 	const { hue, lightness, chroma } = gamutMap(color)
-	const hueData = computeHueData(hue)
-	const maxChromaAtBase = computeMaxChroma(lightness, hueData)
+	const slice = computeGamutSlice(hue)
+	const maxChromaAtBase = slice.maxChroma.solve({ lightness })
 	const chromaRatio = maxChromaAtBase > 0 ? clampNumber(0, chroma / maxChromaAtBase, 1) : 0
 
 	const targetLExpr = invert
@@ -221,10 +221,10 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 				yBg: yBackground,
 				scYBg: softClampApprox.bind({ y: yBackground }),
 			})
+			.bind(slice)
 			.solve({
 				lightness,
 				chroma: chromaRatio,
-				...hueData,
 				'contrast-_': clampedContrast,
 			}),
 		1,
@@ -232,7 +232,7 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 
 	return createColor({
 		lightness: targetLightness,
-		chroma: computeMaxChroma(targetLightness, hueData) * chromaRatio,
+		chroma: slice.maxChroma.solve({ lightness: targetLightness }) * chromaRatio,
 		hue,
 	})
 }

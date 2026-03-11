@@ -1,7 +1,7 @@
 import Color from 'colorjs.io'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { computeHueData, gamutMap } from '../../src/gamut.ts'
+import { computeGamutSlice, gamutMap } from '../../src/gamut.ts'
 
 // Arbitraries for OKLCH color components
 const hueArb = fc.double({ min: -720, max: 720, noNaN: true })
@@ -100,7 +100,7 @@ describe('gamutMap', () => {
 		it('allows higher chroma at apex than at extremes', () => {
 			fc.assert(
 				fc.property(fc.integer({ min: 0, max: 359 }), (hue) => {
-					const hueData = computeHueData(hue)
+					const hueData = computeGamutSlice(hue)
 
 					// At apex lightness, chroma should be preserved (or clamped to max)
 					const atApex = gamutMap({ hue, chroma: 0.4, lightness: hueData.apexL })
@@ -119,7 +119,7 @@ describe('gamutMap', () => {
 		it('left half is linear, right half has curvature correction', () => {
 			fc.assert(
 				fc.property(fc.integer({ min: 0, max: 359 }), (hue) => {
-					const hueData = computeHueData(hue)
+					const hueData = computeGamutSlice(hue)
 
 					// Curvature can be positive (gamut bulges out) or negative (curves in)
 					// depending on the hue - this models the real P3 gamut shape
