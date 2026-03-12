@@ -79,9 +79,9 @@ describe('binding', () => {
 			const expr = add('x', multiply(2, 3))
 
 			// The 2*3 should already be folded to 6
-			const css = expr.toCss({ x: 'runtime' })
-			expect(css.expression).toContain('6')
-			expect(css.expression).not.toContain('2 *')
+			const css = expr.bind({ x: 'runtime' }).serialize()
+			expect(css).toContain('6')
+			expect(css).not.toContain('2 *')
 		})
 	})
 
@@ -109,8 +109,8 @@ describe('binding', () => {
 		it('produces correct CSS after binding variadic add', () => {
 			const expr = add('x', 'y', 'z')
 			const bound = expr.bind({ x: 10 })
-			const css = bound.toCss({ y: 'y', z: 'z' })
-			expect(css.expression).toBe('calc(10 + var(--y) + var(--z))')
+			const css = bound.bind({ y: 'y', z: 'z' }).serialize()
+			expect(css).toBe('calc(10 + var(--y) + var(--z))')
 		})
 	})
 
@@ -119,16 +119,16 @@ describe('binding', () => {
 			const expr = add('x', 'y')
 			const bound = expr.bind({ x: 10 })
 
-			const css = bound.toCss({ y: 'runtime' })
-			expect(css.expression).toBe('calc(10 + var(--runtime))')
+			const css = bound.bind({ y: 'runtime' }).serialize()
+			expect(css).toBe('calc(10 + var(--runtime))')
 		})
 
 		it('produces correct CSS when binding to expression', () => {
 			const expr = add('x', 5)
 			const bound = expr.bind({ x: multiply('y', 2) })
 
-			const css = bound.toCss({ y: 'runtime' })
-			expect(css.expression).toBe('calc(var(--runtime) * 2 + 5)')
+			const css = bound.bind({ y: 'runtime' }).serialize()
+			expect(css).toBe('calc(var(--runtime) * 2 + 5)')
 		})
 	})
 
@@ -166,8 +166,8 @@ describe('binding', () => {
 			const expr = add(multiply('x', 'y'), 'z')
 			const bound = expr.bind({ x: 2, y: 3 })
 
-			const css = bound.toCss({ z: 'runtime' })
-			expect(css.expression).toBe('calc(6 + var(--runtime))')
+			const css = bound.bind({ z: 'runtime' }).serialize()
+			expect(css).toBe('calc(6 + var(--runtime))')
 		})
 	})
 

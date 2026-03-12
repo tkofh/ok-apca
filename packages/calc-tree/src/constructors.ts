@@ -10,7 +10,6 @@ import {
 	MultiplyNode,
 	OklchNode,
 	PowNode,
-	PropertyNode,
 	ReferenceNode,
 	SignedPowNode,
 	SignNode,
@@ -306,49 +305,4 @@ export function oklch<
 	const c = toExpression(chroma)
 	const h = toExpression(hue)
 	return new ColorExpression(new OklchNode(l.node, c.node, h.node), mergeRefs(l, c, h))
-}
-
-/** Declare a numeric input property. */
-export function property<const N extends string>(
-	name: N,
-	type: 'number',
-	inherits?: boolean,
-): NumberExpression<N>
-/** Declare a color input property. */
-export function property<const N extends string>(
-	name: N,
-	type: 'color',
-	inherits?: boolean,
-): ColorExpression<N>
-/** Wrap a numeric expression as a computed property. */
-export function property<const N extends string, Refs extends string>(
-	name: N,
-	value: NumberExpression<Refs> | number,
-	inherits?: boolean,
-): NumberExpression<Refs>
-/** Wrap a color expression as a computed property. */
-export function property<const N extends string, Refs extends string>(
-	name: N,
-	value: ColorExpression<Refs>,
-	inherits?: boolean,
-): ColorExpression<Refs>
-export function property(
-	name: string,
-	typeOrValue: 'number' | 'color' | NumberExpression<string> | ColorExpression<string> | number,
-	inherits = false,
-): NumberExpression<string> | ColorExpression<string> {
-	if (typeOrValue === 'number') {
-		return new NumberExpression(new PropertyNode(name, null, '<number>', inherits), new Set([name]))
-	}
-	if (typeOrValue === 'color') {
-		return new ColorExpression(new PropertyNode(name, null, '<color>', inherits), new Set([name]))
-	}
-	if (typeOrValue instanceof ColorExpression) {
-		return new ColorExpression(
-			new PropertyNode(name, typeOrValue.node, '<color>', inherits),
-			typeOrValue.refs,
-		)
-	}
-	const expr = toExpression(typeOrValue)
-	return new NumberExpression(new PropertyNode(name, expr.node, '<number>', inherits), expr.refs)
 }

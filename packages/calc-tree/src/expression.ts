@@ -1,30 +1,5 @@
 import { type ExpressionInput, toExpression } from './constructors.ts'
-import type { CSSResult, ExpressionNode, PropertyRule } from './types.ts'
-
-function createCSSResult(
-	expression: string,
-	declarations: Record<string, string>,
-	properties: Record<string, PropertyRule>,
-): CSSResult {
-	return {
-		expression,
-		declarations,
-		properties,
-		toDeclarationBlock() {
-			return Object.entries(declarations)
-				.map(([name, value]) => `${name}: ${value};`)
-				.join('\n')
-		},
-		toPropertyRules() {
-			return Object.entries(properties)
-				.map(
-					([name, rule]) =>
-						`@property ${name} {\n\tinherits: ${rule.inherits ? 'true' : 'false'};\n\tinitial-value: ${rule.initialValue};\n\tsyntax: '${rule.syntax}';\n}`,
-				)
-				.join('\n')
-		},
-	}
-}
+import type { ExpressionNode } from './nodes.ts'
 
 function applyBindings(
 	node: ExpressionNode,
@@ -106,20 +81,18 @@ export abstract class BaseExpression<Refs extends string = never> {
 	}
 
 	/**
-	 * Generate CSS from the expression.
+	 * Serialize the expression to a CSS string.
 	 * Optionally accepts bindings to substitute before serialization.
 	 */
-	toCss(bindings?: Partial<Record<Refs, ExpressionInput<never>>>): CSSResult {
+	serialize(bindings?: Partial<Record<Refs, ExpressionInput<never>>>): string {
 		const substituted = applyBindings(
 			this.node,
 			bindings as Record<string, ExpressionInput<never>>,
 			this.refs,
 		)
 		const declarations: Record<string, string> = {}
-		const properties: Record<string, PropertyRule> = {}
-		const rawExpression = substituted.serialize(declarations, properties)
-		const expression = substituted.needsCalcWrap() ? `calc(${rawExpression})` : rawExpression
-		return createCSSResult(expression, declarations, properties)
+		const raw = substituted.serialize(declarations)
+		return substituted.needsCalcWrap() ? `calc(${raw})` : raw
 	}
 }
 

@@ -83,28 +83,24 @@ describe('evaluation', () => {
 	})
 
 	describe('css output', () => {
-		it('toCss returns expression and declarations', () => {
+		it('serialize returns expression string', () => {
 			const expr = add('x', 5)
-			const css = expr.toCss({ x: 10 })
+			const css = expr.bind({ x: 10 }).serialize()
 
-			expect(css).toHaveProperty('expression')
-			expect(css).toHaveProperty('declarations')
+			expect(typeof css).toBe('string')
 		})
 
-		it('toCss with non-constant bindings produces css', () => {
+		it('serialize with non-constant bindings produces css', () => {
 			const expr = add('x', 5)
-			const css = expr.toCss({ x: 'runtime' })
+			const css = expr.bind({ x: 'runtime' }).serialize()
 
-			expect(css).toHaveProperty('expression')
-			expect(css).toHaveProperty('declarations')
+			expect(typeof css).toBe('string')
 		})
 
-		it('constant expression css contains the value', () => {
+		it('constant expression serializes to the value', () => {
 			const expr = constant(42)
-			const css = expr.toCss()
 
-			expect(css.expression).toBe('42')
-			expect(css.declarations).toEqual({})
+			expect(expr.serialize()).toBe('42')
 		})
 	})
 
@@ -133,11 +129,11 @@ describe('evaluation', () => {
 		it('produces simplified CSS output', () => {
 			// 2*3 should fold to 6
 			const expr = add(multiply(2, 3), 'x')
-			const css = expr.toCss({ x: 'x' })
+			const css = expr.bind({ x: 'x' }).serialize()
 
 			// Should have simplified 2*3 to 6
-			expect(css.expression).toContain('6')
-			expect(css.expression).not.toContain('2 *')
+			expect(css).toContain('6')
+			expect(css).not.toContain('2 *')
 		})
 	})
 })

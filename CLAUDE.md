@@ -22,7 +22,16 @@ A standalone expression tree library for building CSS `calc()` expressions. It p
   - `ColorExpression<Refs>` - color expressions that can only be serialized to CSS (prevents misuse in arithmetic)
 - **Binding API**: `.bind({ key1: value1, key2: value2 })` substitutes references
 - **CSS output**: `.toCss()` returns `{ expression, declarations, toDeclarationBlock() }`
-- **Property wrapping**: `.asProperty('name')` wraps expression as a CSS custom property
+- **Property wrapping**: `property('name', expr)` wraps expression as a CSS custom property. The `_` prefix convention determines `inherits`: names starting with `_` get `inherits: false`, others get `inherits: true`
+- **Property sets**: `Properties` namespace for collecting CSS `@property` rules and declarations:
+  - `Properties.make(parent?)` — create a property set, optionally linked to a parent for shared `@property` rules
+  - `Properties.number(set, name)` — declare numeric input property (returns expression)
+  - `Properties.number(set, name, expr)` — declare computed numeric property (registers rule + declaration)
+  - `Properties.color(set, name, expr)` — declare computed color property
+  - `Properties.numbers(set, values)` — batch-define numeric properties from a record
+  - `Properties.merge(...sets)` — combine multiple property sets
+  - `Properties.toAtRules(set)` — render `@property` rules as CSS
+  - `Properties.toRuleset(set, selector)` — render declarations as CSS selector block
 
 ### `ok-apca`
 
@@ -38,8 +47,8 @@ The main library that uses `@ok-apca/calc-tree` to generate CSS for OKLCH colors
   - `normalPolarity`, `reversePolarity` - polarity direction solvers
   - `softClampApprox`, `softUnclamp` - Lp-norm approximation of APCA soft black clamp
 
-- **`generator.ts`** - Builds complete CSS from hue definitions:
-  - Generates `@property` declarations for type-safe custom properties
+- **`generator.ts`** - Builds complete CSS from hue definitions using `Properties` namespace:
+  - Uses `Properties.make()` to collect `@property` rules and declarations
   - Builds base color expressions with gamut mapping
   - Builds contrast color expressions using APCA polarity selection
 

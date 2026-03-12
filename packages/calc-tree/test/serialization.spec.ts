@@ -17,225 +17,176 @@ import {
 describe('serialization', () => {
 	describe('constants', () => {
 		it('serializes integer constants', () => {
-			const css = constant(42).toCss()
-			expect(css.expression).toBe('42')
-			expect(css.declarations).toEqual({})
+			expect(constant(42).serialize()).toBe('42')
 		})
 
 		it('serializes decimal constants', () => {
-			const css = constant(1.5).toCss()
-			expect(css.expression).toBe('1.5')
+			expect(constant(1.5).serialize()).toBe('1.5')
 		})
 
 		it('serializes pi constant', () => {
-			const css = constant(Math.PI).toCss()
-			expect(css.expression).toBe('pi')
+			expect(constant(Math.PI).serialize()).toBe('pi')
 		})
 
 		it('formats numbers without trailing zeros', () => {
-			const css1 = constant(1.5).toCss()
-			expect(css1.expression).toBe('1.5')
-
-			const css2 = constant(2.0).toCss()
-			expect(css2.expression).toBe('2')
+			expect(constant(1.5).serialize()).toBe('1.5')
+			expect(constant(2.0).serialize()).toBe('2')
 		})
 
 		it('formats negative numbers', () => {
-			const css = constant(-42).toCss()
-			expect(css.expression).toBe('-42')
+			expect(constant(-42).serialize()).toBe('-42')
 		})
 
 		it('formats zero', () => {
-			const css = constant(0).toCss()
-			expect(css.expression).toBe('0')
+			expect(constant(0).serialize()).toBe('0')
 		})
 	})
 
 	describe('references', () => {
 		it('serializes references as var()', () => {
-			const expr = reference('x')
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('var(--x)')
+			expect(reference('x').bind({ x: 'x' }).serialize()).toBe('var(--x)')
 		})
 
 		it('serializes multi-word references', () => {
-			const expr = reference('my-variable')
-			const css = expr.toCss({ 'my-variable': 'my-variable' })
-			expect(css.expression).toBe('var(--my-variable)')
+			expect(
+				reference('my-variable').bind({ 'my-variable': 'my-variable' }).serialize(),
+			).toBe('var(--my-variable)')
 		})
 	})
 
 	describe('binary operations', () => {
 		it('serializes addition', () => {
-			const expr = add('x', 5)
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('calc(var(--x) + 5)')
+			expect(add('x', 5).bind({ x: 'x' }).serialize()).toBe('calc(var(--x) + 5)')
 		})
 
 		it('serializes subtraction', () => {
-			const expr = subtract('x', 5)
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('calc(var(--x) - 5)')
+			expect(subtract('x', 5).bind({ x: 'x' }).serialize()).toBe('calc(var(--x) - 5)')
 		})
 
 		it('serializes multiplication', () => {
-			const expr = multiply('x', 2)
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('calc(var(--x) * 2)')
+			expect(multiply('x', 2).bind({ x: 'x' }).serialize()).toBe('calc(var(--x) * 2)')
 		})
 
 		it('serializes division', () => {
-			const expr = divide('x', 2)
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('calc(var(--x) / 2)')
+			expect(divide('x', 2).bind({ x: 'x' }).serialize()).toBe('calc(var(--x) / 2)')
 		})
 
 		it('serializes power', () => {
-			const expr = pow('x', 2)
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('pow(var(--x), 2)')
+			expect(pow('x', 2).bind({ x: 'x' }).serialize()).toBe('pow(var(--x), 2)')
 		})
 
 		it('serializes max', () => {
-			const expr = max('x', 0)
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('max(var(--x), 0)')
+			expect(max('x', 0).bind({ x: 'x' }).serialize()).toBe('max(var(--x), 0)')
 		})
 
 		it('serializes min', () => {
-			const expr = min('x', 100)
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('min(var(--x), 100)')
+			expect(min('x', 100).bind({ x: 'x' }).serialize()).toBe('min(var(--x), 100)')
 		})
 	})
 
 	describe('variadic operations', () => {
 		it('serializes variadic addition', () => {
-			const expr = add('x', 'y', 5)
-			const css = expr.toCss({ x: 'x', y: 'y' })
-			expect(css.expression).toBe('calc(var(--x) + var(--y) + 5)')
+			expect(add('x', 'y', 5).bind({ x: 'x', y: 'y' }).serialize()).toBe(
+				'calc(var(--x) + var(--y) + 5)',
+			)
 		})
 
 		it('serializes variadic max', () => {
-			const expr = max('x', 0, 'y')
-			const css = expr.toCss({ x: 'x', y: 'y' })
-			expect(css.expression).toBe('max(var(--x), 0, var(--y))')
+			expect(max('x', 0, 'y').bind({ x: 'x', y: 'y' }).serialize()).toBe(
+				'max(var(--x), 0, var(--y))',
+			)
 		})
 
 		it('serializes variadic min', () => {
-			const expr = min('x', 100, 'y')
-			const css = expr.toCss({ x: 'x', y: 'y' })
-			expect(css.expression).toBe('min(var(--x), 100, var(--y))')
+			expect(min('x', 100, 'y').bind({ x: 'x', y: 'y' }).serialize()).toBe(
+				'min(var(--x), 100, var(--y))',
+			)
 		})
 
 		it('parenthesizes variadic add inside multiply', () => {
-			const expr = multiply(add('a', 'b', 'c'), 2)
-			const css = expr.toCss({
-				a: 'a',
-				b: 'b',
-				c: 'c',
-			})
-			expect(css.expression).toBe('calc((var(--a) + var(--b) + var(--c)) * 2)')
+			expect(
+				multiply(add('a', 'b', 'c'), 2)
+					.bind({ a: 'a', b: 'b', c: 'c' })
+					.serialize(),
+			).toBe('calc((var(--a) + var(--b) + var(--c)) * 2)')
 		})
 	})
 
 	describe('unary operations', () => {
 		it('serializes sin', () => {
-			const expr = sin('x')
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('sin(var(--x))')
+			expect(sin('x').bind({ x: 'x' }).serialize()).toBe('sin(var(--x))')
 		})
 
 		it('serializes abs', () => {
-			const expr = abs('x')
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('abs(var(--x))')
+			expect(abs('x').bind({ x: 'x' }).serialize()).toBe('abs(var(--x))')
 		})
 
 		it('serializes sign', () => {
-			const expr = sign('x')
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('sign(var(--x))')
+			expect(sign('x').bind({ x: 'x' }).serialize()).toBe('sign(var(--x))')
 		})
 	})
 
 	describe('clamp', () => {
 		it('serializes clamp', () => {
-			const expr = clamp(0, 'x', 100)
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('clamp(0, var(--x), 100)')
+			expect(clamp(0, 'x', 100).bind({ x: 'x' }).serialize()).toBe(
+				'clamp(0, var(--x), 100)',
+			)
 		})
 	})
 
 	describe('parenthesization', () => {
 		it('does not add parens around function arguments', () => {
-			const expr = sin(add('x', 1))
-			const css = expr.toCss({ x: 'x' })
-			expect(css.expression).toBe('sin(var(--x) + 1)')
+			expect(sin(add('x', 1)).bind({ x: 'x' }).serialize()).toBe('sin(var(--x) + 1)')
 		})
 
 		it('adds parens to add/subtract when used in multiply', () => {
-			const expr = multiply(add('a', 'b'), 'c')
-			const css = expr.toCss({
-				a: 'a',
-				b: 'b',
-				c: 'c',
-			})
-			expect(css.expression).toBe('calc((var(--a) + var(--b)) * var(--c))')
+			expect(
+				multiply(add('a', 'b'), 'c')
+					.bind({ a: 'a', b: 'b', c: 'c' })
+					.serialize(),
+			).toBe('calc((var(--a) + var(--b)) * var(--c))')
 		})
 
 		it('adds parens to subtract when used in divide', () => {
-			const expr = divide(subtract('a', 'b'), 'c')
-			const css = expr.toCss({
-				a: 'a',
-				b: 'b',
-				c: 'c',
-			})
-			expect(css.expression).toBe('calc((var(--a) - var(--b)) / var(--c))')
+			expect(
+				divide(subtract('a', 'b'), 'c')
+					.bind({ a: 'a', b: 'b', c: 'c' })
+					.serialize(),
+			).toBe('calc((var(--a) - var(--b)) / var(--c))')
 		})
 
 		it('does not add parens to multiply when used in add', () => {
-			const expr = add(multiply('a', 'b'), 'c')
-			const css = expr.toCss({
-				a: 'a',
-				b: 'b',
-				c: 'c',
-			})
-			expect(css.expression).toBe('calc(var(--a) * var(--b) + var(--c))')
+			expect(
+				add(multiply('a', 'b'), 'c')
+					.bind({ a: 'a', b: 'b', c: 'c' })
+					.serialize(),
+			).toBe('calc(var(--a) * var(--b) + var(--c))')
 		})
 
 		it('handles deeply nested expressions', () => {
-			// (a + b) * (c - d)
-			const expr = multiply(add('a', 'b'), subtract('c', 'd'))
-			const css = expr.toCss({
-				a: 'a',
-				b: 'b',
-				c: 'c',
-				d: 'd',
-			})
-			expect(css.expression).toBe('calc((var(--a) + var(--b)) * (var(--c) - var(--d)))')
+			expect(
+				multiply(add('a', 'b'), subtract('c', 'd'))
+					.bind({ a: 'a', b: 'b', c: 'c', d: 'd' })
+					.serialize(),
+			).toBe('calc((var(--a) + var(--b)) * (var(--c) - var(--d)))')
 		})
 	})
 
 	describe('complex expressions', () => {
 		it('serializes quadratic formula components', () => {
-			// ax^2
-			const expr = multiply('a', pow('x', 2))
-			const css = expr.toCss({
-				a: 'a',
-				x: 'x',
-			})
-			expect(css.expression).toBe('calc(var(--a) * pow(var(--x), 2))')
+			expect(
+				multiply('a', pow('x', 2))
+					.bind({ a: 'a', x: 'x' })
+					.serialize(),
+			).toBe('calc(var(--a) * pow(var(--x), 2))')
 		})
 
 		it('serializes distance formula', () => {
-			// sqrt(x^2 + y^2)
-			const expr = pow(add(pow('x', 2), pow('y', 2)), 0.5)
-			const css = expr.toCss({
-				x: 'x',
-				y: 'y',
-			})
-			expect(css.expression).toBe('pow(pow(var(--x), 2) + pow(var(--y), 2), 0.5)')
+			expect(
+				pow(add(pow('x', 2), pow('y', 2)), 0.5)
+					.bind({ x: 'x', y: 'y' })
+					.serialize(),
+			).toBe('pow(pow(var(--x), 2) + pow(var(--y), 2), 0.5)')
 		})
 	})
 })

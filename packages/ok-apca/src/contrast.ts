@@ -74,12 +74,12 @@ export const correctedLightness: ct.NumberExpression<'yTarget' | 'chroma' | 'fA'
  * Unbound refs: `scYBg`, `contrast-{label}`, `chroma`, `fA`, `fB`, `fD`.
  */
 export function contrastTargetLightness<const Label extends string>(label: Label) {
-	const yRaw = ct.property(
+	const yRaw = ct.Properties.number(
 		`_yr-${label}`,
 		contrastSolver.bind({ yBg: 'scYBg', contrast: `contrast-${label}` }),
 	)
-	const yTarget = ct.property(`_yt-${label}`, softUnclamp.bind({ y: yRaw }))
-	return ct.property(`_cl-${label}`, correctedLightness.bind({ yTarget }))
+	const yTarget = ct.Properties.number(`_yt-${label}`, softUnclamp.bind({ y: yRaw }))
+	return ct.Properties.number(`_cl-${label}`, correctedLightness.bind({ yTarget }))
 }
 
 /**
@@ -101,25 +101,25 @@ export function contrastTargetLightnessWithInversion<const Label extends string>
 	const polarityBinding = { yBg: 'scYBg' as const, contrast: contrastRef }
 
 	// Raw solver outputs in soft-clamped domain
-	const yLightRaw = ct.property(
+	const yLightRaw = ct.Properties.number(
 		`_ylr-${label}`,
 		ct.clamp(0, reversePolarity.bind(polarityBinding), 1),
 	)
-	const yDarkRaw = ct.property(
+	const yDarkRaw = ct.Properties.number(
 		`_ydr-${label}`,
 		ct.clamp(0, normalPolarity.bind(polarityBinding), 1),
 	)
 
 	// Unclamp to recover actual Y values
-	const yLight = ct.property(`_yl-${label}`, softUnclamp.bind({ y: yLightRaw }))
-	const yDark = ct.property(`_yd-${label}`, softUnclamp.bind({ y: yDarkRaw }))
+	const yLight = ct.Properties.number(`_yl-${label}`, softUnclamp.bind({ y: yLightRaw }))
+	const yDark = ct.Properties.number(`_yd-${label}`, softUnclamp.bind({ y: yDarkRaw }))
 
 	// Measure achieved contrast using original Y_bg (yBg ref, not scYBg)
-	const lcLight = ct.property(`_lcl-${label}`, contrastMeasurementReverse.bind({ yFg: yLight }))
-	const lcDark = ct.property(`_lcd-${label}`, contrastMeasurementNormal.bind({ yFg: yDark }))
+	const lcLight = ct.Properties.number(`_lcl-${label}`, contrastMeasurementReverse.bind({ yFg: yLight }))
+	const lcDark = ct.Properties.number(`_lcd-${label}`, contrastMeasurementNormal.bind({ yFg: yDark }))
 
 	// Inversion solver uses original Y_bg for zero-contrast fallback
-	const yTarget = ct.property(
+	const yTarget = ct.Properties.number(
 		`_yt-${label}`,
 		contrastSolverWithInversion.bind({
 			contrast: contrastRef,
@@ -132,7 +132,7 @@ export function contrastTargetLightnessWithInversion<const Label extends string>
 		}),
 	)
 
-	return ct.property(`_cl-${label}`, correctedLightness.bind({ yTarget }))
+	return ct.Properties.number(`_cl-${label}`, correctedLightness.bind({ yTarget }))
 }
 
 // =============================================================================

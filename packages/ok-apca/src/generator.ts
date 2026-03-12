@@ -1,4 +1,5 @@
 import * as ct from '@ok-apca/calc-tree'
+import { Properties } from '@ok-apca/calc-tree'
 import { softClampApprox } from './apca.ts'
 import {
 	contrastTargetLightness,
@@ -57,30 +58,31 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 	// Prefix for internal/intermediate properties
 	const p = `_${output}-`
 
-	const base = ct.declarations()
+	const base = Properties.make()
 
 	// =========================================================================
-	// Gamut slice input properties (set by hue selectors, inherit: true)
+	// Gamut slice input properties (set by hue selectors, inherits: false via _ prefix)
 	// =========================================================================
 
-	const hueInput = base.property(`${p}hue`, 'number', true)
-	const apexLInput = base.property(`${p}apexL`, 'number', true)
-	const apexCInput = base.property(`${p}apexC`, 'number', true)
-	const curvatureInput = base.property(`${p}curvature`, 'number', true)
-	const fAInput = base.property(`${p}fA`, 'number', true)
-	const fBInput = base.property(`${p}fB`, 'number', true)
-	const fDInput = base.property(`${p}fD`, 'number', true)
+	const hueInput = Properties.number(base, `${p}hue`)
+	const apexLInput = Properties.number(base, `${p}apexL`)
+	const apexCInput = Properties.number(base, `${p}apexC`)
+	const curvatureInput = Properties.number(base, `${p}curvature`)
+	const fAInput = Properties.number(base, `${p}fA`)
+	const fBInput = Properties.number(base, `${p}fB`)
+	const fDInput = Properties.number(base, `${p}fD`)
 
-	// User-facing input properties (inherit: true)
-	const lightnessInput = base.property('lightness', 'number', true)
-	base.property('chroma', 'number', true)
+	// User-facing input properties (inherits: true via no _ prefix)
+	const lightnessInput = Properties.number(base, 'lightness')
+	Properties.number(base, 'chroma')
 
 	// =========================================================================
 	// Base color
 	// =========================================================================
 
 	// Max chroma at base lightness — bind gamut refs to input properties
-	const maxChromaProp = base.property(
+	const maxChromaProp = Properties.number(
+		base,
 		`${p}mc`,
 		maxChromaExpr.bind({
 			lightness: lightnessInput,
@@ -90,8 +92,12 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 		}),
 	)
 
-	// Base color output (inherit: true)
-	base.property(output, ct.oklch('lightness', ct.multiply(maxChromaProp, 'chroma'), hueInput), true)
+	// Base color output (inherits: true via no _ prefix)
+	Properties.color(
+		base,
+		output,
+		ct.oklch('lightness', ct.multiply(maxChromaProp, 'chroma'), hueInput),
+	)
 
 	// =========================================================================
 	// Variants (contrast colors)
@@ -99,7 +105,8 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 
 	if (variants.length > 0) {
 		// Bind gamut slice refs into Y background
-		const yBgExpr = base.property(
+		const yBgExpr = Properties.number(
+			base,
 			`${p}ybg`,
 			yBackground.bind({
 				fA: fAInput,
@@ -109,11 +116,11 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 		)
 
 		// Soft-clamped Y_bg
-		const scYBgExpr = base.property(`${p}sc`, softClampApprox.bind({ y: yBgExpr }))
+		const scYBgExpr = Properties.number(base, `${p}sc`, softClampApprox.bind({ y: yBgExpr }))
 
 		for (const variant of variants) {
-			// Declare contrast input property (inherit: true)
-			base.property(`contrast-${variant}`, 'number', true)
+			// Declare contrast input property (inherits: true via no _ prefix)
+			Properties.number(base, `contrast-${variant}`)
 
 			// Contrast target lightness
 			const conLExpr = noContrastInversion
@@ -128,7 +135,8 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 			})
 
 			// Max chroma at contrast color's lightness
-			const conMaxChroma = base.property(
+			const conMaxChroma = Properties.number(
+				base,
 				`${p}mc-${variant}`,
 				maxChromaExpr.bind({
 					lightness: boundConL,
@@ -138,11 +146,11 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 				}),
 			)
 
-			// Contrast color output (inherit: true)
-			base.property(
+			// Contrast color output (inherits: true via no _ prefix)
+			Properties.color(
+				base,
 				`${output}-${variant}`,
 				ct.oklch(boundConL, ct.multiply(conMaxChroma, 'chroma'), hueInput),
-				true,
 			)
 		}
 	}
@@ -165,17 +173,17 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 			slice,
 		})
 
-		const hueBlock = ct.declarations()
-		hueBlock.assign(p, {
-			hue,
-			apexL: slice.apexL,
-			apexC: slice.apexC,
-			curvature: slice.curvature,
-			fA: slice.fA,
-			fB: slice.fB,
-			fD: slice.fD,
+		const hueBlock = Properties.make()
+		Properties.numbers(hueBlock, {
+			[`${p}hue`]: hue,
+			[`${p}apexL`]: slice.apexL,
+			[`${p}apexC`]: slice.apexC,
+			[`${p}curvature`]: slice.curvature,
+			[`${p}fA`]: slice.fA,
+			[`${p}fB`]: slice.fB,
+			[`${p}fD`]: slice.fD,
 		})
-		hueBlocks.push(hueBlock.toSelector(hueEntry.selector))
+		hueBlocks.push(Properties.toRuleset(hueBlock, hueEntry.selector))
 	}
 
 	// =========================================================================
@@ -183,9 +191,9 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 	// =========================================================================
 
 	const css = outdent`
-		${base.toPropertyRules()}
+		${Properties.toAtRules(base)}
 
-		${[base.toSelector(baseSelector), ...hueBlocks].join('\n\n')}
+		${[Properties.toRuleset(base, baseSelector), ...hueBlocks].join('\n\n')}
 	`
 
 	return { css, hues: generatedHues }
