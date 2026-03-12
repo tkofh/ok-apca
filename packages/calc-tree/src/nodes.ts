@@ -1,6 +1,6 @@
 import type { ExpressionNode, PropertyRule } from './types.ts'
 
-function formatNumber(n: number): string {
+export function formatNumber(n: number): string {
 	if (Math.abs(n - Math.PI) < 1e-10) {
 		return 'pi'
 	}

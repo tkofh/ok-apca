@@ -10,9 +10,8 @@ describe('Contrast color computation', () => {
 
 	beforeEach(() => {
 		harness = createTestHarness({
+			options: { variants: ['text'] },
 			hue: 240,
-			selector: '.test-element',
-			contrastColors: [{ label: 'text' }],
 		})
 	})
 
@@ -119,15 +118,19 @@ describe('Contrast inversion timing', () => {
 
 	beforeEach(() => {
 		harness = createTestHarness({
+			options: {
+				baseSelector: '.test-inv',
+				variants: ['text'],
+			},
 			hue: 240,
-			selector: '.test-inv',
-			contrastColors: [{ label: 'text' }],
 		})
 		harnessNoInversion = createTestHarness({
+			options: {
+				baseSelector: '.test-noinv',
+				variants: ['text'],
+				noContrastInversion: true,
+			},
 			hue: 240,
-			selector: '.test-noinv',
-			contrastColors: [{ label: 'text' }],
-			noContrastInversion: true,
 		})
 	})
 
@@ -213,9 +216,8 @@ describe('Multiple contrast colors', () => {
 
 	beforeEach(() => {
 		harness = createTestHarness({
+			options: { variants: ['text', 'fill', 'stroke'] },
 			hue: 30,
-			selector: '.test-element',
-			contrastColors: [{ label: 'text' }, { label: 'fill' }, { label: 'stroke' }],
 		})
 	})
 

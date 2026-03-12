@@ -1,5 +1,5 @@
 /**
- * Browser integration tests for defineHue options.
+ * Browser integration tests for defineColors options.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -10,10 +10,10 @@ describe('Custom output name', () => {
 
 	beforeEach(() => {
 		harness = createTestHarness({
-			hue: 180,
-			selector: '.test-element',
-			output: 'accent',
-			contrastColors: [{ label: 'text' }],
+			options: {
+				output: 'accent',
+				variants: ['text'],
+			},
 		})
 	})
 
@@ -37,14 +37,13 @@ describe('Custom output name', () => {
 	})
 })
 
-describe('No contrast colors', () => {
+describe('No variants', () => {
 	let harness: TestHarness
 
 	beforeEach(() => {
 		harness = createTestHarness({
+			options: {},
 			hue: 120,
-			selector: '.test-element',
-			// No contrastColors
 		})
 	})
 
@@ -59,7 +58,7 @@ describe('No contrast colors', () => {
 		expect(color.get('oklch.h')).toBeCloseTo(120, 0)
 	})
 
-	it('ignores contrast variables when no contrast colors configured', () => {
+	it('ignores contrast variables when no variants configured', () => {
 		harness.setVar('lightness', 0.5)
 		harness.setVar('chroma', 0.5)
 		harness.setVar('contrast-text', 0.6) // Should be ignored
@@ -75,8 +74,8 @@ describe('Hue normalization', () => {
 
 	it('normalizes hue values above 360', () => {
 		const harness = createTestHarness({
+			options: {},
 			hue: 390, // Should become 30
-			selector: '.test-element',
 		})
 
 		harness.setVar('lightness', 0.5)
@@ -90,8 +89,8 @@ describe('Hue normalization', () => {
 
 	it('normalizes negative hue values', () => {
 		const harness = createTestHarness({
+			options: {},
 			hue: -30, // Should become 330
-			selector: '.test-element',
 		})
 
 		harness.setVar('lightness', 0.5)

@@ -3,23 +3,31 @@
  */
 
 import {
-	type ContrastColor,
-	type ContrastColorWithSelector,
-	generateHueCss,
-	type HueDefinition,
+	type ColorSystem,
+	type ColorsDefinition,
+	generateColorsCss,
+	type HueEntry,
 } from './generator.ts'
 
 export type { Color } from './color.ts'
 export { computeContrastColor, measureContrast } from './contrast.ts'
-export type { ContrastColor, ContrastColorWithSelector, HueDefinition } from './generator.ts'
+export type { ColorSystem, HueEntry } from './generator.ts'
 
-export type HueOptions = {
-	readonly hue: number
+export interface DefineColorsOptions {
 	/**
-	 * Base name for the output CSS custom properties.
+	 * Base name for output CSS custom properties.
 	 * @default 'color'
 	 */
 	readonly output?: string
+	/** Selector for the base color + variant declarations. */
+	readonly baseSelector: string
+	/** Hue definitions. Each gets a selector setting gamut constants. */
+	readonly hues: readonly HueEntry[]
+	/**
+	 * Contrast variant labels (e.g., `['text', 'fill', 'stroke']`).
+	 * Each produces a `--{output}-{variant}` color output.
+	 */
+	readonly variants?: readonly string[]
 	/**
 	 * Disables automatic contrast polarity inversion.
 	 *
@@ -31,108 +39,73 @@ export type HueOptions = {
 	 * @default false
 	 */
 	readonly noContrastInversion?: boolean
-} & (
-	| {
-			readonly selector: string
-			readonly contrastColors?: readonly ContrastColor[]
-	  }
-	| {
-			readonly selector?: never
-			readonly contrastColors: readonly ContrastColorWithSelector[]
-	  }
-)
-
-export interface Hue {
-	readonly hue: number
-	readonly selector: string
-	readonly css: string
 }
 
 const LABEL_REGEX = /^[a-z][a-z0-9_-]*$/i
 
-function validateLabel(label: string): void {
+function validateLabel(label: string, context: string): void {
 	if (!LABEL_REGEX.test(label)) {
 		throw new Error(
-			`Invalid contrast color label '${label}'. Labels must start with a letter and contain only letters, numbers, hyphens, and underscores.`,
+			`Invalid ${context} '${label}'. Must start with a letter and contain only letters, numbers, hyphens, and underscores.`,
 		)
 	}
 }
 
-function validateUniqueLabels(labels: readonly string[]): void {
+function validateUniqueLabels(labels: readonly string[], context: string): void {
 	const seen = new Set<string>()
 	for (const label of labels) {
 		if (seen.has(label)) {
-			throw new Error(
-				`Duplicate contrast color label '${label}'. Each contrast color must have a unique label.`,
-			)
+			throw new Error(`Duplicate ${context} '${label}'. Each must be unique.`)
 		}
 		seen.add(label)
 	}
 }
 
 /**
- * Define a hue with optional contrast colors.
- * Validates all inputs and returns a normalized `Hue` with generated CSS.
+ * Define a multi-hue color system with APCA-based contrast variants.
+ *
+ * Generates CSS where the base selector contains all color math (using
+ * CSS custom properties for gamut constants), and each hue gets a
+ * selector that sets those constants.
  *
  * @example
  * ```ts
- * const blue = defineHue({
- *   hue: 240,
- *   selector: '.blue',
- *   contrastColors: [{ label: 'text' }],
+ * const system = defineColors({
+ *   baseSelector: '.color',
+ *   hues: [
+ *     { name: 'red', hue: 25, selector: '.color-red' },
+ *     { name: 'blue', hue: 240, selector: '.color-blue' },
+ *   ],
+ *   variants: ['text', 'fill'],
  * })
- * console.log(blue.css) // Generated CSS string
+ * console.log(system.css) // Generated CSS string
  * ```
  */
-export function defineHue(options: HueOptions): Hue {
-	const hue = ((options.hue % 360) + 360) % 360
-	const contrastColors: readonly ContrastColor[] = options.contrastColors ?? []
+export function defineColors(options: DefineColorsOptions): ColorSystem {
 	const output = options.output ?? 'color'
+	const variants: readonly string[] = options.variants ?? []
 	const noContrastInversion = options.noContrastInversion ?? false
 
-	const labels = contrastColors.map((c) => c.label)
-	for (const label of labels) {
-		validateLabel(label)
+	// Validate hue names
+	const hueNames = options.hues.map((h) => h.name)
+	for (const name of hueNames) {
+		validateLabel(name, 'hue name')
 	}
-	validateUniqueLabels(labels)
+	validateUniqueLabels(hueNames, 'hue name')
 
-	if (!options.selector) {
-		for (const cc of contrastColors) {
-			if (!cc.selector) {
-				throw new Error(
-					'When no main selector is provided, all contrast colors must have a selector.',
-				)
-			}
-		}
+	// Validate variant labels
+	for (const variant of variants) {
+		validateLabel(variant, 'variant label')
 	}
+	validateUniqueLabels(variants, 'variant label')
 
-	let definition: HueDefinition
-	if (options.selector) {
-		definition = {
-			hue,
-			selector: options.selector,
-			output,
-			contrastColors,
-			noContrastInversion,
-		}
-	} else {
-		definition = {
-			hue,
-			output,
-			contrastColors: contrastColors as readonly ContrastColorWithSelector[],
-			noContrastInversion,
-		}
+	const definition: ColorsDefinition = {
+		output,
+		baseSelector: options.baseSelector,
+		hues: options.hues,
+		variants,
+		noContrastInversion,
 	}
 
-	const css = generateHueCss(definition)
-
-	const selector =
-		options.selector ??
-		`:is(${[...new Set(contrastColors.flatMap((cc) => (cc.selector ? [cc.selector] : [])))].join(', ')})`
-
-	return {
-		hue,
-		selector,
-		css,
-	}
+	return generateColorsCss(definition)
 }

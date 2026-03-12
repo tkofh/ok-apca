@@ -10,9 +10,8 @@ describe('Edge cases', () => {
 
 	beforeEach(() => {
 		harness = createTestHarness({
+			options: { variants: ['text'] },
 			hue: 240,
-			selector: '.test-element',
-			contrastColors: [{ label: 'text' }],
 		})
 	})
 
@@ -103,8 +102,8 @@ describe('Gamut mapping', () => {
 
 	it('keeps colors within Display P3 gamut at all lightness levels', () => {
 		const harness = createTestHarness({
+			options: {},
 			hue: 270, // Purple - challenging hue for gamut
-			selector: '.test-element',
 		})
 
 		for (const lightness of [0.1, 0.3, 0.5, 0.7, 0.9]) {
@@ -121,9 +120,8 @@ describe('Gamut mapping', () => {
 
 	it('keeps contrast colors within Display P3 gamut', () => {
 		const harness = createTestHarness({
+			options: { variants: ['text'] },
 			hue: 150, // Green - another challenging hue
-			selector: '.test-element',
-			contrastColors: [{ label: 'text' }],
 		})
 
 		harness.setVar('lightness', 0.4)
@@ -148,9 +146,8 @@ describe('Different hues', () => {
 	for (const hue of testHues) {
 		it(`produces correct colors for hue ${hue}`, () => {
 			const harness = createTestHarness({
+				options: { variants: ['text'] },
 				hue,
-				selector: '.test-element',
-				contrastColors: [{ label: 'text' }],
 			})
 
 			harness.setVar('lightness', 0.5)
@@ -183,12 +180,12 @@ describe('Different hues', () => {
 		// Orange and cyan have very different gamut shapes
 		// Use unique selectors to avoid CSS conflicts
 		const orangeHarness = createTestHarness({
+			options: { baseSelector: '.test-orange' },
 			hue: 30,
-			selector: '.test-orange',
 		})
 		const cyanHarness = createTestHarness({
+			options: { baseSelector: '.test-cyan' },
 			hue: 200,
-			selector: '.test-cyan',
 		})
 
 		// At high chroma, the maximum available chroma differs by hue

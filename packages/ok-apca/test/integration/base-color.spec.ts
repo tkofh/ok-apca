@@ -10,8 +10,8 @@ describe('Base color computation', () => {
 
 	beforeEach(() => {
 		harness = createTestHarness({
+			options: {},
 			hue: 240,
-			selector: '.test-element',
 		})
 	})
 

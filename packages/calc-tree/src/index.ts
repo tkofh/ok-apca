@@ -17,5 +17,7 @@ export {
 	subtract,
 } from './constructors.ts'
 
+export { type DeclarationBlock, declarations } from './declarations.ts'
 export type { ColorExpression, NumberExpression } from './expression.ts'
+export { formatNumber } from './nodes.ts'
 export type { CSSResult, PropertyRule } from './types.ts'

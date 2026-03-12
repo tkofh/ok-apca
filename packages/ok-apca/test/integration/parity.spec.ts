@@ -51,8 +51,8 @@ describe('gamutMap parity with CSS', () => {
 
 			// Get result from CSS in browser
 			const harness = createTestHarness({
+				options: {},
 				hue,
-				selector: '.test-element',
 			})
 			harness.setVar('lightness', lightness)
 			harness.setVar('chroma', chroma)
@@ -81,8 +81,8 @@ describe('findGamutSlice parity with CSS gamut clamping', () => {
 	for (const hue of hues) {
 		it(`produces correct max chroma curve for hue ${hue}`, () => {
 			const harness = createTestHarness({
+				options: {},
 				hue,
-				selector: '.test-element',
 			})
 
 			for (const lightness of lightnessLevels) {
@@ -129,9 +129,8 @@ describe('computeContrastColor parity with CSS', () => {
 
 			// Get result from CSS in browser (contrast input is normalized)
 			const harness = createTestHarness({
+				options: { variants: ['text'] },
 				hue,
-				selector: '.test-element',
-				contrastColors: [{ label: 'text' }],
 			})
 			harness.setVar('lightness', lightness)
 			harness.setVar('chroma', chroma)
@@ -168,9 +167,8 @@ describe('computeContrastColor parity with CSS', () => {
 			const tsResult = computeContrastColor(baseColor, contrast)
 
 			const harness = createTestHarness({
+				options: { variants: ['text'] },
 				hue,
-				selector: '.test-element',
-				contrastColors: [{ label: 'text' }],
 			})
 			harness.setVar('lightness', lightness)
 			harness.setVar('chroma', chroma)
@@ -202,9 +200,8 @@ describe('chroma percentage preservation parity', () => {
 
 		// CSS computation
 		const harness = createTestHarness({
+			options: { variants: ['text'] },
 			hue,
-			selector: '.test-element',
-			contrastColors: [{ label: 'text' }],
 		})
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
@@ -248,9 +245,8 @@ describe('edge case parity', () => {
 		const tsResult = computeContrastColor(baseColor, contrast)
 
 		const harness = createTestHarness({
+			options: { variants: ['text'] },
 			hue,
-			selector: '.test-element',
-			contrastColors: [{ label: 'text' }],
 		})
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
@@ -275,9 +271,8 @@ describe('edge case parity', () => {
 		const tsResult = computeContrastColor(baseColor, contrast)
 
 		const harness = createTestHarness({
+			options: { variants: ['text'] },
 			hue,
-			selector: '.test-element',
-			contrastColors: [{ label: 'text' }],
 		})
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
@@ -303,7 +298,7 @@ describe('edge case parity', () => {
 		// Very dark
 		{
 			const expected = computeExpectedColor(hue, 0.05, chroma)
-			const harness = createTestHarness({ hue, selector: '.test-element' })
+			const harness = createTestHarness({ options: {}, hue })
 			harness.setVar('lightness', 0.05)
 			harness.setVar('chroma', chroma)
 			const cssColor = harness.getColor()
@@ -316,7 +311,7 @@ describe('edge case parity', () => {
 		// Very light
 		{
 			const expected = computeExpectedColor(hue, 0.95, chroma)
-			const harness = createTestHarness({ hue, selector: '.test-element' })
+			const harness = createTestHarness({ options: {}, hue })
 			harness.setVar('lightness', 0.95)
 			harness.setVar('chroma', chroma)
 			const cssColor = harness.getColor()

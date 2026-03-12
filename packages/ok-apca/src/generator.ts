@@ -5,219 +5,188 @@ import {
 	contrastTargetLightnessWithInversion,
 	yBackground,
 } from './contrast.ts'
-import { computeGamutSlice } from './gamut.ts'
+import { computeGamutSlice, type GamutSlice, maxChromaExpr } from './gamut.ts'
 import { outdent } from './util.ts'
 
-export interface ContrastColor {
-	readonly label: string
-	readonly selector?: string
-}
-
-export interface ContrastColorWithSelector {
-	readonly label: string
+export interface HueEntry {
+	readonly name: string
+	readonly hue: number
 	readonly selector: string
 }
 
-export type HueDefinition = {
-	readonly hue: number
+export interface ColorsDefinition {
 	readonly output: string
+	readonly baseSelector: string
+	readonly hues: readonly HueEntry[]
+	readonly variants: readonly string[]
 	readonly noContrastInversion: boolean
-} & (
-	| {
-			readonly selector: string
-			readonly contrastColors: readonly ContrastColor[]
-	  }
-	| {
-			readonly selector?: never
-			readonly contrastColors: readonly ContrastColorWithSelector[]
-	  }
-)
+}
 
-function groupContrastDeclarations(
-	contrastColors: readonly ContrastColor[],
-	contrastDeclarationsByLabel: Map<string, Record<string, string>>,
-	sharedDeclarations: Record<string, string>,
-	mainBlockDecls: Record<string, string>,
-): Map<string, Record<string, string>> {
-	const selectorGroups = new Map<string, Record<string, string>>()
-	for (const cc of contrastColors) {
-		const decls = contrastDeclarationsByLabel.get(cc.label) ?? {}
-		if (cc.selector) {
-			const existing = selectorGroups.get(cc.selector)
-			if (existing) {
-				Object.assign(existing, decls)
-			} else {
-				selectorGroups.set(cc.selector, { ...sharedDeclarations, ...decls })
-			}
-		} else {
-			Object.assign(mainBlockDecls, decls)
-		}
-	}
-	return selectorGroups
+export interface GeneratedHue {
+	readonly name: string
+	readonly hue: number
+	readonly selector: string
+	readonly slice: GamutSlice
+}
+
+export interface ColorSystem {
+	readonly css: string
+	readonly hues: readonly GeneratedHue[]
 }
 
 /**
- * Generate CSS for OKLCH color with optional APCA-based contrast colors.
+ * Generate CSS for a multi-hue color system with APCA-based contrast variants.
  *
- * Accepts a pre-validated `HueDefinition` from `defineHue`.
+ * Accepts a pre-validated `ColorsDefinition` from `defineColors`.
+ *
+ * The expression tree is built once (hue-independent). Gamut slice constants
+ * are left as CSS custom properties, set by per-hue selectors. All variant
+ * declarations live in the base selector.
  *
  * Runtime inputs (all normalized):
  * - `--lightness` (0–1), `--chroma` (0–1)
- * - `--contrast-{label}` (-1.08 to 1.08)
+ * - `--contrast-{variant}` (-1.08 to 1.08)
  *
  * Outputs:
  * - `--{output}` (e.g., `--color`)
- * - `--{output}-{label}` (e.g., `--color-text`)
- *
- * The generated CSS includes `@property` declarations for all custom properties,
- * enabling proper type checking, animation support, and initial values.
+ * - `--{output}-{variant}` (e.g., `--color-text`)
  */
-export function generateHueCss(definition: HueDefinition): string {
-	const { hue, output, contrastColors, noContrastInversion } = definition
-	const slice = computeGamutSlice(hue)
+export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
+	const { output, baseSelector, hues, variants, noContrastInversion } = definition
 
-	// Declare input properties
-	const lightnessInput = ct.property('lightness', 'number', true)
-	const chromaInput = ct.property('chroma', 'number', true)
+	// Prefix for internal/intermediate properties
+	const p = `_${output}-`
 
-	// Base declarations (only in main selector)
-	const baseDeclarations: Record<string, string> = {}
-	// Shared intermediate declarations (main selector + contrast selector blocks)
-	const sharedDeclarations: Record<string, string> = {}
-	// Per-contrast declarations, keyed by label
-	const contrastDeclarationsByLabel = new Map<string, Record<string, string>>()
-	// All @property rules
-	const properties: Record<string, ct.PropertyRule> = {}
+	const base = ct.declarations()
 
-	const mergeBase = (css: ct.CSSResult) => {
-		Object.assign(baseDeclarations, css.declarations)
-		Object.assign(properties, css.properties)
-	}
+	// =========================================================================
+	// Gamut slice input properties (set by hue selectors, inherit: true)
+	// =========================================================================
 
-	const mergeShared = (css: ct.CSSResult) => {
-		Object.assign(sharedDeclarations, css.declarations)
-		Object.assign(properties, css.properties)
-	}
+	const hueInput = base.property(`${p}hue`, 'number', true)
+	const apexLInput = base.property(`${p}apexL`, 'number', true)
+	const apexCInput = base.property(`${p}apexC`, 'number', true)
+	const curvatureInput = base.property(`${p}curvature`, 'number', true)
+	const fAInput = base.property(`${p}fA`, 'number', true)
+	const fBInput = base.property(`${p}fB`, 'number', true)
+	const fDInput = base.property(`${p}fD`, 'number', true)
 
-	const mergeContrast = (label: string, css: ct.CSSResult) => {
-		let decls = contrastDeclarationsByLabel.get(label)
-		if (!decls) {
-			decls = {}
-			contrastDeclarationsByLabel.set(label, decls)
-		}
-		Object.assign(decls, css.declarations)
-		Object.assign(properties, css.properties)
-	}
+	// User-facing input properties (inherit: true)
+	const lightnessInput = base.property('lightness', 'number', true)
+	base.property('chroma', 'number', true)
 
-	// Shared max chroma at base lightness (reused by base color and Y_bg)
-	const maxChromaExpr = ct.property('_mc', slice.maxChroma.bind({ lightness: lightnessInput }))
+	// =========================================================================
+	// Base color
+	// =========================================================================
 
-	// Build base color expression
-	mergeBase(
-		ct
-			.property(output, ct.oklch('lightness', ct.multiply(maxChromaExpr, 'chroma'), hue), true)
-			.toCss(),
+	// Max chroma at base lightness — bind gamut refs to input properties
+	const maxChromaProp = base.property(
+		`${p}mc`,
+		maxChromaExpr.bind({
+			lightness: lightnessInput,
+			apexL: apexLInput,
+			apexC: apexCInput,
+			curvature: curvatureInput,
+		}),
 	)
 
-	// Build contrast colors if any
-	if (contrastColors.length > 0) {
-		// Y_bg with hue-dependent correction bound
-		const yBgExpr = ct.property('_ybg', yBackground.bind(slice))
-		mergeShared(yBgExpr.toCss())
+	// Base color output (inherit: true)
+	base.property(output, ct.oklch('lightness', ct.multiply(maxChromaProp, 'chroma'), hueInput), true)
 
-		// Soft-clamped Y_bg for the contrast solver
-		const scYBgExpr = ct.property('_sc', softClampApprox.bind({ y: yBgExpr }))
-		mergeShared(scYBgExpr.toCss())
+	// =========================================================================
+	// Variants (contrast colors)
+	// =========================================================================
 
-		for (const cc of contrastColors) {
-			// Declare contrast input property
-			mergeContrast(cc.label, ct.property(`contrast-${cc.label}`, 'number', true).toCss())
+	if (variants.length > 0) {
+		// Bind gamut slice refs into Y background
+		const yBgExpr = base.property(
+			`${p}ybg`,
+			yBackground.bind({
+				fA: fAInput,
+				fB: fBInput,
+				fD: fDInput,
+			}),
+		)
 
-			// Get corrected lightness from shared factory, bind Y_bg refs and fA/fB/fD
+		// Soft-clamped Y_bg
+		const scYBgExpr = base.property(`${p}sc`, softClampApprox.bind({ y: yBgExpr }))
+
+		for (const variant of variants) {
+			// Declare contrast input property (inherit: true)
+			base.property(`contrast-${variant}`, 'number', true)
+
+			// Contrast target lightness
 			const conLExpr = noContrastInversion
-				? contrastTargetLightness(cc.label)
-				: contrastTargetLightnessWithInversion(cc.label)
+				? contrastTargetLightness(variant)
+				: contrastTargetLightnessWithInversion(variant)
 			const boundConL = conLExpr.bind({
-				...slice,
+				fA: fAInput,
+				fB: fBInput,
+				fD: fDInput,
 				yBg: yBgExpr,
 				scYBg: scYBgExpr,
 			})
 
 			// Max chroma at contrast color's lightness
-			const conMaxChroma = ct.property(
-				`_mc-${cc.label}`,
-				slice.maxChroma.bind({ lightness: boundConL }),
+			const conMaxChroma = base.property(
+				`${p}mc-${variant}`,
+				maxChromaExpr.bind({
+					lightness: boundConL,
+					apexL: apexLInput,
+					apexC: apexCInput,
+					curvature: curvatureInput,
+				}),
 			)
 
-			// Build the contrast color
-			mergeContrast(
-				cc.label,
-				ct
-					.property(
-						`${output}-${cc.label}`,
-						ct.oklch(boundConL, ct.multiply(conMaxChroma, 'chroma'), hue),
-						true,
-					)
-					.toCss(),
+			// Contrast color output (inherit: true)
+			base.property(
+				`${output}-${variant}`,
+				ct.oklch(boundConL, ct.multiply(conMaxChroma, 'chroma'), hueInput),
+				true,
 			)
 		}
 	}
 
-	// Ensure input properties are registered even if they weren't serialized
-	mergeShared(lightnessInput.toCss())
-	mergeShared(chromaInput.toCss())
+	// =========================================================================
+	// Hue selector blocks
+	// =========================================================================
 
-	// Determine main selector
-	const mainSelector =
-		definition.selector ??
-		`:is(${[...new Set(contrastColors.flatMap((cc) => (cc.selector ? [cc.selector] : [])))].join(', ')})`
+	const generatedHues: GeneratedHue[] = []
+	const hueBlocks: string[] = []
 
-	// Build main block: base + shared + contrast colors without own selector
-	const mainBlockDecls: Record<string, string> = { ...sharedDeclarations, ...baseDeclarations }
+	for (const hueEntry of hues) {
+		const hue = ((hueEntry.hue % 360) + 360) % 360
+		const slice = computeGamutSlice(hue)
 
-	// Group contrast colors by selector, or merge into main block
-	const selectorGroups = groupContrastDeclarations(
-		contrastColors,
-		contrastDeclarationsByLabel,
-		sharedDeclarations,
-		mainBlockDecls,
-	)
+		generatedHues.push({
+			name: hueEntry.name,
+			hue,
+			selector: hueEntry.selector,
+			slice,
+		})
 
-	const propertyRules = Object.entries(properties)
-		.map(
-			([name, rule]) => outdent`
-				@property ${name} {
-					inherits: ${rule.inherits ? 'true' : 'false'};
-					initial-value: ${rule.initialValue};
-					syntax: '${rule.syntax}';
-				}
-			`,
-		)
-		.join('\n')
+		const hueBlock = ct.declarations()
+		hueBlock.assign(p, {
+			hue,
+			apexL: slice.apexL,
+			apexC: slice.apexC,
+			curvature: slice.curvature,
+			fA: slice.fA,
+			fB: slice.fB,
+			fD: slice.fD,
+		})
+		hueBlocks.push(hueBlock.toSelector(hueEntry.selector))
+	}
 
-	const formatDeclarationBlock = (decls: Record<string, string>) =>
-		Object.entries(decls)
-			.map(([name, value]) => `${name}: ${value};`)
-			.join('\n')
+	// =========================================================================
+	// Build CSS output
+	// =========================================================================
 
-	const blocks = [
-		outdent`
-			${mainSelector} {
-				${formatDeclarationBlock(mainBlockDecls)}
-			}
-		`,
-		...[...selectorGroups].map(
-			([selector, decls]) => outdent`
-				${selector} {
-					${formatDeclarationBlock(decls)}
-				}
-			`,
-		),
-	]
+	const css = outdent`
+		${base.toPropertyRules()}
 
-	return outdent`
-		${propertyRules}
-
-		${blocks.join('\n\n')}
+		${[base.toSelector(baseSelector), ...hueBlocks].join('\n\n')}
 	`
+
+	return { css, hues: generatedHues }
 }
