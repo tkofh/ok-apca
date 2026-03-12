@@ -1,5 +1,4 @@
-import * as ct from '@ok-apca/calc-tree'
-import { Properties } from '@ok-apca/calc-tree'
+import { Calc, Colors, Properties } from '@ok-apca/calc-tree'
 import { softClampApprox } from './apca.ts'
 import {
 	contrastTargetLightness,
@@ -84,7 +83,7 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 	const maxChromaProp = Properties.number(
 		base,
 		`${p}mc`,
-		maxChromaExpr.bind({
+		Calc.bind(maxChromaExpr, {
 			lightness: lightnessInput,
 			apexL: apexLInput,
 			apexC: apexCInput,
@@ -96,7 +95,7 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 	Properties.color(
 		base,
 		output,
-		ct.oklch('lightness', ct.multiply(maxChromaProp, 'chroma'), hueInput),
+		Colors.oklch('lightness', Calc.multiply(maxChromaProp, 'chroma'), hueInput),
 	)
 
 	// =========================================================================
@@ -108,7 +107,7 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 		const yBgExpr = Properties.number(
 			base,
 			`${p}ybg`,
-			yBackground.bind({
+			Calc.bind(yBackground, {
 				fA: fAInput,
 				fB: fBInput,
 				fD: fDInput,
@@ -116,7 +115,7 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 		)
 
 		// Soft-clamped Y_bg
-		const scYBgExpr = Properties.number(base, `${p}sc`, softClampApprox.bind({ y: yBgExpr }))
+		const scYBgExpr = Properties.number(base, `${p}sc`, Calc.bind(softClampApprox, { y: yBgExpr }))
 
 		for (const variant of variants) {
 			// Declare contrast input property (inherits: true via no _ prefix)
@@ -126,7 +125,7 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 			const conLExpr = noContrastInversion
 				? contrastTargetLightness(variant)
 				: contrastTargetLightnessWithInversion(variant)
-			const boundConL = conLExpr.bind({
+			const boundConL = Calc.bind(conLExpr, {
 				fA: fAInput,
 				fB: fBInput,
 				fD: fDInput,
@@ -138,7 +137,7 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 			const conMaxChroma = Properties.number(
 				base,
 				`${p}mc-${variant}`,
-				maxChromaExpr.bind({
+				Calc.bind(maxChromaExpr, {
 					lightness: boundConL,
 					apexL: apexLInput,
 					apexC: apexCInput,
@@ -150,7 +149,7 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 			Properties.color(
 				base,
 				`${output}-${variant}`,
-				ct.oklch(boundConL, ct.multiply(conMaxChroma, 'chroma'), hueInput),
+				Colors.oklch(boundConL, Calc.multiply(conMaxChroma, 'chroma'), hueInput),
 			)
 		}
 	}

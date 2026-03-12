@@ -1,4 +1,16 @@
-import { ColorExpression, NumberExpression } from './expression.ts'
+import {
+	bindImpl,
+	type ExpressionInput,
+	type InferRefs,
+	isConstantNode,
+	makeNumber,
+	mergeRefs,
+	type NumberExpression,
+	type RelevantBindingRefs,
+	serializeImpl,
+	solveImpl,
+	toExpression,
+} from './expression.ts'
 import {
 	AbsNode,
 	AddNode,
@@ -8,82 +20,65 @@ import {
 	MaxNode,
 	MinNode,
 	MultiplyNode,
-	OklchNode,
 	PowNode,
-	ReferenceNode,
 	SignedPowNode,
 	SignNode,
 	SinNode,
 	SubtractNode,
 } from './nodes.ts'
 
-export type ExpressionInput<Refs extends string = never> = NumberExpression<Refs> | number | string
+// =============================================================================
+// Re-exported Types
+// =============================================================================
 
-export type InferRefs<T> =
-	T extends NumberExpression<infer R>
-		? R
-		: T extends string
-			? string extends T
-				? never
-				: T
-			: never
+export type { NumberExpression as Expression } from './expression.ts'
 
-class ConstantValueTypeError extends TypeError {
-	readonly value: unknown
-	constructor(value: unknown) {
-		super(`Constant value must be a finite number, got ${value}`)
-		this.value = value
-	}
+export type Input<Refs extends string = never> = ExpressionInput<Refs>
+
+export type { InferRefs } from './expression.ts'
+
+// =============================================================================
+// Utilities
+// =============================================================================
+
+export { formatNumber } from './nodes.ts'
+
+// =============================================================================
+// Expression Operations
+// =============================================================================
+
+export function bind<Refs extends string, const B>(
+	expr: NumberExpression<Refs>,
+	bindings: B & Partial<Record<Refs, ExpressionInput<string>>>,
+): NumberExpression<Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>> {
+	const result = bindImpl(expr._node, expr._refs, bindings)
+	return makeNumber(result.node, result.refs) as NumberExpression<
+		Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>
+	>
 }
 
-export function constant(value: number | string): NumberExpression<never> {
-	const num = typeof value === 'string' ? Number(value) : value
-	if (!Number.isFinite(num)) {
-		throw new ConstantValueTypeError(value)
-	}
-	return new NumberExpression(new ConstantNode(num))
+export function solve(expr: NumberExpression): number
+export function solve<Refs extends string, B extends Record<Refs, ExpressionInput<never>>>(
+	expr: NumberExpression<Refs>,
+	bindings: B,
+): number
+export function solve(
+	expr: NumberExpression<string>,
+	bindings?: Record<string, ExpressionInput<never>>,
+): number {
+	return solveImpl(expr._node, expr._refs, bindings)
 }
 
-const referenceCache = new Map<string, NumberExpression<string>>()
-
-export function reference<Name extends string>(name: Name): NumberExpression<Name> {
-	const cached = referenceCache.get(name)
-	if (cached) {
-		return cached as NumberExpression<Name>
-	}
-	if (name.length === 0) {
-		throw new TypeError('Reference name must be a non-empty string')
-	}
-	const expr = new NumberExpression(new ReferenceNode(name), new Set([name]))
-	referenceCache.set(name, expr)
-	return expr
+export function serialize<Refs extends string>(
+	expr: NumberExpression<Refs>,
+	bindings?: Partial<Record<Refs, ExpressionInput<never>>>,
+): string {
+	return serializeImpl(expr._node, expr._refs, bindings as Record<string, ExpressionInput<never>>)
 }
 
-export function toExpression<A extends ExpressionInput<string>>(
-	input: A,
-): NumberExpression<InferRefs<A>> {
-	if (typeof input === 'number') {
-		return constant(input) as NumberExpression<InferRefs<A>>
-	}
-	if (typeof input === 'string') {
-		return reference(input) as NumberExpression<InferRefs<A>>
-	}
-	return input as NumberExpression<InferRefs<A>>
-}
-
-function mergeRefs(...exprs: NumberExpression<string>[]): Set<string> {
-	const refs = new Set<string>()
-	for (const expr of exprs) {
-		for (const ref of expr.refs) {
-			refs.add(ref)
-		}
-	}
-	return refs
-}
-
-function isConstant(node: unknown): node is ConstantNode {
-	return node instanceof ConstantNode
-}
+// =============================================================================
+// Math Constructors
+// =============================================================================
 
 export function add<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
 	a: A,
@@ -110,14 +105,14 @@ export function add(
 ): NumberExpression<string>
 export function add(...args: ExpressionInput<string>[]): NumberExpression<string> {
 	const exprs = args.map((a) => toExpression(a))
-	if (exprs.every((e) => isConstant(e.node))) {
+	if (exprs.every((e) => isConstantNode(e._node))) {
 		const sum = (exprs as NumberExpression<never>[]).reduce(
-			(acc, e) => acc + e.node.evaluateConstant(),
+			(acc, e) => acc + e._node.evaluateConstant(),
 			0,
 		)
-		return new NumberExpression(new ConstantNode(sum), new Set())
+		return makeNumber(new ConstantNode(sum), new Set())
 	}
-	return new NumberExpression(new AddNode(exprs.map((e) => e.node)), mergeRefs(...exprs))
+	return makeNumber(new AddNode(exprs.map((e) => e._node)), mergeRefs(...exprs))
 }
 
 export function subtract<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
@@ -127,10 +122,10 @@ export function subtract<A extends ExpressionInput<string>, B extends Expression
 	const l = toExpression(left)
 	const r = toExpression(right)
 	const node =
-		isConstant(l.node) && isConstant(r.node)
-			? new ConstantNode(l.node.value - r.node.value)
-			: new SubtractNode(l.node, r.node)
-	return new NumberExpression(node, mergeRefs(l, r))
+		isConstantNode(l._node) && isConstantNode(r._node)
+			? new ConstantNode(l._node.value - r._node.value)
+			: new SubtractNode(l._node, r._node)
+	return makeNumber(node, mergeRefs(l, r))
 }
 
 export function multiply<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
@@ -140,10 +135,10 @@ export function multiply<A extends ExpressionInput<string>, B extends Expression
 	const l = toExpression(left)
 	const r = toExpression(right)
 	const node =
-		isConstant(l.node) && isConstant(r.node)
-			? new ConstantNode(l.node.value * r.node.value)
-			: new MultiplyNode(l.node, r.node)
-	return new NumberExpression(node, mergeRefs(l, r))
+		isConstantNode(l._node) && isConstantNode(r._node)
+			? new ConstantNode(l._node.value * r._node.value)
+			: new MultiplyNode(l._node, r._node)
+	return makeNumber(node, mergeRefs(l, r))
 }
 
 export function divide<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
@@ -153,10 +148,10 @@ export function divide<A extends ExpressionInput<string>, B extends ExpressionIn
 	const l = toExpression(left)
 	const r = toExpression(right)
 	const node =
-		isConstant(l.node) && isConstant(r.node)
-			? new ConstantNode(l.node.value / r.node.value)
-			: new DivideNode(l.node, r.node)
-	return new NumberExpression(node, mergeRefs(l, r))
+		isConstantNode(l._node) && isConstantNode(r._node)
+			? new ConstantNode(l._node.value / r._node.value)
+			: new DivideNode(l._node, r._node)
+	return makeNumber(node, mergeRefs(l, r))
 }
 
 export function pow<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
@@ -166,10 +161,10 @@ export function pow<A extends ExpressionInput<string>, B extends ExpressionInput
 	const b = toExpression(base)
 	const e = toExpression(exponent)
 	const node =
-		isConstant(b.node) && isConstant(e.node)
-			? new ConstantNode(b.node.value ** e.node.value)
-			: new PowNode(b.node, e.node)
-	return new NumberExpression(node, mergeRefs(b, e))
+		isConstantNode(b._node) && isConstantNode(e._node)
+			? new ConstantNode(b._node.value ** e._node.value)
+			: new PowNode(b._node, e._node)
+	return makeNumber(node, mergeRefs(b, e))
 }
 
 export function signedPow<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
@@ -179,28 +174,34 @@ export function signedPow<A extends ExpressionInput<string>, B extends Expressio
 	const b = toExpression(base)
 	const e = toExpression(exponent)
 	const node =
-		isConstant(b.node) && isConstant(e.node)
-			? new ConstantNode(Math.abs(b.node.value) ** e.node.value * Math.sign(b.node.value))
-			: new SignedPowNode(b.node, e.node)
-	return new NumberExpression(node, mergeRefs(b, e))
+		isConstantNode(b._node) && isConstantNode(e._node)
+			? new ConstantNode(Math.abs(b._node.value) ** e._node.value * Math.sign(b._node.value))
+			: new SignedPowNode(b._node, e._node)
+	return makeNumber(node, mergeRefs(b, e))
 }
 
 export function sin<A extends ExpressionInput<string>>(arg: A): NumberExpression<InferRefs<A>> {
 	const a = toExpression(arg)
-	const node = isConstant(a.node) ? new ConstantNode(Math.sin(a.node.value)) : new SinNode(a.node)
-	return new NumberExpression(node, new Set(a.refs))
+	const node = isConstantNode(a._node)
+		? new ConstantNode(Math.sin(a._node.value))
+		: new SinNode(a._node)
+	return makeNumber(node, new Set(a._refs))
 }
 
 export function abs<A extends ExpressionInput<string>>(arg: A): NumberExpression<InferRefs<A>> {
 	const a = toExpression(arg)
-	const node = isConstant(a.node) ? new ConstantNode(Math.abs(a.node.value)) : new AbsNode(a.node)
-	return new NumberExpression(node, new Set(a.refs))
+	const node = isConstantNode(a._node)
+		? new ConstantNode(Math.abs(a._node.value))
+		: new AbsNode(a._node)
+	return makeNumber(node, new Set(a._refs))
 }
 
 export function sign<A extends ExpressionInput<string>>(arg: A): NumberExpression<InferRefs<A>> {
 	const a = toExpression(arg)
-	const node = isConstant(a.node) ? new ConstantNode(Math.sign(a.node.value)) : new SignNode(a.node)
-	return new NumberExpression(node, new Set(a.refs))
+	const node = isConstantNode(a._node)
+		? new ConstantNode(Math.sign(a._node.value))
+		: new SignNode(a._node)
+	return makeNumber(node, new Set(a._refs))
 }
 
 export function max<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
@@ -228,13 +229,13 @@ export function max(
 ): NumberExpression<string>
 export function max(...args: ExpressionInput<string>[]): NumberExpression<string> {
 	const exprs = args.map((a) => toExpression(a))
-	if (exprs.every((e) => isConstant(e.node))) {
+	if (exprs.every((e) => isConstantNode(e._node))) {
 		const result = Math.max(
-			...(exprs as NumberExpression<never>[]).map((e) => e.node.evaluateConstant()),
+			...(exprs as NumberExpression<never>[]).map((e) => e._node.evaluateConstant()),
 		)
-		return new NumberExpression(new ConstantNode(result), new Set())
+		return makeNumber(new ConstantNode(result), new Set())
 	}
-	return new NumberExpression(new MaxNode(exprs.map((e) => e.node)), mergeRefs(...exprs))
+	return makeNumber(new MaxNode(exprs.map((e) => e._node)), mergeRefs(...exprs))
 }
 
 export function min<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
@@ -262,13 +263,13 @@ export function min(
 ): NumberExpression<string>
 export function min(...args: ExpressionInput<string>[]): NumberExpression<string> {
 	const exprs = args.map((a) => toExpression(a))
-	if (exprs.every((e) => isConstant(e.node))) {
+	if (exprs.every((e) => isConstantNode(e._node))) {
 		const result = Math.min(
-			...(exprs as NumberExpression<never>[]).map((e) => e.node.evaluateConstant()),
+			...(exprs as NumberExpression<never>[]).map((e) => e._node.evaluateConstant()),
 		)
-		return new NumberExpression(new ConstantNode(result), new Set())
+		return makeNumber(new ConstantNode(result), new Set())
 	}
-	return new NumberExpression(new MinNode(exprs.map((e) => e.node)), mergeRefs(...exprs))
+	return makeNumber(new MinNode(exprs.map((e) => e._node)), mergeRefs(...exprs))
 }
 
 export function clamp<
@@ -280,12 +281,12 @@ export function clamp<
 	const valExpr = toExpression(value)
 	const maxExpr = toExpression(maximum)
 	const node =
-		isConstant(minExpr.node) && isConstant(valExpr.node) && isConstant(maxExpr.node)
+		isConstantNode(minExpr._node) && isConstantNode(valExpr._node) && isConstantNode(maxExpr._node)
 			? new ConstantNode(
-					Math.max(minExpr.node.value, Math.min(valExpr.node.value, maxExpr.node.value)),
+					Math.max(minExpr._node.value, Math.min(valExpr._node.value, maxExpr._node.value)),
 				)
-			: new ClampNode(minExpr.node, valExpr.node, maxExpr.node)
-	return new NumberExpression(node, mergeRefs(minExpr, valExpr, maxExpr))
+			: new ClampNode(minExpr._node, valExpr._node, maxExpr._node)
+	return makeNumber(node, mergeRefs(minExpr, valExpr, maxExpr))
 }
 
 export function lerp<
@@ -294,15 +295,4 @@ export function lerp<
 	T extends ExpressionInput<string>,
 >(a: A, b: B, t: T): NumberExpression<InferRefs<A> | InferRefs<B> | InferRefs<T>> {
 	return add(multiply(subtract(1, t), a), multiply(t, b))
-}
-
-export function oklch<
-	L extends ExpressionInput<string>,
-	C extends ExpressionInput<string>,
-	H extends ExpressionInput<string>,
->(lightness: L, chroma: C, hue: H): ColorExpression<InferRefs<L> | InferRefs<C> | InferRefs<H>> {
-	const l = toExpression(lightness)
-	const c = toExpression(chroma)
-	const h = toExpression(hue)
-	return new ColorExpression(new OklchNode(l.node, c.node, h.node), mergeRefs(l, c, h))
 }

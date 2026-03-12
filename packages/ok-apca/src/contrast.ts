@@ -1,4 +1,4 @@
-import * as ct from '@ok-apca/calc-tree'
+import { Calc, Properties } from '@ok-apca/calc-tree'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
@@ -31,11 +31,11 @@ import { clampNumber } from './util.ts'
  * fA, fB, fD are hue-dependent and incorporate the gamut boundary slope
  * (apexC/apexL), so chroma here is the normalized ratio (0–1).
  */
-const fCorrection: ct.NumberExpression<'chroma' | 'fA' | 'fB' | 'fD'> = ct.add(
+const fCorrection: Calc.Expression<'chroma' | 'fA' | 'fB' | 'fD'> = Calc.add(
 	1,
-	ct.multiply('fA', 'chroma'),
-	ct.multiply('fB', ct.pow('chroma', 2)),
-	ct.multiply('fD', ct.pow('chroma', 3)),
+	Calc.multiply('fA', 'chroma'),
+	Calc.multiply('fB', Calc.pow('chroma', 2)),
+	Calc.multiply('fD', Calc.pow('chroma', 3)),
 )
 
 /**
@@ -45,8 +45,8 @@ const fCorrection: ct.NumberExpression<'chroma' | 'fA' | 'fB' | 'fD'> = ct.add(
  * Exact on the left half of the gamut tent where k = (apexC/apexL) · chromaRatio
  * is constant; close approximation on the right half.
  */
-export const yBackground: ct.NumberExpression<'lightness' | 'chroma' | 'fA' | 'fB' | 'fD'> =
-	ct.multiply(ct.pow('lightness', 3), fCorrection)
+export const yBackground: Calc.Expression<'lightness' | 'chroma' | 'fA' | 'fB' | 'fD'> =
+	Calc.multiply(Calc.pow('lightness', 3), fCorrection)
 
 /**
  * Corrected lightness from target Y: L = pow(Y / f(chroma), 1/3)
@@ -57,8 +57,8 @@ export const yBackground: ct.NumberExpression<'lightness' | 'chroma' | 'fA' | 'f
  *
  * Unbound refs: `yTarget`, `chroma`, `fA`, `fB`, `fD`.
  */
-export const correctedLightness: ct.NumberExpression<'yTarget' | 'chroma' | 'fA' | 'fB' | 'fD'> =
-	ct.pow(ct.divide('yTarget', fCorrection), 1 / 3)
+export const correctedLightness: Calc.Expression<'yTarget' | 'chroma' | 'fA' | 'fB' | 'fD'> =
+	Calc.pow(Calc.divide('yTarget', fCorrection), 1 / 3)
 
 // =============================================================================
 // Contrast Target Lightness Factories
@@ -74,12 +74,12 @@ export const correctedLightness: ct.NumberExpression<'yTarget' | 'chroma' | 'fA'
  * Unbound refs: `scYBg`, `contrast-{label}`, `chroma`, `fA`, `fB`, `fD`.
  */
 export function contrastTargetLightness<const Label extends string>(label: Label) {
-	const yRaw = ct.Properties.number(
+	const yRaw = Properties.number(
 		`_yr-${label}`,
-		contrastSolver.bind({ yBg: 'scYBg', contrast: `contrast-${label}` }),
+		Calc.bind(contrastSolver, { yBg: 'scYBg', contrast: `contrast-${label}` }),
 	)
-	const yTarget = ct.Properties.number(`_yt-${label}`, softUnclamp.bind({ y: yRaw }))
-	return ct.Properties.number(`_cl-${label}`, correctedLightness.bind({ yTarget }))
+	const yTarget = Properties.number(`_yt-${label}`, Calc.bind(softUnclamp, { y: yRaw }))
+	return Properties.number(`_cl-${label}`, Calc.bind(correctedLightness, { yTarget }))
 }
 
 /**
@@ -101,27 +101,33 @@ export function contrastTargetLightnessWithInversion<const Label extends string>
 	const polarityBinding = { yBg: 'scYBg' as const, contrast: contrastRef }
 
 	// Raw solver outputs in soft-clamped domain
-	const yLightRaw = ct.Properties.number(
+	const yLightRaw = Properties.number(
 		`_ylr-${label}`,
-		ct.clamp(0, reversePolarity.bind(polarityBinding), 1),
+		Calc.clamp(0, Calc.bind(reversePolarity, polarityBinding), 1),
 	)
-	const yDarkRaw = ct.Properties.number(
+	const yDarkRaw = Properties.number(
 		`_ydr-${label}`,
-		ct.clamp(0, normalPolarity.bind(polarityBinding), 1),
+		Calc.clamp(0, Calc.bind(normalPolarity, polarityBinding), 1),
 	)
 
 	// Unclamp to recover actual Y values
-	const yLight = ct.Properties.number(`_yl-${label}`, softUnclamp.bind({ y: yLightRaw }))
-	const yDark = ct.Properties.number(`_yd-${label}`, softUnclamp.bind({ y: yDarkRaw }))
+	const yLight = Properties.number(`_yl-${label}`, Calc.bind(softUnclamp, { y: yLightRaw }))
+	const yDark = Properties.number(`_yd-${label}`, Calc.bind(softUnclamp, { y: yDarkRaw }))
 
 	// Measure achieved contrast using original Y_bg (yBg ref, not scYBg)
-	const lcLight = ct.Properties.number(`_lcl-${label}`, contrastMeasurementReverse.bind({ yFg: yLight }))
-	const lcDark = ct.Properties.number(`_lcd-${label}`, contrastMeasurementNormal.bind({ yFg: yDark }))
+	const lcLight = Properties.number(
+		`_lcl-${label}`,
+		Calc.bind(contrastMeasurementReverse, { yFg: yLight }),
+	)
+	const lcDark = Properties.number(
+		`_lcd-${label}`,
+		Calc.bind(contrastMeasurementNormal, { yFg: yDark }),
+	)
 
 	// Inversion solver uses original Y_bg for zero-contrast fallback
-	const yTarget = ct.Properties.number(
+	const yTarget = Properties.number(
 		`_yt-${label}`,
-		contrastSolverWithInversion.bind({
+		Calc.bind(contrastSolverWithInversion, {
 			contrast: contrastRef,
 			yLight,
 			yDark,
@@ -132,7 +138,7 @@ export function contrastTargetLightnessWithInversion<const Label extends string>
 		}),
 	)
 
-	return ct.Properties.number(`_cl-${label}`, correctedLightness.bind({ yTarget }))
+	return Properties.number(`_cl-${label}`, Calc.bind(correctedLightness, { yTarget }))
 }
 
 // =============================================================================
@@ -169,13 +175,13 @@ export function measureContrast(
 	if (approximate) {
 		// Use expression trees directly to ensure alignment with the CSS implementation
 		if (yBg >= yFg) {
-			return contrastMeasurementNormal.solve({ yBg, yFg })
+			return Calc.solve(contrastMeasurementNormal, { yBg, yFg })
 		}
-		return -contrastMeasurementReverse.solve({ yBg, yFg })
+		return -Calc.solve(contrastMeasurementReverse, { yBg, yFg })
 	}
 
-	const scBg = trueSoftClamp.solve({ y: yBg })
-	const scFg = trueSoftClamp.solve({ y: yFg })
+	const scBg = Calc.solve(trueSoftClamp, { y: yBg })
+	const scFg = Calc.solve(trueSoftClamp, { y: yFg })
 
 	if (yBg >= yFg) {
 		return Math.max(
@@ -206,7 +212,7 @@ export function measureContrast(
 export function computeContrastColor(color: Color, contrast: number, invert = true): Color {
 	const { hue, lightness, chroma } = gamutMap(color)
 	const slice = computeGamutSlice(hue)
-	const maxChromaAtBase = slice.maxChroma.solve({ lightness })
+	const maxChromaAtBase = Calc.solve(slice.maxChroma, { lightness })
 	const chromaRatio = maxChromaAtBase > 0 ? clampNumber(0, chroma / maxChromaAtBase, 1) : 0
 
 	const targetLExpr = invert
@@ -216,23 +222,26 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 	const clampedContrast = clampNumber(-1.08, contrast, 1.08)
 	const targetLightness = clampNumber(
 		0,
-		targetLExpr
-			.bind({
-				yBg: yBackground,
-				scYBg: softClampApprox.bind({ y: yBackground }),
-			})
-			.bind(slice)
-			.solve({
+		Calc.solve(
+			Calc.bind(
+				Calc.bind(targetLExpr, {
+					yBg: yBackground,
+					scYBg: Calc.bind(softClampApprox, { y: yBackground }),
+				}),
+				slice,
+			),
+			{
 				lightness,
 				chroma: chromaRatio,
 				'contrast-_': clampedContrast,
-			}),
+			},
+		),
 		1,
 	)
 
 	return createColor({
 		lightness: targetLightness,
-		chroma: slice.maxChroma.solve({ lightness: targetLightness }) * chromaRatio,
+		chroma: Calc.solve(slice.maxChroma, { lightness: targetLightness }) * chromaRatio,
 		hue,
 	})
 }

@@ -1,694 +1,330 @@
-```css
-@property --_color-hue {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_color-apexL {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_color-apexC {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_color-curvature {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_color-fA {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_color-fB {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_color-fD {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --lightness {
-  inherits: true;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --chroma {
-  inherits: true;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_color-mc {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --color {
-  inherits: true;
-  initial-value: transparent;
-  syntax: "<color>";
-}
-@property --_color-ybg {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_color-sc {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --contrast-text {
-  inherits: true;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_color-mc-text {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_cl-text {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_yt-text {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_lcl-text {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_yl-text {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_ylr-text {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_lcd-text {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_yd-text {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --_ydr-text {
-  inherits: false;
-  initial-value: 0;
-  syntax: "<number>";
-}
-@property --color-text {
-  inherits: true;
-  initial-value: transparent;
-  syntax: "<color>";
-}
-
-.preview {
-  --_color-mc: calc(
-    (1 - max(0, sign(var(--lightness) - var(--_color-apexL)))) *
-      var(--_color-apexC) * var(--lightness) / var(--_color-apexL) +
-      max(0, sign(var(--lightness) - var(--_color-apexL))) *
-      (
-        var(--_color-apexC) * (1 - var(--lightness)) /
-          (1 - var(--_color-apexL)) + var(--_color-curvature) *
-          pow(
-            sin(
-              max(
-                  0,
-                  (var(--lightness) - var(--_color-apexL)) /
-                    (1 - var(--_color-apexL))
-                ) *
-                pi
-            ),
-            0.95
-          ) *
-          var(--_color-apexC)
-      )
-  );
-  --color: oklch(
-    var(--lightness) calc(var(--_color-mc) * var(--chroma)) var(--_color-hue)
-  );
-  --_color-ybg: calc(
-    pow(var(--lightness), 3) *
-      (
-        1 + var(--_color-fA) * var(--chroma) + var(--_color-fB) *
-          pow(var(--chroma), 2) + var(--_color-fD) * pow(var(--chroma), 3)
-      )
-  );
-  --_color-sc: pow(pow(var(--_color-ybg), 1.75) + 0.00009, 0.57143);
-  --_color-mc-text: calc(
-    (1 - max(0, sign(var(--_cl-text) - var(--_color-apexL)))) *
-      var(--_color-apexC) * var(--_cl-text) / var(--_color-apexL) +
-      max(0, sign(var(--_cl-text) - var(--_color-apexL))) *
-      (
-        var(--_color-apexC) * (1 - var(--_cl-text)) /
-          (1 - var(--_color-apexL)) + var(--_color-curvature) *
-          pow(
-            sin(
-              max(
-                  0,
-                  (var(--_cl-text) - var(--_color-apexL)) /
-                    (1 - var(--_color-apexL))
-                ) *
-                pi
-            ),
-            0.95
-          ) *
-          var(--_color-apexC)
-      )
-  );
-  --_cl-text: pow(
-    var(--_yt-text) /
-      (
-        1 + var(--_color-fA) * var(--chroma) + var(--_color-fB) *
-          pow(var(--chroma), 2) + var(--_color-fD) * pow(var(--chroma), 3)
-      ),
-    0.33333
-  );
-  --_yt-text: calc(
-    (
-        (
-            1 -
-              max(
-                max(0, sign(0.08 - var(--_lcl-text))) *
-                  max(0, sign(0.08 - var(--_lcd-text))),
-                max(0, -1 * sign(var(--contrast-text))) *
-                  max(0, sign(var(--_ydr-text))) +
-                  max(0, sign(var(--contrast-text))) *
-                  max(0, sign(1 - var(--_ylr-text)))
-              )
-          ) *
-          max(
-            0,
-            sign(
-              var(--_lcl-text) - var(--_lcd-text) +
-                max(0, sign(var(--contrast-text))) * 0.001 -
-                max(0, -1 * sign(var(--contrast-text))) * 0.001
-            )
-          ) +
-          max(
-            max(0, sign(0.08 - var(--_lcl-text))) *
-              max(0, sign(0.08 - var(--_lcd-text))),
-            max(0, -1 * sign(var(--contrast-text))) *
-              max(0, sign(var(--_ydr-text))) +
-              max(0, sign(var(--contrast-text))) *
-              max(0, sign(1 - var(--_ylr-text)))
-          ) *
-          max(0, sign(var(--contrast-text)))
-      ) *
-      var(--_yl-text) +
-      (
-        (
-            1 -
-              max(
-                max(0, sign(0.08 - var(--_lcl-text))) *
-                  max(0, sign(0.08 - var(--_lcd-text))),
-                max(0, -1 * sign(var(--contrast-text))) *
-                  max(0, sign(var(--_ydr-text))) +
-                  max(0, sign(var(--contrast-text))) *
-                  max(0, sign(1 - var(--_ylr-text)))
-              )
-          ) *
-          max(
-            0,
-            sign(
-              -1 *
-                (
-                  var(--_lcl-text) - var(--_lcd-text) +
-                    max(0, sign(var(--contrast-text))) * 0.001 -
-                    max(0, -1 * sign(var(--contrast-text))) * 0.001
-                )
-            )
-          ) +
-          max(
-            max(0, sign(0.08 - var(--_lcl-text))) *
-              max(0, sign(0.08 - var(--_lcd-text))),
-            max(0, -1 * sign(var(--contrast-text))) *
-              max(0, sign(var(--_ydr-text))) +
-              max(0, sign(var(--contrast-text))) *
-              max(0, sign(1 - var(--_ylr-text)))
-          ) *
-          max(0, -1 * sign(var(--contrast-text)))
-      ) *
-      var(--_yd-text) +
-      (
-        1 -
-          max(
-            max(0, sign(var(--contrast-text))),
-            max(0, -1 * sign(var(--contrast-text)))
-          )
-      ) *
-      var(--_color-ybg)
-  );
-  --_lcl-text: max(
-    0,
-    1.14 *
-      (
-        pow(pow(pow(var(--_yl-text), 1.75) + 0.00009, 0.57143), 0.62) -
-          pow(pow(pow(var(--_color-ybg), 1.75) + 0.00009, 0.57143), 0.65)
-      ) -
-      0.027
-  );
-  --_yl-text: pow(max(0, pow(var(--_ylr-text), 1.75) - 0.00009), 0.57143);
-  --_ylr-text: clamp(
-    0,
-    (1 - max(0, sign(abs(var(--contrast-text)) - 0.022))) *
-      (
-        (
-            1 -
-              pow(sin(min(abs(var(--contrast-text)) / 0.022, 1) * 1.5708), 2.46)
-          ) *
-          var(--_color-sc) +
-          pow(sin(min(abs(var(--contrast-text)) / 0.022, 1) * 1.5708), 2.46) *
-          pow(pow(var(--_color-sc), 0.65) + 0.04298, 1.6129)
-      ) +
-      max(0, sign(abs(var(--contrast-text)) - 0.022)) *
-      pow(
-        pow(var(--_color-sc), 0.65) + (abs(var(--contrast-text)) + 0.027) / 1.14,
-        1.6129
-      ),
-    1
-  );
-  --_lcd-text: max(
-    0,
-    1.14 *
-      (
-        pow(pow(pow(var(--_color-ybg), 1.75) + 0.00009, 0.57143), 0.56) -
-          pow(pow(pow(var(--_yd-text), 1.75) + 0.00009, 0.57143), 0.57)
-      ) -
-      0.027
-  );
-  --_yd-text: pow(max(0, pow(var(--_ydr-text), 1.75) - 0.00009), 0.57143);
-  --_ydr-text: clamp(
-    0,
-    (1 - max(0, sign(abs(var(--contrast-text)) - 0.022))) *
-      (
-        (
-            1 -
-              pow(sin(min(abs(var(--contrast-text)) / 0.022, 1) * 1.5708), 2.46)
-          ) *
-          var(--_color-sc) +
-          pow(sin(min(abs(var(--contrast-text)) / 0.022, 1) * 1.5708), 2.46) *
-          pow(abs(pow(var(--_color-sc), 0.56) - 0.04298), 1.75439) *
-          sign(pow(var(--_color-sc), 0.56) - 0.04298)
-      ) +
-      max(0, sign(abs(var(--contrast-text)) - 0.022)) *
-      pow(
-        abs(
-          pow(var(--_color-sc), 0.56) - (abs(var(--contrast-text)) + 0.027) /
-            1.14
-        ),
-        1.75439
-      ) *
-      sign(
-        pow(var(--_color-sc), 0.56) - (abs(var(--contrast-text)) + 0.027) / 1.14
-      ),
-    1
-  );
-  --color-text: oklch(
-    var(--_cl-text) calc(var(--_color-mc-text) * var(--chroma))
-      var(--_color-hue)
-  );
-}
-
-.preview {
-  --_color-hue: 240;
-  --_color-apexL: 0.68;
-  --_color-apexC: 0.20342;
-  --_color-curvature: -0.02484;
-  --_color-fA: 0.04705;
-  --_color-fB: -0.02418;
-  --_color-fD: -0.00292;
-}
-```
-
-# RFC: calc-tree API cleanup
+# RFC: calc-tree namespace & functional API cleanup
 
 ## Status
 
-Draft — prerequisite for peer-colors implementation.
+Draft
 
 ## Summary
 
-Simplify the `@ok-apca/calc-tree` API to be consistently functional, make `@property` block sets a first-class concept, and encode the `_`-prefix = `inherits: false` convention so callers never pass `inherits` directly.
+Reorganize `@ok-apca/calc-tree` around three namespaces — `Calc`, `Colors`, `Properties` — and replace class methods (`.bind()`, `.solve()`, `.serialize()`) with standalone functions. Expressions become opaque data types with `@internal` fields, matching the pattern established by `PropertySet`.
 
 ## Motivation
 
-The peer-colors RFC (multi-role CSS generation) needs multiple `DeclarationBlock`s that share `@property` rules. Today each block independently collects its own rules via `.property()`, so the same `@property` would be emitted multiple times. That's task 3 in the peer-colors implementation plan.
+The previous RFC (now implemented) introduced the `Properties` namespace with a clean functional API and opaque `PropertySet` type. The rest of calc-tree hasn't caught up:
 
-Rather than patch around the current API, this is an opportunity to clean up accumulated friction:
+1. **No namespace for math.** Consumers import `* as ct` and call `ct.add`, `ct.multiply`, etc. — but the flat export mixes math constructors (`add`, `sin`), color construction (`oklch`), types (`NumberExpression`, `ExpressionInput`), and a formatting utility (`formatNumber`). Namespaces would make the API self-documenting: `Calc.add`, `Colors.oklch`, `Properties.make`.
 
-1. **Mixed paradigms.** Expression construction is functional (`add`, `multiply`, `property`), but CSS collection is class-method (`DeclarationBlock` with `.property()`, `.set()`, `.assign()`, `.toPropertyRules()`, `.toSelector()`). The `DeclarationBlock.property()` method duplicates the standalone `property()` function with added side effects (merging declarations/properties into internal maps). This is confusing — two `property` functions with different semantics.
+2. **Mixed paradigms.** Expression construction is functional (`add(a, b)`), but expression operations are class methods (`expr.bind(...)`, `expr.solve(...)`, `expr.serialize(...)`). The `Properties` namespace proved that the functional style works well — `bind`, `solve`, and `serialize` should follow suit.
 
-2. **`inherits` is always computable.** In ok-apca, the convention is: names starting with `_` are intermediate/private (`inherits: false`), everything else is public (`inherits: true`). Every single `inherits` argument in `generator.ts` follows this rule. Passing it explicitly is a source of potential bugs — the naming convention and the `inherits` flag could drift apart.
+3. **Murky file organization.** `constructors.ts` ↔ `expression.ts` have a circular import: constructors create expressions, expressions import `toExpression` for bind/solve. `nodes.ts` is cleanly internal, but the boundary between "constructor" and "expression operation" is blurry. The circular dependency makes it hard to understand the data flow.
 
-3. **`@property` sharing across blocks.** The current `DeclarationBlock` has no concept of shared property declarations. Each block that calls `.property()` independently collects its own `@property` rules. For peer-colors, we need multiple role blocks (one per active role) that share a common set of `@property` rules (for inputs like `--lightness`, outputs like `--color-fill`, and intermediates namespaced per role). There's no clean way to do this today.
-
-4. **`DeclarationBlock` does too much.** It mixes property declaration, expression wrapping, literal value assignment, and CSS rendering into one mutable class. Separating these concerns would make the API easier to understand and compose.
+4. **Expressions are classes but act like data.** `NumberExpression` and `ColorExpression` are immutable — every operation returns a new instance. They carry two fields (`node`, `refs`) that are only accessed by the library internals. Making them opaque data types (like `PropertySet`) with `@internal` fields is more honest about the API contract.
 
 ## Design
 
-### Drop `DeclarationBlock`, replace with functional `Properties` namespace
-
-The core idea: a **property set** is a plain collection of `@property` rules and CSS declarations that can be rendered to CSS. Property sets are built with functions, not methods. All functions are exported as a `Properties` namespace (following the Effect convention of namespaced submodule exports).
-
-Property types are split into separate functions — `number` and `color` — rather than passing a type string as an argument. When called without a value, the property is an input (just an `@property` rule). When called with an expression, the property is computed (both `@property` rule and declaration).
+### Three namespaces
 
 ```ts
-import { Properties } from "@ok-apca/calc-tree";
+import { Calc, Colors, Properties } from '@ok-apca/calc-tree'
+import type { NumberExpression } from '@ok-apca/calc-tree'
 
-// Create a property set
-const shared = Properties.make();
+// Math — all numeric expression constructors
+const x = Calc.add('a', Calc.multiply('b', 2))
+const clamped = Calc.clamp(0, x, 1)
 
-// Define input properties — returns an expression, registers the @property rule in the set
-const lightness = Properties.number(shared, "lightness");
-const hue = Properties.number(shared, "_color-hue");
+// Expression operations — bind, solve, serialize
+const bound = Calc.bind(x, { a: 0.5 })
+const value = Calc.solve(bound, { b: 3 })
+const css = Calc.serialize(clamped)
 
-// Define computed property — wraps expression, registers @property and declaration
-const mc = Properties.number(
-  shared,
-  "_color-mc",
-  maxChromaExpr.bind({ lightness }),
-);
+// Input type — replaces ExpressionInput
+function scale(input: Calc.Input<'factor'>): NumberExpression<'factor'> {
+  return Calc.multiply(input, 2)
+}
 
-// Define output color
-Properties.color(
-  shared,
-  "color",
-  oklch(lightness, multiply(mc, "chroma"), hue),
-);
+// Colors — oklch constructor + its own bind/serialize
+const color = Colors.oklch(0.7, 0.15, 240)
+const colorCss = Colors.serialize(color)
 
-// Render
-Properties.toAtRules(shared); // → all @property rules as CSS string
-Properties.toRuleset(shared, ".fill"); // → selector block with all declarations
+// Properties — unchanged from current API
+const set = Properties.make()
+const lightness = Properties.number(set, 'lightness')
 ```
 
-### Encode `_`-prefix convention: drop `inherits` parameter
+### `Calc` namespace
 
-The `inherits` value is derived from the property name:
+Contains all numeric expression constructors, expression operations for `NumberExpression`, and the `Input` type alias.
 
-- Name starts with `_` → `inherits: false` (intermediate/private)
-- Otherwise → `inherits: true` (public input or output)
+**Constructors** (existing, just moved under namespace):
+- `add`, `subtract`, `multiply`, `divide`
+- `pow`, `signedPow`
+- `sin`, `abs`, `sign`
+- `clamp`, `min`, `max`
+- `lerp`
+
+**Expression operations** for `NumberExpression` (currently class methods, become standalone):
+- `bind(expr, bindings)` — substitute references, returns `NumberExpression`
+- `solve(expr, bindings?)` — evaluate to number
+- `serialize(expr, bindings?)` — produce CSS string
+
+**Types:**
+- `Input<Refs>` — union of `NumberExpression<Refs> | number | string` (renamed from `ExpressionInput`). Consumers use `Calc.Input` where they'd use `ExpressionInput` today.
+- `InferRefs<T>` — type utility to extract reference variables from an `Input`
+
+**Utilities:**
+- `formatNumber(n)` — number formatting (π detection, trailing zeros)
+
+### `Colors` namespace
+
+Contains `oklch` and expression operations for `ColorExpression`.
 
 ```ts
-// Before
-base.property(`${p}hue`, 'number', true)    // _ prefix + inherits: true ← contradictory!
-base.property(`${p}mc`, maxChromaExpr...)    // _ prefix, inherits defaults to false ✓
-base.property('lightness', 'number', true)   // no prefix, inherits: true ✓
-base.property(output, color, true)           // no prefix, inherits: true ✓
-
-// After — no inherits argument, convention is the API
-Properties.number(set, '_color-hue')        // _ → inherits: false
-Properties.number(set, 'lightness')         // no _ → inherits: true
-Properties.color(set, 'color', colorExpr)   // no _ → inherits: true
+export function oklch<L, C, H>(lightness: L, chroma: C, hue: H): ColorExpression<...>
 ```
 
-Previously, the gamut slice properties (`_color-hue`, `_color-apexL`, etc.) were `_`-prefixed but `inherits: true` — they were set by a hue ancestor selector and inherited via CSS inheritance. This broke the convention.
+Pluralized to `Colors` to avoid conflicts with a `Color` interface in consuming modules.
 
-The peer-colors RFC resolves this: hue selectors now use `:is()` nesting to assign gamut constants directly to role elements (e.g., `.red { :is(&, & *):is(.fill, .text) { --_color-hue: 25; } }`). With this change, all `_`-prefixed properties are `inherits: false` — no exceptions.
+**Expression operations** for `ColorExpression`:
+- `Colors.bind(expr, bindings)` — substitute references, returns `ColorExpression`
+- `Colors.serialize(expr, bindings?)` — produce CSS string
 
-| Property        | Prefix | `inherits` | Why                                      |
-| --------------- | ------ | ---------- | ---------------------------------------- |
-| `_color-hue`    | `_`    | `false`    | Assigned directly by nested hue selector |
-| `_color-apexL`  | `_`    | `false`    | Same                                     |
-| `_color-mc`     | `_`    | `false`    | Computed intermediate                    |
-| `_color-ybg`    | `_`    | `false`    | Computed intermediate                    |
-| `lightness`     | none   | `true`     | User-facing input                        |
-| `chroma`        | none   | `true`     | User-facing input                        |
-| `color`         | none   | `true`     | Output                                   |
-| `color-text`    | none   | `true`     | Output                                   |
-| `contrast-text` | none   | `true`     | User-facing input                        |
+`Colors` does not have `solve` — color expressions cannot be evaluated to a number. Each namespace owns the operations for its expression type, so there's no shared `Expr` namespace or method duplication concern.
 
-The convention holds universally: `_` prefix → `inherits: false`, no prefix → `inherits: true`.
+### Opaque expression types
 
-### Property sets with sharing
-
-For peer-colors, we need shared `@property` rules across multiple selector blocks. The API should support this:
+Expressions become interfaces with `@internal` fields, matching `PropertySet`:
 
 ```ts
-// Shared set — collects @property rules only, no selector declarations
-const shared = Properties.make();
+export interface NumberExpression<Refs extends string = never> {
+  /** @internal */ readonly _node: ExpressionNode
+  /** @internal */ readonly _refs: ReadonlySet<string>
+  /** @internal */ readonly _brand: 'NumberExpression'
+}
 
-// Input properties (shared across all role selectors)
-const lightness = Properties.number(shared, "lightness");
-
-// Per-role sets — each gets its own selector declarations
-const fillBlock = Properties.make(shared);
-const textBlock = Properties.make(shared);
-
-// Gamut constants as intermediates (inherits: false via _ prefix)
-// Values assigned by nested hue selectors, not inherited
-const hue = Properties.number(fillBlock, "_color-fill-hue");
-
-// Computed intermediates scoped to fill's selector
-const mc = Properties.number(
-  fillBlock,
-  "_color-fill-mc",
-  maxChromaExpr.bind({ lightness }),
-);
-
-// Output color assigned in fill's selector
-Properties.color(
-  fillBlock,
-  "color-fill",
-  oklch(lightness, multiply(mc, "chroma"), hue),
-);
-
-// Render — shared @property rules include everything from all linked sets
-Properties.toAtRules(shared);
-Properties.toRuleset(fillBlock, ".fill");
-Properties.toRuleset(textBlock, ".text");
+export interface ColorExpression<Refs extends string = never> {
+  /** @internal */ readonly _node: ExpressionNode
+  /** @internal */ readonly _refs: ReadonlySet<string>
+  /** @internal */ readonly _brand: 'ColorExpression'
+}
 ```
 
-Key behaviors:
+The `_brand` field distinguishes the two types at the type level and prevents accidental interchange. Internally, creation uses plain object literals (or a factory function) — no classes needed.
 
-- `Properties.make()` creates a standalone set
-- `Properties.make(parent)` creates a child set that contributes `@property` rules to the parent
-- `Properties.toAtRules(parent)` renders rules from the parent and all children (deduplicated)
-- `Properties.toRuleset(child, selector)` renders only that child's declarations
-- `Properties.number(set, name)` without a value registers an `@property` rule and returns an expression (input)
-- `Properties.number(set, name, expr)` with a value registers `@property` rule + declaration, returns expression (computed intermediate)
-- `Properties.color(set, name, expr)` registers `@property` rule + declaration for color properties
+### File reorganization
 
-### Batch number definitions (hue selectors)
+Current:
+```
+constructors.ts  ← math constructors + oklch + toExpression/constant/reference
+expression.ts    ← BaseExpression/NumberExpression/ColorExpression classes (methods: bind, solve, serialize)
+nodes.ts         ← internal AST node classes
+properties.ts    ← Properties namespace
+index.ts         ← flat re-exports
+```
 
-Hue selectors assign many literal values at once. `numbers` is a batch `number` that takes a `Record<string, number | NumberExpression>`:
+Proposed:
+```
+expression.ts    ← opaque NumberExpression/ColorExpression interfaces + internal factory functions
+nodes.ts         ← internal AST node classes (unchanged)
+calc.ts          ← Calc namespace (math constructors + bind/solve/serialize for NumberExpression)
+colors.ts        ← Colors namespace (oklch + bind/serialize for ColorExpression)
+properties.ts    ← Properties namespace (unchanged)
+index.ts         ← export { Calc } from './calc.ts'; export { Colors } from './colors.ts'; export * as Properties from './properties.ts'
+```
+
+The circular dependency is eliminated: `expression.ts` defines only types and factory functions (no imports from `calc.ts`). `calc.ts` and `colors.ts` import from `expression.ts` and `nodes.ts`.
+
+### Breaking change: import style
+
+**Before:**
+```ts
+import * as ct from '@ok-apca/calc-tree'
+import { Properties } from '@ok-apca/calc-tree'
+import type { ExpressionInput } from '@ok-apca/calc-tree'
+
+ct.add('a', ct.multiply('b', 2))
+ct.oklch(lightness, chroma, hue)
+expr.bind({ x: 5 })
+expr.solve({ x: 5 })
+const input: ExpressionInput<'x'> = 'x'
+```
+
+**After:**
+```ts
+import { Calc, Colors, Properties } from '@ok-apca/calc-tree'
+
+Calc.add('a', Calc.multiply('b', 2))
+Colors.oklch(lightness, chroma, hue)
+Calc.bind(expr, { x: 5 })
+Calc.solve(expr, { x: 5 })
+const input: Calc.Input<'x'> = 'x'
+```
+
+### Type exports
+
+Expression types are exported at the top level for convenience. `Input` and `InferRefs` live on the `Calc` namespace since they describe numeric expression inputs:
 
 ```ts
-const hueBlock = Properties.make();
-Properties.numbers(hueBlock, {
-  "_color-hue": 25,
-  "_color-apexL": 0.65,
-  "_color-apexC": 0.28,
-  "_color-curvature": 1.2,
-  "_color-fA": 0.12,
-  "_color-fB": 0.34,
-  "_color-fD": 0.56,
-});
-Properties.toRuleset(hueBlock, ".red");
+// Top-level type exports
+export type { NumberExpression, ColorExpression } from './expression.ts'
+export type { PropertySet, PropertyRule } from './properties.ts'
+
+// Namespace-scoped types (accessed as Calc.Input, Calc.InferRefs)
+Calc.Input<Refs>      // NumberExpression<Refs> | number | string
+Calc.InferRefs<T>     // extract refs from an Input
 ```
 
-No prefix support — full property names are always explicit. This keeps the API compatible with future type-level tracking of property names in a set.
-
-### Merging property sets
-
-When mapping over color sets or roles produces an array of `PropertySet`s, `merge` combines them into a single set:
-
+Usage:
 ```ts
-const roleSets = activeRoles.map((role) => {
-  const set = Properties.make();
-  // ... define properties for this role ...
-  return set;
-});
+import type { NumberExpression } from '@ok-apca/calc-tree'
+import { Calc } from '@ok-apca/calc-tree'
 
-const merged = Properties.merge(...roleSets);
-Properties.toAtRules(merged); // all @property rules, deduplicated
+// Where you'd previously use ExpressionInput:
+function foo(x: Calc.Input<'lightness'>): NumberExpression<'lightness'> { ... }
 ```
-
-Conflict resolution: `@property` rules are deduplicated by name — if two sets define the same property name with the same syntax/inherits, only one rule is emitted. Declarations use last-write-wins (later sets override earlier ones for the same property name), matching `Object.assign` semantics. In practice, the primary use case is combining `@property` rules across independently-built sets, where property names are already disjoint by design (namespaced per role).
-
-### Expression construction — no changes
-
-The functional expression builders (`add`, `multiply`, `pow`, `oklch`, etc.) and the expression classes (`NumberExpression`, `ColorExpression`) stay as-is. They're already well-designed:
-
-- Pure functional construction
-- Type-safe ref tracking
-- Immutable `.bind()` returns new expressions
-- `.solve()` for build-time evaluation
-- `.toCss()` for standalone CSS generation (still useful for testing/debugging)
-
-The standalone `property()` function is removed — its role is taken by `Properties.number` and `Properties.color`.
 
 ## Migration
 
-### Before (current API)
+### ok-apca gamut.ts
 
 ```ts
-const base = ct.declarations();
+// Before
+import * as ct from '@ok-apca/calc-tree'
 
-const hueInput = base.property(`${p}hue`, "number", true);
-const lightnessInput = base.property("lightness", "number", true);
-base.property("chroma", "number", true);
+const maxChromaExpr: ct.NumberExpression<'lightness' | 'apexL' | 'apexC' | 'curvature'> =
+  ct.lerp(
+    ct.divide(ct.multiply('apexC', 'lightness'), 'apexL'),
+    // ...
+  )
+slice.maxChroma.solve({ lightness })
 
-const maxChromaProp = base.property(
-  `${p}mc`,
-  maxChromaExpr.bind({ lightness: lightnessInput }),
-);
-base.property(
-  output,
-  ct.oklch("lightness", ct.multiply(maxChromaProp, "chroma"), hueInput),
-  true,
-);
+// After
+import { Calc } from '@ok-apca/calc-tree'
+import type { NumberExpression } from '@ok-apca/calc-tree'
 
-base.toPropertyRules();
-base.toSelector(baseSelector);
+const maxChromaExpr: NumberExpression<'lightness' | 'apexL' | 'apexC' | 'curvature'> =
+  Calc.lerp(
+    Calc.divide(Calc.multiply('apexC', 'lightness'), 'apexL'),
+    // ...
+  )
+Calc.solve(slice.maxChroma, { lightness })
 ```
 
-### After (new API, current single-base model)
+### ok-apca generator.ts
 
 ```ts
-import { Properties } from "@ok-apca/calc-tree";
+// Before
+import * as ct from '@ok-apca/calc-tree'
+import { Properties } from '@ok-apca/calc-tree'
 
-const set = Properties.make();
+ct.oklch('lightness', ct.multiply(maxChromaProp, 'chroma'), hueInput)
+expr.bind({ fA: fAInput, fB: fBInput, fD: fDInput })
 
-const hueRef = Properties.number(set, `${p}hue`); // _ prefix → inherits: false
-const lightnessInput = Properties.number(set, "lightness");
-Properties.number(set, "chroma");
+// After
+import { Calc, Colors, Properties } from '@ok-apca/calc-tree'
 
-const maxChromaProp = Properties.number(
-  set,
-  `${p}mc`,
-  maxChromaExpr.bind({ lightness: lightnessInput }),
-);
-Properties.color(
-  set,
-  output,
-  ct.oklch("lightness", ct.multiply(maxChromaProp, "chroma"), hueRef),
-);
-
-Properties.toAtRules(set);
-Properties.toRuleset(set, baseSelector);
+Colors.oklch('lightness', Calc.multiply(maxChromaProp, 'chroma'), hueInput)
+Calc.bind(expr, { fA: fAInput, fB: fBInput, fD: fDInput })
 ```
 
-### After (peer-colors, multiple roles)
+### ok-apca apca.ts / contrast.ts
 
 ```ts
-import { Properties } from "@ok-apca/calc-tree";
+// Before
+import * as ct from '@ok-apca/calc-tree'
 
-const shared = Properties.make();
+const absContrast = ct.abs('contrast')
+expr.bind({ y: yBgExpr })
 
-const lightnessInput = Properties.number(shared, "lightness");
-Properties.number(shared, "chroma");
+// After
+import { Calc } from '@ok-apca/calc-tree'
 
-for (const role of activeRoles) {
-  const roleBlock = Properties.make(shared);
-
-  // Gamut constants — intermediates assigned by nested hue selectors
-  const hueRef = Properties.number(roleBlock, `${p}${role.name}-hue`);
-  // ... apexL, apexC, curvature, fA, fB, fD ...
-
-  const mc = Properties.number(
-    roleBlock,
-    `${p}${role.name}-mc`,
-    maxChromaExpr.bind({ lightness: lightnessInput }),
-  );
-  Properties.color(
-    roleBlock,
-    `${name}-${role.name}`,
-    ct.oklch(lightnessInput, ct.multiply(mc, "chroma"), hueRef),
-  );
-
-  // contrast targets...
-
-  roleSelectors.push(Properties.toRuleset(roleBlock, role.selector));
-}
-
-Properties.toAtRules(shared); // all @property rules, deduplicated
+const absContrast = Calc.abs('contrast')
+Calc.bind(expr, { y: yBgExpr })
 ```
 
 ## Scope
 
 ### In scope
 
-- Replace `DeclarationBlock` class with `Properties` namespace: `make()`, `number()`, `color()`, `numbers()`, `merge()`
-- Replace `toPropertyRules()` / `toSelector()` methods with `Properties.toAtRules()` / `Properties.toRuleset()`
-- Remove the standalone `property()` constructor function
-- Add parent-child property set linking for `@property` sharing
-- Update ok-apca `generator.ts` to use the new API
+- Create `Calc` namespace with math constructors + `bind`/`solve`/`serialize` + `Input`/`InferRefs` types
+- Create `Colors` namespace with `oklch` + `bind`/`serialize` (no `solve`)
+- Convert `NumberExpression`/`ColorExpression` from classes to opaque interfaces with `@internal` fields
+- Reorganize files: `calc.ts`, `colors.ts`, `expression.ts` (types only)
+- Eliminate circular dependency between constructors and expressions
+- Update ok-apca consumers (`gamut.ts`, `apca.ts`, `contrast.ts`, `generator.ts`)
+- Update tests
+- Update CLAUDE.md
 
 ### Out of scope
 
-- Expression construction API (`add`, `multiply`, etc.) — no changes
-- Expression classes (`NumberExpression`, `ColorExpression`) — no changes
-- `.bind()`, `.solve()`, `.toCss()` on expressions — no changes
-- `formatNumber` — no changes
+- `Properties` namespace — no changes (already functional)
+- `nodes.ts` internal AST — no changes
+- `formatNumber` — stays, just moves into `Calc` namespace
+- Expression semantics (constant folding, ref tracking, etc.) — no changes
 
 ## Implementation plan
 
-### 1. Implement `Properties` namespace
+### 1. Restructure expression types
 
-**File:** `packages/calc-tree/src/property.ts` (new)
+**File:** `packages/calc-tree/src/expression.ts`
 
-- [ ] Define `PropertySet` type (opaque — internal structure not exposed)
-- [ ] Implement `make(parent?)` — creates a property set, optionally linked to a parent
-- [ ] Implement `number(set, name)` — registers `@property` rule with `syntax: '<number>'`, returns expression (input)
-- [ ] Implement `number(set, name, expr)` — registers `@property` rule + declaration, returns expression (computed)
-- [ ] Implement `color(set, name, expr)` — registers `@property` rule with `syntax: '<color>'` + declaration, returns expression
-- [ ] Implement `numbers(set, values)` — batch `number` taking `Record<string, number | NumberExpression>`, no prefix support
-- [ ] Implement `merge(...sets)` — combines multiple property sets into one (deduplicates `@property` rules, last-write-wins for declarations)
-- [ ] Implement `toAtRules(set)` — renders deduplicated `@property` rules from set + children
-- [ ] Implement `toRuleset(set, selector)` — renders set's declarations as selector block
+- [ ] Convert `NumberExpression` and `ColorExpression` from classes to opaque interfaces with `@internal` `_node`, `_refs`, `_brand` fields
+- [ ] Add internal factory functions `makeNumber(node, refs)` and `makeColor(node, refs)` (not exported from package)
+- [ ] Add internal accessor helpers `getNode(expr)` and `getRefs(expr)` (not exported)
+- [ ] Remove `BaseExpression` abstract class
 
-### 2. Update exports
+### 2. Create `Calc` namespace
 
-**File:** `packages/calc-tree/src/index.ts`
+**File:** `packages/calc-tree/src/calc.ts`
 
-- [ ] Export `Properties` namespace (containing `make`, `number`, `color`, `numbers`, `merge`, `toAtRules`, `toRuleset`)
-- [ ] Remove `declarations` export
-- [ ] Remove standalone `property` export
-- [ ] Keep `PropertyRule`, `CSSResult` type exports
+- [ ] Move all math constructors from `constructors.ts`: `add`, `subtract`, `multiply`, `divide`, `pow`, `signedPow`, `sin`, `abs`, `sign`, `clamp`, `min`, `max`, `lerp`
+- [ ] Move `constant`, `reference`, `toExpression` as internal helpers (not in namespace surface)
+- [ ] Implement `bind(expr, bindings)` — extracted from `BaseExpression.bind()`
+- [ ] Implement `solve(expr, bindings?)` — extracted from `NumberExpression.solve()`
+- [ ] Implement `serialize(expr, bindings?)` — extracted from `BaseExpression.serialize()`
+- [ ] Move `formatNumber` into namespace
+- [ ] Export `Input` type (renamed from `ExpressionInput`) and `InferRefs` type on the namespace
 
-### 3. Remove old code
+### 3. Create `Colors` namespace
 
-**Files:** `packages/calc-tree/src/declarations.ts`, `packages/calc-tree/src/constructors.ts`
+**File:** `packages/calc-tree/src/colors.ts`
 
-- [ ] Delete `DeclarationBlock` class and `declarations()` factory
-- [ ] Remove standalone `property()` function from constructors
-- [ ] Remove `PropertyNode` from nodes if it can be replaced (or keep as internal implementation detail for `input`/`intermediate`/`output`)
+- [ ] Move `oklch` from `constructors.ts`
+- [ ] Add `bind(expr, bindings)` for `ColorExpression`
+- [ ] Add `serialize(expr, bindings?)` for `ColorExpression`
 
-### 4. Update ok-apca generator
+### 4. Update `properties.ts`
 
-**File:** `packages/ok-apca/src/generator.ts`
+- [ ] Update internal imports to use new expression factory/accessor functions instead of class constructors
+- [ ] No public API changes
 
-- [ ] Migrate from `DeclarationBlock` to `Properties.make` + `Properties.number`/`Properties.color`
-- [ ] Verify generated CSS is identical (snapshot test or diff)
+### 5. Update index.ts exports
 
-### 5. Update tests
+- [ ] `export { Calc } from './calc.ts'` (or `export * as Calc`)
+- [ ] `export { Colors } from './colors.ts'` (or `export * as Colors`)
+- [ ] `export * as Properties from './properties.ts'` (unchanged)
+- [ ] Export types at top level: `NumberExpression`, `ColorExpression`, `PropertySet`, `PropertyRule`
+- [ ] Ensure `Input` and `InferRefs` are accessible as `Calc.Input` and `Calc.InferRefs`
+- [ ] Remove old flat exports (`add`, `multiply`, `oklch`, etc.)
+- [ ] Delete `constructors.ts`
 
-**Files:** `packages/calc-tree/test/**`
+### 6. Update ok-apca consumers
 
-- [ ] Update unit tests for new API surface
-- [ ] Verify expression construction tests unchanged
-- [ ] Add tests for parent-child property set sharing
-- [ ] Add tests for `toPropertyRules` deduplication
+**Files:** `gamut.ts`, `apca.ts`, `contrast.ts`, `generator.ts`
 
-### 6. Update CLAUDE.md
+- [ ] Replace `import * as ct` with `import { Calc, Colors, Properties }`
+- [ ] Replace `ct.add(...)` with `Calc.add(...)`, etc.
+- [ ] Replace `ct.oklch(...)` with `Colors.oklch(...)`
+- [ ] Replace `expr.bind(...)` with `Calc.bind(expr, ...)` or `Colors.bind(expr, ...)`
+- [ ] Replace `expr.solve(...)` with `Calc.solve(expr, ...)`
+- [ ] Verify generated CSS is identical
 
-- [ ] Update calc-tree architecture description
+### 7. Update tests
+
+- [ ] Update all test imports to use new namespaces
+- [ ] Replace method calls with namespace function calls
+- [ ] Verify all tests pass
+
+### 8. Update CLAUDE.md
+
+- [ ] Update calc-tree architecture description to reflect namespaces and functional API

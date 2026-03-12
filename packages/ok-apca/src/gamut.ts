@@ -1,4 +1,4 @@
-import * as ct from '@ok-apca/calc-tree'
+import { Calc } from '@ok-apca/calc-tree'
 import { type Color, createColor, inP3 } from './color.ts'
 import { clampNumber } from './util.ts'
 
@@ -47,7 +47,7 @@ export interface GamutSlice {
 	readonly fB: number
 	readonly fD: number
 	/** Max chroma expression tree pre-bound to this slice's geometry. */
-	readonly maxChroma: ct.NumberExpression<'lightness'>
+	readonly maxChroma: Calc.Expression<'lightness'>
 }
 
 const gamutSliceCache = new Map<number, GamutSlice>()
@@ -105,7 +105,7 @@ export function computeGamutSlice(hue: number): GamutSlice {
 		fA: yCoeffA * kScale,
 		fB: yCoeffB * kScale ** 2,
 		fD: yCoeffD * kScale ** 3,
-		maxChroma: maxChromaExpr.bind({
+		maxChroma: Calc.bind(maxChromaExpr, {
 			apexL: lightnessAtMaxChroma,
 			apexC: maxC,
 			curvature,
@@ -171,20 +171,20 @@ function fitCurvature(hue: number, apexL: number, apexC: number): number {
 // Max Chroma Expression Tree
 // =============================================================================
 
-const oneMinusApexL = ct.subtract(1, 'apexL')
+const oneMinusApexL = Calc.subtract(1, 'apexL')
 
-export const maxChromaExpr: ct.NumberExpression<'lightness' | 'apexL' | 'apexC' | 'curvature'> =
-	ct.lerp(
-		ct.divide(ct.multiply('apexC', 'lightness'), 'apexL'),
-		ct.add(
-			ct.divide(ct.multiply('apexC', ct.subtract(1, 'lightness')), oneMinusApexL),
-			ct.multiply(
-				ct.multiply(
+export const maxChromaExpr: Calc.Expression<'lightness' | 'apexL' | 'apexC' | 'curvature'> =
+	Calc.lerp(
+		Calc.divide(Calc.multiply('apexC', 'lightness'), 'apexL'),
+		Calc.add(
+			Calc.divide(Calc.multiply('apexC', Calc.subtract(1, 'lightness')), oneMinusApexL),
+			Calc.multiply(
+				Calc.multiply(
 					'curvature',
-					ct.pow(
-						ct.sin(
-							ct.multiply(
-								ct.max(0, ct.divide(ct.subtract('lightness', 'apexL'), oneMinusApexL)),
+					Calc.pow(
+						Calc.sin(
+							Calc.multiply(
+								Calc.max(0, Calc.divide(Calc.subtract('lightness', 'apexL'), oneMinusApexL)),
 								Math.PI,
 							),
 						),
@@ -194,7 +194,7 @@ export const maxChromaExpr: ct.NumberExpression<'lightness' | 'apexL' | 'apexC' 
 				'apexC',
 			),
 		),
-		ct.max(0, ct.sign(ct.subtract('lightness', 'apexL'))),
+		Calc.max(0, Calc.sign(Calc.subtract('lightness', 'apexL'))),
 	)
 
 /**
@@ -207,7 +207,7 @@ export function gamutMap(color: Color): Color {
 
 	return createColor({
 		hue,
-		chroma: clampNumber(0, chroma, slice.maxChroma.solve({ lightness })),
+		chroma: clampNumber(0, chroma, Calc.solve(slice.maxChroma, { lightness })),
 		lightness,
 	})
 }
@@ -249,11 +249,10 @@ const S_PRIME_KB = -1.2914855480194092
  * only on hue (precomputed at build time). For achromatic colors (C=0),
  * this reduces to Y = L³.
  */
-export const exactY: ct.NumberExpression<
-	'lightness' | 'yChroma' | 'yCoeffA' | 'yCoeffB' | 'yCoeffD'
-> = ct.add(
-	ct.pow('lightness', 3),
-	ct.multiply('yCoeffA', ct.multiply(ct.pow('lightness', 2), 'yChroma')),
-	ct.multiply('yCoeffB', ct.multiply('lightness', ct.pow('yChroma', 2))),
-	ct.multiply('yCoeffD', ct.pow('yChroma', 3)),
-)
+export const exactY: Calc.Expression<'lightness' | 'yChroma' | 'yCoeffA' | 'yCoeffB' | 'yCoeffD'> =
+	Calc.add(
+		Calc.pow('lightness', 3),
+		Calc.multiply('yCoeffA', Calc.multiply(Calc.pow('lightness', 2), 'yChroma')),
+		Calc.multiply('yCoeffB', Calc.multiply('lightness', Calc.pow('yChroma', 2))),
+		Calc.multiply('yCoeffD', Calc.pow('yChroma', 3)),
+	)

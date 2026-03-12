@@ -1,21 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { constant, reference } from '../src/constructors.ts'
-import { add, multiply, oklch, Properties, pow } from '../src/index.ts'
+import { constant, reference } from '../src/expression.ts'
+import { Calc, Colors, Properties } from '../src/index.ts'
 
 describe('property wrapping', () => {
 	describe('basic wrapping', () => {
 		it('wraps expression as property', () => {
-			const expr = multiply('x', 2)
+			const expr = Calc.multiply('x', 2)
 
 			// Evaluate before wrapping
-			const result = expr.solve({ x: 5 })
+			const result = Calc.solve(expr, { x: 5 })
 			expect(result).toBe(10)
 		})
 
 		it('includes property declaration in CSS output', () => {
-			const expr = Properties.number('doubled', multiply('x', 2).bind({ x: 'runtime' }))
+			const expr = Properties.number('doubled', Calc.bind(Calc.multiply('x', 2), { x: 'runtime' }))
 
-			expect(expr.serialize()).toBe('var(--doubled)')
+			expect(Calc.serialize(expr)).toBe('var(--doubled)')
 
 			const set = Properties.make()
 			Properties.collect(set, expr)
@@ -24,9 +24,9 @@ describe('property wrapping', () => {
 		})
 
 		it('leaves unbound references as CSS variables', () => {
-			const expr = Properties.number('sum', add('x', 'y'))
+			const expr = Properties.number('sum', Calc.add('x', 'y'))
 
-			expect(expr.serialize()).toBe('var(--sum)')
+			expect(Calc.serialize(expr)).toBe('var(--sum)')
 
 			const set = Properties.make()
 			Properties.collect(set, expr)
@@ -37,10 +37,10 @@ describe('property wrapping', () => {
 
 	describe('nested properties', () => {
 		it('handles nested properties', () => {
-			const inner = Properties.number('doubled', multiply('x', 2).bind({ x: 'runtime' }))
-			const outer = Properties.number('result', add(inner, 5))
+			const inner = Properties.number('doubled', Calc.bind(Calc.multiply('x', 2), { x: 'runtime' }))
+			const outer = Properties.number('result', Calc.add(inner, 5))
 
-			expect(outer.serialize()).toBe('var(--result)')
+			expect(Calc.serialize(outer)).toBe('var(--result)')
 
 			const set = Properties.make()
 			Properties.collect(set, outer)
@@ -50,11 +50,11 @@ describe('property wrapping', () => {
 		})
 
 		it('handles deeply nested properties', () => {
-			const xSquared = Properties.number('x-squared', pow('x', 2))
-			const ySquared = Properties.number('y-squared', pow('y', 2))
-			const distance = Properties.number('distance', pow(add(xSquared, ySquared), 0.5))
+			const xSquared = Properties.number('x-squared', Calc.pow('x', 2))
+			const ySquared = Properties.number('y-squared', Calc.pow('y', 2))
+			const distance = Properties.number('distance', Calc.pow(Calc.add(xSquared, ySquared), 0.5))
 
-			expect(distance.serialize()).toBe('var(--distance)')
+			expect(Calc.serialize(distance)).toBe('var(--distance)')
 
 			const set = Properties.make()
 			Properties.collect(set, distance)
@@ -65,9 +65,9 @@ describe('property wrapping', () => {
 		})
 
 		it('collects declarations in correct order', () => {
-			const a = Properties.number('a', reference('x').bind({ x: 'input' }))
-			const b = Properties.number('b', add(a, 1))
-			const c = Properties.number('c', multiply(b, 2))
+			const a = Properties.number('a', Calc.bind(reference('x'), { x: 'input' }))
+			const b = Properties.number('b', Calc.add(a, 1))
+			const c = Properties.number('c', Calc.multiply(b, 2))
 
 			const set = Properties.make()
 			Properties.collect(set, c)
@@ -83,7 +83,7 @@ describe('property wrapping', () => {
 		it('throws on property name conflicts with different values', () => {
 			const prop1 = Properties.number('value', reference('x'))
 			const prop2 = Properties.number('value', reference('y'))
-			const expr = add(prop1, prop2)
+			const expr = Calc.add(prop1, prop2)
 
 			const set = Properties.make()
 			expect(() => {
@@ -93,9 +93,9 @@ describe('property wrapping', () => {
 
 		it('allows same property with same value', () => {
 			const shared = Properties.number('shared', reference('x'))
-			const expr = add(shared, shared)
+			const expr = Calc.add(shared, shared)
 
-			expect(expr.serialize()).toBe('calc(var(--shared) + var(--shared))')
+			expect(Calc.serialize(expr)).toBe('calc(var(--shared) + var(--shared))')
 
 			const set = Properties.make()
 			Properties.collect(set, expr)
@@ -105,9 +105,9 @@ describe('property wrapping', () => {
 
 		it('allows same property when resolved to same constant', () => {
 			const shared = Properties.number('shared', constant(42))
-			const expr = add(shared, shared)
+			const expr = Calc.add(shared, shared)
 
-			expect(expr.serialize()).toBe('calc(var(--shared) + var(--shared))')
+			expect(Calc.serialize(expr)).toBe('calc(var(--shared) + var(--shared))')
 
 			const set = Properties.make()
 			Properties.collect(set, expr)
@@ -118,17 +118,17 @@ describe('property wrapping', () => {
 
 	describe('binding with properties', () => {
 		it('binding works before property wrapping', () => {
-			const inner = Properties.number('sum', add('x', 'y').bind({ x: 5, y: 10 }))
-			const expr = multiply(inner, 'z')
+			const inner = Properties.number('sum', Calc.bind(Calc.add('x', 'y'), { x: 5, y: 10 }))
+			const expr = Calc.multiply(inner, 'z')
 
-			const result = expr.solve({ z: 2 })
+			const result = Calc.solve(expr, { z: 2 })
 
 			expect(result).toBe(30) // (5 + 10) * 2
 		})
 
 		it('binding updates property declarations', () => {
-			const inner = Properties.number('sum', add('x', 'y').bind({ x: 5 }))
-			const expr = multiply(inner, 2)
+			const inner = Properties.number('sum', Calc.bind(Calc.add('x', 'y'), { x: 5 }))
+			const expr = Calc.multiply(inner, 2)
 
 			const set = Properties.make()
 			Properties.collect(set, expr)
@@ -139,12 +139,12 @@ describe('property wrapping', () => {
 
 	describe('integration', () => {
 		it('generates CSS with complex nested properties', () => {
-			const xSquared = Properties.number('x2', pow('x', 2))
-			const axSquared = Properties.number('ax2', multiply('a', xSquared))
-			const bx = Properties.number('bx', multiply('b', 'x'))
-			const quadratic = Properties.number('quadratic', add(axSquared, bx, 'c'))
+			const xSquared = Properties.number('x2', Calc.pow('x', 2))
+			const axSquared = Properties.number('ax2', Calc.multiply('a', xSquared))
+			const bx = Properties.number('bx', Calc.multiply('b', 'x'))
+			const quadratic = Properties.number('quadratic', Calc.add(axSquared, bx, 'c'))
 
-			expect(quadratic.serialize()).toBe('var(--quadratic)')
+			expect(Calc.serialize(quadratic)).toBe('var(--quadratic)')
 
 			const set = Properties.make()
 			Properties.collect(set, quadratic)
@@ -158,7 +158,7 @@ describe('property wrapping', () => {
 
 	describe('inherits convention', () => {
 		it('_ prefix properties have inherits: false', () => {
-			const expr = Properties.number('_internal', multiply('x', 2))
+			const expr = Properties.number('_internal', Calc.multiply('x', 2))
 
 			const set = Properties.make()
 			Properties.collect(set, expr)
@@ -202,7 +202,7 @@ describe('Properties namespace', () => {
 			const expr = Properties.number(set, 'lightness')
 
 			// Returns expression referencing the property
-			expect(expr.serialize()).toBe('var(--lightness)')
+			expect(Calc.serialize(expr)).toBe('var(--lightness)')
 
 			// Registers @property rule
 			const atRules = Properties.toAtRules(set)
@@ -217,9 +217,9 @@ describe('Properties namespace', () => {
 
 		it('declares computed property with expression value', () => {
 			const set = Properties.make()
-			const expr = Properties.number(set, '_doubled', multiply('x', 2))
+			const expr = Properties.number(set, '_doubled', Calc.multiply('x', 2))
 
-			expect(expr.serialize()).toBe('var(--_doubled)')
+			expect(Calc.serialize(expr)).toBe('var(--_doubled)')
 
 			const atRules = Properties.toAtRules(set)
 			expect(atRules).toContain('@property --_doubled')
@@ -239,8 +239,8 @@ describe('Properties namespace', () => {
 
 		it('collects nested property declarations', () => {
 			const set = Properties.make()
-			const inner = Properties.number('_inner', multiply('x', 2))
-			Properties.number(set, '_outer', add(inner, 5))
+			const inner = Properties.number('_inner', Calc.multiply('x', 2))
+			Properties.number(set, '_outer', Calc.add(inner, 5))
 
 			const ruleset = Properties.toRuleset(set, '.test')
 			expect(ruleset).toContain('--_inner: calc(var(--x) * 2)')
@@ -251,7 +251,7 @@ describe('Properties namespace', () => {
 	describe('color', () => {
 		it('declares color property', () => {
 			const set = Properties.make()
-			Properties.color(set, 'my-color', oklch(0.5, 0.1, 180))
+			Properties.color(set, 'my-color', Colors.oklch(0.5, 0.1, 180))
 
 			const atRules = Properties.toAtRules(set)
 			expect(atRules).toContain('@property --my-color')
@@ -284,8 +284,8 @@ describe('Properties namespace', () => {
 
 	describe('collect', () => {
 		it('registers all property nodes from an expression', () => {
-			const inner = Properties.number('_a', multiply('x', 2))
-			const outer = Properties.number('_b', add(inner, 1))
+			const inner = Properties.number('_a', Calc.multiply('x', 2))
+			const outer = Properties.number('_b', Calc.add(inner, 1))
 
 			const set = Properties.make()
 			Properties.collect(set, outer)
@@ -319,7 +319,7 @@ describe('Properties namespace', () => {
 			Properties.number(parent, 'lightness')
 
 			const child = Properties.make(parent)
-			Properties.number(child, '_mc', multiply('lightness', 2))
+			Properties.number(child, '_mc', Calc.multiply('lightness', 2))
 
 			const atRules = Properties.toAtRules(parent)
 			expect(atRules).toContain('--lightness')
@@ -331,7 +331,7 @@ describe('Properties namespace', () => {
 			Properties.number(parent, 'lightness')
 
 			const child = Properties.make(parent)
-			Properties.number(child, '_mc', multiply('lightness', 2))
+			Properties.number(child, '_mc', Calc.multiply('lightness', 2))
 
 			const parentRuleset = Properties.toRuleset(parent, '.parent')
 			const childRuleset = Properties.toRuleset(child, '.child')
@@ -345,10 +345,10 @@ describe('Properties namespace', () => {
 			Properties.number(parent, 'lightness')
 
 			const fill = Properties.make(parent)
-			Properties.number(fill, '_fill-mc', multiply('lightness', 2))
+			Properties.number(fill, '_fill-mc', Calc.multiply('lightness', 2))
 
 			const text = Properties.make(parent)
-			Properties.number(text, '_text-mc', multiply('lightness', 3))
+			Properties.number(text, '_text-mc', Calc.multiply('lightness', 3))
 
 			const atRules = Properties.toAtRules(parent)
 			expect(atRules).toContain('--lightness')
@@ -388,7 +388,7 @@ describe('Properties namespace', () => {
 			Properties.number(set1, '_x', 1)
 
 			const set2 = Properties.make()
-			Properties.color(set2, '_x', oklch(0.5, 0.1, 180))
+			Properties.color(set2, '_x', Colors.oklch(0.5, 0.1, 180))
 
 			expect(() => Properties.merge(set1, set2)).toThrow(/multiple times.*different rules/i)
 		})
@@ -398,7 +398,7 @@ describe('Properties namespace', () => {
 		it('renders @property rules as CSS', () => {
 			const set = Properties.make()
 			Properties.number(set, 'lightness')
-			Properties.number(set, '_mc', multiply('lightness', 2))
+			Properties.number(set, '_mc', Calc.multiply('lightness', 2))
 
 			const css = Properties.toAtRules(set)
 

@@ -1,5 +1,10 @@
-import { toExpression } from './constructors.ts'
-import { ColorExpression, NumberExpression } from './expression.ts'
+import {
+	type ColorExpression,
+	makeColor,
+	makeNumber,
+	type NumberExpression,
+	toExpression,
+} from './expression.ts'
 import { formatNumber, PropertyNode } from './nodes.ts'
 
 interface PropertyEntry {
@@ -89,7 +94,7 @@ export function collect(
 ): void {
 	const declarations: Record<string, string> = {}
 	const properties: Record<string, PropertyRule> = {}
-	expr.node.serialize(declarations, properties)
+	expr._node.serialize(declarations, properties)
 	for (const [name, rule] of Object.entries(properties)) {
 		addEntry(set, name, rule, declarations[name])
 	}
@@ -119,15 +124,12 @@ export function number(
 		const name = setOrName
 		const inherits = inheritsFromName(name)
 		if (nameOrValue === undefined) {
-			return new NumberExpression(
-				new PropertyNode(name, null, '<number>', inherits),
-				new Set([name]),
-			)
+			return makeNumber(new PropertyNode(name, null, '<number>', inherits), new Set([name]))
 		}
 		const expr = typeof nameOrValue === 'number' ? toExpression(nameOrValue) : nameOrValue
-		return new NumberExpression(
-			new PropertyNode(name, (expr as NumberExpression<string>).node, '<number>', inherits),
-			(expr as NumberExpression<string>).refs,
+		return makeNumber(
+			new PropertyNode(name, (expr as NumberExpression<string>)._node, '<number>', inherits),
+			(expr as NumberExpression<string>)._refs,
 		)
 	}
 
@@ -160,7 +162,7 @@ export function color(
 		const name = setOrName
 		const inherits = inheritsFromName(name)
 		const expr = nameOrValue as ColorExpression<string>
-		return new ColorExpression(new PropertyNode(name, expr.node, '<color>', inherits), expr.refs)
+		return makeColor(new PropertyNode(name, expr._node, '<color>', inherits), expr._refs)
 	}
 
 	// Set overload: delegate to no-set, then collect
