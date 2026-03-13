@@ -8,22 +8,22 @@ import {
 import { computeGamutSlice, type GamutSlice, maxChromaExpr } from './gamut.ts'
 import { outdent } from './util.ts'
 
-export interface HueEntry {
+export interface ResolvedHue {
 	readonly name: string
 	readonly hue: number
 	readonly selector: string
 }
 
-export interface ResolvedActiveRole {
+export interface ResolvedRole {
 	readonly name: string
 	readonly selector: string
 	readonly contrastTargets: readonly string[]
 }
 
 export interface ColorsDefinition {
-	readonly name: string
-	readonly hues: readonly HueEntry[]
-	readonly activeRoles: readonly ResolvedActiveRole[]
+	readonly prefix: string
+	readonly hues: readonly ResolvedHue[]
+	readonly roles: readonly ResolvedRole[]
 	readonly noContrastInversion: boolean
 }
 
@@ -47,8 +47,8 @@ export interface ColorSystem {
  */
 function buildRoleBlock(
 	parent: Properties.Properties,
-	role: ResolvedActiveRole,
-	name: string,
+	role: ResolvedRole,
+	outputPrefix: string,
 	prefix: string,
 	noContrastInversion: boolean,
 ): string {
@@ -79,7 +79,7 @@ function buildRoleBlock(
 	// Active role's base color output
 	Properties.color(
 		child,
-		`${name}-${role.name}`,
+		`${outputPrefix}-${role.name}`,
 		Colors.oklch(Calc.ref('lightness'), Calc.multiply(maxChromaProp, Calc.ref('chroma')), hue),
 	)
 
@@ -108,7 +108,7 @@ function buildRoleBlock(
 
 			Properties.color(
 				child,
-				`${name}-${target}`,
+				`${outputPrefix}-${target}`,
 				Colors.oklch(conL, Calc.multiply(conCMax, Calc.ref('chroma')), hue),
 			)
 		}
@@ -122,16 +122,16 @@ function buildRoleBlock(
  * directly to role elements.
  */
 function buildHueBlock(
-	hueEntry: HueEntry,
-	activeRoles: readonly ResolvedActiveRole[],
+	hueEntry: ResolvedHue,
+	roles: readonly ResolvedRole[],
 	prefix: string,
 	roleSelectorList: string,
 ): { block: string; generatedHue: GeneratedHue } {
-	const hue = ((hueEntry.hue % 360) + 360) % 360
+	const { hue } = hueEntry
 	const slice = computeGamutSlice(hue)
 
 	const nestedDecls: string[] = []
-	for (const role of activeRoles) {
+	for (const role of roles) {
 		const rolePrefix = `${prefix}${role.name}-`
 		const hueBlock = Properties.make()
 		Properties.numbers(hueBlock, {
@@ -174,11 +174,11 @@ function buildHueBlock(
  * - `--contrast-{role}` (-1.08 to 1.08)
  *
  * Outputs:
- * - `--{name}-{role}` (e.g., `--color-fill`, `--color-text`)
+ * - `--{prefix}-{role}` (e.g., `--color-fill`, `--color-text`)
  */
 export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
-	const { name, hues, activeRoles, noContrastInversion } = definition
-	const p = `_${name}-`
+	const { prefix, hues, roles, noContrastInversion } = definition
+	const p = `_${prefix}-`
 
 	const parent = Properties.make()
 
@@ -188,7 +188,7 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 
 	// Contrast input properties for all target roles
 	const allContrastTargets = new Set<string>()
-	for (const role of activeRoles) {
+	for (const role of roles) {
 		for (const target of role.contrastTargets) {
 			allContrastTargets.add(target)
 		}
@@ -199,28 +199,28 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 
 	// Output color properties on parent for @property rule collection
 	const allRoleNames = new Set<string>()
-	for (const role of activeRoles) {
+	for (const role of roles) {
 		allRoleNames.add(role.name)
 		for (const target of role.contrastTargets) {
 			allRoleNames.add(target)
 		}
 	}
 	for (const roleName of allRoleNames) {
-		Properties.color(parent, `${name}-${roleName}`, Colors.oklch(0.5, 0, 0))
+		Properties.color(parent, `${prefix}-${roleName}`, Colors.oklch(0.5, 0, 0))
 	}
 
 	// Per-active-role selector blocks
-	const roleBlocks = activeRoles.map((role) =>
-		buildRoleBlock(parent, role, name, p, noContrastInversion),
+	const roleBlocks = roles.map((role) =>
+		buildRoleBlock(parent, role, prefix, p, noContrastInversion),
 	)
 
 	// Hue selector blocks with :is() nesting
-	const roleSelectorList = activeRoles.map((r) => r.selector).join(', ')
+	const roleSelectorList = roles.map((r) => r.selector).join(', ')
 	const generatedHues: GeneratedHue[] = []
 	const hueBlocks: string[] = []
 
 	for (const hueEntry of hues) {
-		const { block, generatedHue } = buildHueBlock(hueEntry, activeRoles, p, roleSelectorList)
+		const { block, generatedHue } = buildHueBlock(hueEntry, roles, p, roleSelectorList)
 		hueBlocks.push(block)
 		generatedHues.push(generatedHue)
 	}

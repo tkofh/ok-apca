@@ -44,3 +44,22 @@ export function outdent(input: string | TemplateStringsArray, ...values: any[]) 
 export function clampNumber(min: number, value: number, max: number): number {
 	return Math.min(Math.max(value, min), max)
 }
+
+export function invariant(condition: boolean, message: string): asserts condition {
+	if (!condition) {
+		throw new Error(message)
+	}
+}
+
+export type NonEmptyArray<T> = readonly [T, ...T[]]
+export type OneOrMore<T> = T | NonEmptyArray<T>
+export type ZeroOrMore<T> = T | T[]
+
+export function toArray<T>(value: OneOrMore<T>): NonEmptyArray<T>
+export function toArray<T>(value: ZeroOrMore<T>): readonly T[]
+export function toArray<T>(value: ZeroOrMore<T>): readonly T[] {
+	if (Array.isArray(value)) {
+		return value as never
+	}
+	return [value] as never
+}

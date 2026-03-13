@@ -4,6 +4,7 @@
 
 import Color from 'colorjs.io'
 import { type ColorSetOptions, defineColors } from '../../src/index.ts'
+import { toArray } from '../../src/util.ts'
 
 export type TestHarness = ReturnType<typeof createTestHarness>
 
@@ -26,11 +27,11 @@ interface TestHarnessConfig {
  */
 export function createTestHarness(config: TestHarnessConfig) {
 	const hue = config.hue ?? 180
-	const name = config.options.name ?? 'color'
+	const name = config.options.prefix ?? 'color'
 
 	// Default roles: a single "fill" role (which defaults selector to ".fill")
 	// If the caller provided roles, use those
-	const roles = config.options.roles ?? [{ name: 'fill' }]
+	const roles = toArray(config.options.roles ?? [{ name: 'fill' }])
 
 	// Derive hue selector from the first active role's selector
 	const firstActiveRole = roles.find((r) => !r.passive)

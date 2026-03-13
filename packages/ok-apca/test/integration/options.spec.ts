@@ -11,7 +11,7 @@ describe('Custom output name', () => {
 	beforeEach(() => {
 		harness = createTestHarness({
 			options: {
-				name: 'accent',
+				prefix: 'accent',
 				roles: [{ name: 'fill' }, { name: 'text' }],
 			},
 		})

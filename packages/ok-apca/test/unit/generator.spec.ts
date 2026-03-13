@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { resolveColorSet } from '../../src/config.ts'
 import { defineColors } from '../../src/index.ts'
 
 describe('defineColors validation', () => {
@@ -62,6 +63,40 @@ describe('defineColors validation', () => {
 		).toThrow(/Duplicate hue name/)
 	})
 
+	it('defaults hue name and selector from hue angle', () => {
+		const resolved = resolveColorSet({
+			hues: [{ hue: 30 }],
+			roles: [{ name: 'fill' }],
+		})
+
+		expect(resolved.hues[0].name).toBe('hue-30')
+		expect(resolved.hues[0].selector).toBe('.hue-30')
+	})
+
+	it('defaults hue selector from name', () => {
+		const resolved = resolveColorSet({
+			hues: [{ hue: 30, name: 'warm' }],
+			roles: [{ name: 'fill' }],
+		})
+
+		expect(resolved.hues[0].selector).toBe('.warm')
+	})
+
+	it('normalizes hue angle to [0, 360)', () => {
+		const resolved = resolveColorSet({
+			hues: [
+				{ hue: -30, name: 'neg' },
+				{ hue: 390, name: 'over' },
+				{ hue: 720, name: 'wrap' },
+			],
+			roles: [{ name: 'fill' }],
+		})
+
+		expect(resolved.hues[0].hue).toBe(330)
+		expect(resolved.hues[1].hue).toBe(30)
+		expect(resolved.hues[2].hue).toBe(0)
+	})
+
 	it('requires at least one active role', () => {
 		expect(() =>
 			defineColors({
@@ -69,16 +104,6 @@ describe('defineColors validation', () => {
 				roles: [{ name: 'focus', passive: true }],
 			}),
 		).toThrow(/At least one active role/)
-	})
-
-	it('validates passive roles cannot have selectors', () => {
-		expect(() =>
-			defineColors({
-				hues: [{ name: 'red', hue: 30, selector: '.red' }],
-				// biome-ignore lint/suspicious/noExplicitAny: testing runtime validation of invalid input
-				roles: [{ name: 'fill' }, { name: 'focus', passive: true, selector: '.focus' } as any],
-			}),
-		).toThrow(/Passive role.*must not specify a selector/)
 	})
 
 	it('validates contrastsWith references exist', () => {
@@ -163,7 +188,7 @@ describe('defineColors API', () => {
 
 	it('uses custom name in CSS variable names', () => {
 		const { css } = defineColors({
-			name: 'theme',
+			prefix: 'theme',
 			hues: [{ name: 'red', hue: 30, selector: '.red' }],
 			roles: [{ name: 'fill' }, { name: 'text' }],
 		})
@@ -199,7 +224,7 @@ describe('defineColors API', () => {
 
 	it('namespaces internal properties with name', () => {
 		const { css } = defineColors({
-			name: 'theme',
+			prefix: 'theme',
 			hues: [{ name: 'red', hue: 30, selector: '.red' }],
 			roles: [{ name: 'fill' }, { name: 'text' }],
 		})
@@ -237,7 +262,7 @@ describe('defineColors API', () => {
 	})
 
 	it('respects contrastsWith filtering', () => {
-		const { css } = defineColors({
+		const resolved = resolveColorSet({
 			hues: [{ name: 'red', hue: 30, selector: '.red' }],
 			roles: [
 				{ name: 'fill' },
@@ -246,35 +271,88 @@ describe('defineColors API', () => {
 			],
 		})
 
-		// .fill should have text and icon contrast outputs
-		// .text should only have fill contrast output (not icon)
-		// .icon should only have fill contrast output (not text)
-		expect(css).toContain('--color-fill')
-		expect(css).toContain('--color-text')
-		expect(css).toContain('--color-icon')
+		const fill = resolved.roles.find((r) => r.name === 'fill')!
+		const text = resolved.roles.find((r) => r.name === 'text')!
+		const icon = resolved.roles.find((r) => r.name === 'icon')!
+
+		// text and icon both declare they appear on fill
+		expect(fill.contrastTargets).toContain('text')
+		expect(fill.contrastTargets).toContain('icon')
+
+		// fill has no contrastsWith → appears on all others
+		// text/icon only listed fill, so they don't appear on each other
+		expect(text.contrastTargets).toEqual(['fill'])
+		expect(icon.contrastTargets).toEqual(['fill'])
+	})
+
+	it('contrastsWith defaults to all other active roles', () => {
+		const resolved = resolveColorSet({
+			hues: [{ hue: 30 }],
+			roles: [{ name: 'fill' }, { name: 'text' }, { name: 'border' }],
+		})
+
+		for (const role of resolved.roles) {
+			const otherNames = resolved.roles
+				.filter((r) => r.name !== role.name)
+				.map((r) => r.name)
+			expect(role.contrastTargets).toEqual(otherNames)
+		}
+	})
+
+	it('passive role with contrastsWith appears only on listed active roles', () => {
+		const resolved = resolveColorSet({
+			hues: [{ hue: 30 }],
+			roles: [
+				{ name: 'fill' },
+				{ name: 'text' },
+				{ name: 'focus', passive: true, contrastsWith: ['fill'] },
+			],
+		})
+
+		const fill = resolved.roles.find((r) => r.name === 'fill')!
+		const text = resolved.roles.find((r) => r.name === 'text')!
+
+		// focus declared it appears on fill only
+		expect(fill.contrastTargets).toContain('focus')
+		expect(text.contrastTargets).not.toContain('focus')
+	})
+
+	it('passive role without contrastsWith appears on all active roles', () => {
+		const resolved = resolveColorSet({
+			hues: [{ hue: 30 }],
+			roles: [
+				{ name: 'fill' },
+				{ name: 'text' },
+				{ name: 'focus', passive: true },
+			],
+		})
+
+		const fill = resolved.roles.find((r) => r.name === 'fill')!
+		const text = resolved.roles.find((r) => r.name === 'text')!
+
+		expect(fill.contrastTargets).toContain('focus')
+		expect(text.contrastTargets).toContain('focus')
 	})
 
 	it('supports multiple sets', () => {
-		const [surface, accent] = defineColors({
-			sets: [
-				{
-					name: 'surface',
-					hues: [{ name: 'red', hue: 25, selector: '.surface-red' }],
-					roles: [
-						{ name: 'fill', selector: '.surface-fill' },
-						{ name: 'text', selector: '.surface-text' },
-					],
-				},
-				{
-					name: 'accent',
-					hues: [{ name: 'blue', hue: 240, selector: '.accent-blue' }],
-					roles: [
-						{ name: 'fill', selector: '.accent-fill' },
-						{ name: 'text', selector: '.accent-text' },
-					],
-				},
-			],
-		})
+		const [surface, accent] = defineColors([
+			{
+				prefix: 'surface',
+				hues: [{ name: 'red', hue: 25, selector: '.surface-red' }],
+				roles: [
+					{ name: 'fill', selector: '.surface-fill' },
+					{ name: 'text', selector: '.surface-text' },
+				],
+			},
+			{
+				prefix: 'accent',
+				hues: [{ name: 'blue', hue: 240, selector: '.accent-blue' }],
+				roles: [
+					{ name: 'fill', selector: '.accent-fill' },
+					{ name: 'text', selector: '.accent-text' },
+				],
+			},
+		])
 
 		expect(surface.css).toContain('--surface-fill')
 		expect(surface.css).toContain('--surface-text')
