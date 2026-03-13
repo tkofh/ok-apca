@@ -50,11 +50,11 @@ export const yBackground: Calc.Expression<'lightness' | 'chroma' | 'fA' | 'fB' |
  * Applies the inverse Y-correction to recover OKLCH lightness from CIE Y.
  * Uses the same f-correction polynomial as yBackground, depending only on
  * the input chroma ratio (a leaf variable), not the solver output.
- *
- * Unbound refs: `yTarget`, `chroma`, `fA`, `fB`, `fD`.
  */
-export const correctedLightness: Calc.Expression<'yTarget' | 'chroma' | 'fA' | 'fB' | 'fD'> =
-	Calc.pow(Calc.divide(Calc.ref('yTarget'), fCorrection), 1 / 3)
+const correctedLightness: Calc.Expression<'yTarget' | 'chroma' | 'fA' | 'fB' | 'fD'> = Calc.pow(
+	Calc.divide(Calc.ref('yTarget'), fCorrection),
+	1 / 3,
+)
 
 /**
  * Build contrast target lightness expression (simple solver, no inversion).

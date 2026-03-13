@@ -143,7 +143,7 @@ function buildHueBlock(
 			[`${rolePrefix}fB`]: slice.fB,
 			[`${rolePrefix}fD`]: slice.fD,
 		})
-		for (const [propName, entry] of hueBlock._entries) {
+		for (const [propName, entry] of Properties.entries(hueBlock)) {
 			if (entry.declaration !== undefined) {
 				nestedDecls.push(`\t\t${propName}: ${entry.declaration};`)
 			}

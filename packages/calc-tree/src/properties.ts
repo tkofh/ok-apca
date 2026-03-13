@@ -3,11 +3,13 @@ import {
 	makeColor,
 	makeNumber,
 	type NumberExpression,
+	nodeOf,
+	refsOf,
 	toExpression,
 } from './expression.ts'
 import { formatNumber, PropertyNode } from './nodes.ts'
 
-interface PropertyEntry {
+export interface PropertyEntry {
 	readonly rule: PropertyRule
 	readonly declaration?: string
 }
@@ -18,6 +20,8 @@ export interface PropertyRule {
 	readonly initialValue: string
 }
 
+declare const brand: unique symbol
+
 /**
  * A mutable collection of CSS `@property` rules and declarations.
  *
@@ -26,12 +30,17 @@ export interface PropertyRule {
  * blocks.
  */
 export interface Properties {
-	/** @internal */
+	readonly [brand]?: true
+}
+
+interface InternalProperties extends Properties {
 	readonly _entries: Map<string, PropertyEntry>
-	/** @internal */
-	readonly _children: Properties[]
-	/** @internal */
-	readonly _parent: Properties | null
+	readonly _children: InternalProperties[]
+	readonly _parent: InternalProperties | null
+}
+
+function internal(set: Properties): InternalProperties {
+	return set as InternalProperties
 }
 
 function inheritsFromName(name: string): boolean {
@@ -39,7 +48,7 @@ function inheritsFromName(name: string): boolean {
 }
 
 function addEntry(
-	set: Properties,
+	set: InternalProperties,
 	cssName: string,
 	rule: PropertyRule,
 	declaration?: string,
@@ -73,13 +82,14 @@ function makeRule(syntax: '<number>' | '<color>', inherits: boolean): PropertyRu
 
 /** Create a new property set, optionally linked to a parent. */
 export function make(parent?: Properties): Properties {
-	const set: Properties = {
+	const p = parent ? internal(parent) : null
+	const set: InternalProperties = {
 		_entries: new Map(),
 		_children: [],
-		_parent: parent ?? null,
+		_parent: p,
 	}
-	if (parent) {
-		parent._children.push(set)
+	if (p) {
+		p._children.push(set)
 	}
 	return set
 }
@@ -92,11 +102,12 @@ export function collect(
 	set: Properties,
 	expr: NumberExpression<string> | ColorExpression<string>,
 ): void {
+	const s = internal(set)
 	const declarations: Record<string, string> = {}
 	const properties: Record<string, PropertyRule> = {}
-	expr._node.serialize(declarations, properties)
+	nodeOf(expr).serialize(declarations, properties)
 	for (const [name, rule] of Object.entries(properties)) {
-		addEntry(set, name, rule, declarations[name])
+		addEntry(s, name, rule, declarations[name])
 	}
 }
 
@@ -128,8 +139,8 @@ export function number(
 		}
 		const expr = typeof nameOrValue === 'number' ? toExpression(nameOrValue) : nameOrValue
 		return makeNumber(
-			new PropertyNode(name, (expr as NumberExpression<string>)._node, '<number>', inherits),
-			(expr as NumberExpression<string>)._refs,
+			new PropertyNode(name, nodeOf(expr as NumberExpression<string>), '<number>', inherits),
+			refsOf(expr as NumberExpression<string>),
 		)
 	}
 
@@ -162,8 +173,8 @@ export function color(
 		const name = setOrName
 		const expr = nameOrValue as ColorExpression<string>
 		return makeColor(
-			new PropertyNode(name, expr._node, '<color>', inheritsFromName(name)),
-			expr._refs,
+			new PropertyNode(name, nodeOf(expr), '<color>', inheritsFromName(name)),
+			refsOf(expr),
 		)
 	}
 
@@ -181,9 +192,10 @@ export function numbers(
 	set: Properties,
 	values: Record<string, number | NumberExpression<string>>,
 ): void {
+	const s = internal(set)
 	for (const [name, value] of Object.entries(values)) {
 		if (typeof value === 'number') {
-			addEntry(set, `--${name}`, makeRule('<number>', inheritsFromName(name)), formatNumber(value))
+			addEntry(s, `--${name}`, makeRule('<number>', inheritsFromName(name)), formatNumber(value))
 		} else {
 			number(set, name, value)
 		}
@@ -207,12 +219,13 @@ function mergeEntryInto(
 
 /** Merge multiple property sets into a single set. */
 export function merge(...sets: Properties[]): Properties {
-	const merged = make()
+	const merged = internal(make())
 	for (const set of sets) {
-		for (const [name, entry] of set._entries) {
+		const s = internal(set)
+		for (const [name, entry] of s._entries) {
 			mergeEntryInto(merged._entries, name, entry)
 		}
-		for (const child of set._children) {
+		for (const child of s._children) {
 			for (const [name, entry] of child._entries) {
 				if (!merged._entries.has(name)) {
 					merged._entries.set(name, { rule: entry.rule })
@@ -223,7 +236,7 @@ export function merge(...sets: Properties[]): Properties {
 	return merged
 }
 
-function collectAllRules(set: Properties): Map<string, PropertyRule> {
+function collectAllRules(set: InternalProperties): Map<string, PropertyRule> {
 	const rules = new Map<string, PropertyRule>()
 	for (const [name, entry] of set._entries) {
 		rules.set(name, entry.rule)
@@ -238,9 +251,14 @@ function collectAllRules(set: Properties): Map<string, PropertyRule> {
 	return rules
 }
 
+/** Iterate over all property entries in this set. */
+export function entries(set: Properties): IterableIterator<[string, PropertyEntry]> {
+	return internal(set)._entries.entries()
+}
+
 /** Render all `@property` rules from this set and its children as CSS. */
 export function toAtRules(set: Properties): string {
-	const rules = collectAllRules(set)
+	const rules = collectAllRules(internal(set))
 	return [...rules.entries()]
 		.map(
 			([name, rule]) =>
@@ -252,7 +270,7 @@ export function toAtRules(set: Properties): string {
 /** Render this set's declarations as a CSS selector block. */
 export function toRuleset(set: Properties, selector: string): string {
 	const decls: string[] = []
-	for (const [name, entry] of set._entries) {
+	for (const [name, entry] of internal(set)._entries) {
 		if (entry.declaration !== undefined) {
 			decls.push(`\t${name}: ${entry.declaration};`)
 		}
