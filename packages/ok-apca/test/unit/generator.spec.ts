@@ -326,32 +326,6 @@ describe('defineColors API', () => {
 		expect(text.contrastTargets).toContain('focus')
 	})
 
-	it('supports multiple sets', () => {
-		const [surface, accent] = defineColors([
-			{
-				prefix: 'surface',
-				hues: [{ name: 'red', hue: 25, selector: '.surface-red' }],
-				roles: [
-					{ name: 'fill', selector: '.surface-fill' },
-					{ name: 'text', selector: '.surface-text' },
-				],
-			},
-			{
-				prefix: 'accent',
-				hues: [{ name: 'blue', hue: 240, selector: '.accent-blue' }],
-				roles: [
-					{ name: 'fill', selector: '.accent-fill' },
-					{ name: 'text', selector: '.accent-text' },
-				],
-			},
-		])
-
-		expect(surface.css).toContain('--surface-fill')
-		expect(surface.css).toContain('--surface-text')
-		expect(accent.css).toContain('--accent-fill')
-		expect(accent.css).toContain('--accent-text')
-	})
-
 	it('generates hue selectors with :is() nesting', () => {
 		const { css } = defineColors({
 			hues: [{ name: 'red', hue: 30, selector: '.red' }],

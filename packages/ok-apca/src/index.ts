@@ -1,6 +1,5 @@
 import { type ColorSetOptions, resolveColorSet } from './config.ts'
 import { type ColorSystem, generateColorSystem } from './generator.ts'
-import type { NonEmptyArray, OneOrMore } from './util.ts'
 
 export type { Color } from './color.ts'
 export type { ColorSetOptions, HueEntry, RoleEntry } from './config.ts'
@@ -26,11 +25,6 @@ export type { ColorSystem } from './generator.ts'
  * console.log(system.css) // Generated CSS string
  * ```
  */
-export function defineColors(options: ColorSetOptions): ColorSystem
-export function defineColors(options: NonEmptyArray<ColorSetOptions>): NonEmptyArray<ColorSystem>
-export function defineColors(options: OneOrMore<ColorSetOptions>): OneOrMore<ColorSystem> {
-	if (Array.isArray(options)) {
-		return options.map((set) => generateColorSystem(resolveColorSet(set))) as never
-	}
-	return generateColorSystem(resolveColorSet(options as ColorSetOptions))
+export function defineColors(options: ColorSetOptions): ColorSystem {
+	return generateColorSystem(resolveColorSet(options))
 }

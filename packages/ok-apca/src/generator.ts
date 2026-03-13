@@ -18,17 +18,18 @@ export interface ColorSystem {
  * contrast target expressions.
  */
 function buildRoleBlock(parent: Properties.Properties, role: ResolvedRole, prefix: string): string {
+	const sharedPrefix = `_${prefix}-`
 	const rolePrefix = `_${prefix}-${role.name}-`
 	const child = Properties.make(parent)
 
-	// Gamut slice input properties (inherits: false via _ prefix)
-	const hue = Properties.number(child, `${rolePrefix}hue`)
-	const apexL = Properties.number(child, `${rolePrefix}apexL`)
-	const apexC = Properties.number(child, `${rolePrefix}apexC`)
-	const tentK = Properties.number(child, `${rolePrefix}tentK`)
-	const fA = Properties.number(child, `${rolePrefix}fA`)
-	const fB = Properties.number(child, `${rolePrefix}fB`)
-	const fD = Properties.number(child, `${rolePrefix}fD`)
+	// Gamut slice input properties — shared across roles (inherits: false via _ prefix)
+	const hue = Properties.number(child, `${sharedPrefix}hue`)
+	const apexL = Properties.number(child, `${sharedPrefix}apexL`)
+	const apexC = Properties.number(child, `${sharedPrefix}apexC`)
+	const tentK = Properties.number(child, `${sharedPrefix}tentK`)
+	const fA = Properties.number(child, `${sharedPrefix}fA`)
+	const fB = Properties.number(child, `${sharedPrefix}fB`)
+	const fD = Properties.number(child, `${sharedPrefix}fD`)
 
 	// Max chroma at active role's lightness
 	const maxChromaProp = Properties.number(
@@ -84,20 +85,18 @@ function buildRoleBlock(parent: Properties.Properties, role: ResolvedRole, prefi
  */
 function buildHueBlock(
 	hue: ResolvedHue,
-	roles: readonly ResolvedRole[],
 	prefix: string,
 	roleSelectorList: string,
 ): string {
 	const slice = computeGamutSlice(hue.hue)
 
+	const hueBlock = Properties.make()
+	Properties.numbers(hueBlock, withPrefix(`_${prefix}-`, slice))
+
 	const nestedDecls: string[] = []
-	for (const role of roles) {
-		const hueBlock = Properties.make()
-		Properties.numbers(hueBlock, withPrefix(`_${prefix}-${role.name}-`, slice))
-		for (const [propName, entry] of Properties.entries(hueBlock)) {
-			if (entry.declaration !== undefined) {
-				nestedDecls.push(`\t\t${propName}: ${entry.declaration};`)
-			}
+	for (const [propName, entry] of Properties.entries(hueBlock)) {
+		if (entry.declaration !== undefined) {
+			nestedDecls.push(`\t\t${propName}: ${entry.declaration};`)
 		}
 	}
 
@@ -149,14 +148,17 @@ export function generateColorSystem(definition: ColorsDefinition): ColorSystem {
 
 	const roleSelectorList = roles.map((r) => r.selector).join(', ')
 
+	// Build role and hue blocks first so child properties propagate to parent
+	const blocks = [
+		...roles.map((role) => buildRoleBlock(parent, role, prefix)),
+		...hues.map((hueEntry) => buildHueBlock(hueEntry, prefix, roleSelectorList)),
+	]
+
 	return {
 		css: outdent`
 			${Properties.toAtRules(parent)}
 
-			${[
-				...roles.map((role) => buildRoleBlock(parent, role, prefix)),
-				...hues.map((hueEntry) => buildHueBlock(hueEntry, roles, prefix, roleSelectorList)),
-			].join('\n\n')}
+			${blocks.join('\n\n')}
 		`,
 		hues: Object.fromEntries(hues.map((h) => [h.name, h.selector])),
 		roles: Object.fromEntries(roles.map((r) => [r.name, r.selector])),

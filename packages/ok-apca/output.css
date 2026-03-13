@@ -1,0 +1,635 @@
+@property --lightness {
+	inherits: true;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --chroma {
+	inherits: true;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --contrast-text {
+	inherits: true;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --text-invertable {
+	inherits: true;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --contrast-fill {
+	inherits: true;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --fill-invertable {
+	inherits: true;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --color-fill {
+	inherits: true;
+	initial-value: transparent;
+	syntax: "<color>";
+}
+@property --color-text {
+	inherits: true;
+	initial-value: transparent;
+	syntax: "<color>";
+}
+@property --_color-hue {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-apexL {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-apexC {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-tentK {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-fA {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-fB {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-fD {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-fill-mc {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-fill-ybg {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-fill-sc {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-fill-mc-text {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_cl-text {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_yt-text {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_lcl-text {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_yl-text {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_ylr-text {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_lcd-text {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_yd-text {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_ydr-text {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-text-mc {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-text-ybg {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-text-sc {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_color-text-mc-fill {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_cl-fill {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_yt-fill {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_lcl-fill {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_yl-fill {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_ylr-fill {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_lcd-fill {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_yd-fill {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+@property --_ydr-fill {
+	inherits: false;
+	initial-value: 0;
+	syntax: "<number>";
+}
+
+.fill {
+	--_color-fill-mc: calc(
+		(1 - max(0, sign(var(--lightness) - var(--_color-apexL)))) *
+		var(--_color-apexC) *
+		var(--lightness) /
+		var(--_color-apexL) +
+		max(0, sign(var(--lightness) - var(--_color-apexL))) *
+		(
+			var(--_color-apexC) *
+			(1 - var(--lightness)) /
+			(1 - var(--_color-apexL)) +
+			var(--_color-tentK) *
+			pow(
+				sin(max(0, (var(--lightness) - var(--_color-apexL)) / (1 - var(--_color-apexL))) * pi),
+				0.95
+			) *
+			var(--_color-apexC)
+		)
+	);
+	--color-fill: oklch(
+		var(--lightness) calc(var(--_color-fill-mc) * var(--chroma)) var(--_color-hue)
+	);
+	--_color-fill-ybg: calc(
+		pow(var(--lightness), 3) *
+		(
+			1 +
+			var(--_color-fA) *
+			var(--chroma) +
+			var(--_color-fB) *
+			pow(var(--chroma), 2) +
+			var(--_color-fD) *
+			pow(var(--chroma), 3)
+		)
+	);
+	--_color-fill-sc: pow(pow(var(--_color-fill-ybg), 1.75) + 0.00009, 0.57143);
+	--_color-fill-mc-text: calc(
+		(1 - max(0, sign(var(--_cl-text) - var(--_color-apexL)))) *
+		var(--_color-apexC) *
+		var(--_cl-text) /
+		var(--_color-apexL) +
+		max(0, sign(var(--_cl-text) - var(--_color-apexL))) *
+		(
+			var(--_color-apexC) *
+			(1 - var(--_cl-text)) /
+			(1 - var(--_color-apexL)) +
+			var(--_color-tentK) *
+			pow(
+				sin(max(0, (var(--_cl-text) - var(--_color-apexL)) / (1 - var(--_color-apexL))) * pi),
+				0.95
+			) *
+			var(--_color-apexC)
+		)
+	);
+	--_cl-text: pow(
+		var(--_yt-text) /
+		(
+			1 +
+			var(--_color-fA) *
+			var(--chroma) +
+			var(--_color-fB) *
+			pow(var(--chroma), 2) +
+			var(--_color-fD) *
+			pow(var(--chroma), 3)
+		),
+		0.33333
+	);
+	--_yt-text: calc(
+		(
+			(
+				1 -
+				max(
+					1 -
+					var(--text-invertable),
+					max(0, sign(0.08 - var(--_lcl-text))) *
+					max(0, sign(0.08 - var(--_lcd-text))),
+					max(0, -1 * sign(var(--contrast-text))) *
+					max(0, sign(var(--_ydr-text))) +
+					max(0, sign(var(--contrast-text))) *
+					max(0, sign(1 - var(--_ylr-text)))
+				)
+			) *
+			max(
+				0,
+				sign(
+					var(--_lcl-text) -
+					var(--_lcd-text) +
+					max(0, sign(var(--contrast-text))) *
+					0.001 -
+					max(0, -1 * sign(var(--contrast-text))) *
+					0.001
+				)
+			) +
+			max(
+				1 -
+				var(--text-invertable),
+				max(0, sign(0.08 - var(--_lcl-text))) *
+				max(0, sign(0.08 - var(--_lcd-text))),
+				max(0, -1 * sign(var(--contrast-text))) *
+				max(0, sign(var(--_ydr-text))) +
+				max(0, sign(var(--contrast-text))) *
+				max(0, sign(1 - var(--_ylr-text)))
+			) *
+			max(0, sign(var(--contrast-text)))
+		) *
+		var(--_yl-text) +
+		(
+			(
+				1 -
+				max(
+					1 -
+					var(--text-invertable),
+					max(0, sign(0.08 - var(--_lcl-text))) *
+					max(0, sign(0.08 - var(--_lcd-text))),
+					max(0, -1 * sign(var(--contrast-text))) *
+					max(0, sign(var(--_ydr-text))) +
+					max(0, sign(var(--contrast-text))) *
+					max(0, sign(1 - var(--_ylr-text)))
+				)
+			) *
+			max(
+				0,
+				sign(
+					-1 *
+					(
+						var(--_lcl-text) -
+						var(--_lcd-text) +
+						max(0, sign(var(--contrast-text))) *
+						0.001 -
+						max(0, -1 * sign(var(--contrast-text))) *
+						0.001
+					)
+				)
+			) +
+			max(
+				1 -
+				var(--text-invertable),
+				max(0, sign(0.08 - var(--_lcl-text))) *
+				max(0, sign(0.08 - var(--_lcd-text))),
+				max(0, -1 * sign(var(--contrast-text))) *
+				max(0, sign(var(--_ydr-text))) +
+				max(0, sign(var(--contrast-text))) *
+				max(0, sign(1 - var(--_ylr-text)))
+			) *
+			max(0, -1 * sign(var(--contrast-text)))
+		) *
+		var(--_yd-text) +
+		(1 - max(max(0, sign(var(--contrast-text))), max(0, -1 * sign(var(--contrast-text))))) *
+		var(--_color-fill-ybg)
+	);
+	--_lcl-text: max(
+		0,
+		1.14 *
+		(
+			pow(pow(pow(var(--_yl-text), 1.75) + 0.00009, 0.57143), 0.62) -
+			pow(pow(pow(var(--_color-fill-ybg), 1.75) + 0.00009, 0.57143), 0.65)
+		) -
+		0.027
+	);
+	--_yl-text: pow(max(0, pow(var(--_ylr-text), 1.75) - 0.00009), 0.57143);
+	--_ylr-text: clamp(
+		0,
+		(1 - max(0, sign(abs(var(--contrast-text)) - 0.022))) *
+		(
+			(1 - pow(sin(min(abs(var(--contrast-text)) / 0.022, 1) * 1.5708), 2.46)) *
+			var(--_color-fill-sc) +
+			pow(sin(min(abs(var(--contrast-text)) / 0.022, 1) * 1.5708), 2.46) *
+			pow(pow(var(--_color-fill-sc), 0.65) + 0.04298, 1.6129)
+		) +
+		max(0, sign(abs(var(--contrast-text)) - 0.022)) *
+		pow(pow(var(--_color-fill-sc), 0.65) + (abs(var(--contrast-text)) + 0.027) / 1.14, 1.6129),
+		1
+	);
+	--_lcd-text: max(
+		0,
+		1.14 *
+		(
+			pow(pow(pow(var(--_color-fill-ybg), 1.75) + 0.00009, 0.57143), 0.56) -
+			pow(pow(pow(var(--_yd-text), 1.75) + 0.00009, 0.57143), 0.57)
+		) -
+		0.027
+	);
+	--_yd-text: pow(max(0, pow(var(--_ydr-text), 1.75) - 0.00009), 0.57143);
+	--_ydr-text: clamp(
+		0,
+		(1 - max(0, sign(abs(var(--contrast-text)) - 0.022))) *
+		(
+			(1 - pow(sin(min(abs(var(--contrast-text)) / 0.022, 1) * 1.5708), 2.46)) *
+			var(--_color-fill-sc) +
+			pow(sin(min(abs(var(--contrast-text)) / 0.022, 1) * 1.5708), 2.46) *
+			pow(abs(pow(var(--_color-fill-sc), 0.56) - 0.04298), 1.75439) *
+			sign(pow(var(--_color-fill-sc), 0.56) - 0.04298)
+		) +
+		max(0, sign(abs(var(--contrast-text)) - 0.022)) *
+		pow(
+			abs(pow(var(--_color-fill-sc), 0.56) - (abs(var(--contrast-text)) + 0.027) / 1.14),
+			1.75439
+		) *
+		sign(pow(var(--_color-fill-sc), 0.56) - (abs(var(--contrast-text)) + 0.027) / 1.14),
+		1
+	);
+	--color-text: oklch(
+		var(--_cl-text) calc(var(--_color-fill-mc-text) * var(--chroma)) var(--_color-hue)
+	);
+}
+
+.text {
+	--_color-text-mc: calc(
+		(1 - max(0, sign(var(--lightness) - var(--_color-apexL)))) *
+		var(--_color-apexC) *
+		var(--lightness) /
+		var(--_color-apexL) +
+		max(0, sign(var(--lightness) - var(--_color-apexL))) *
+		(
+			var(--_color-apexC) *
+			(1 - var(--lightness)) /
+			(1 - var(--_color-apexL)) +
+			var(--_color-tentK) *
+			pow(
+				sin(max(0, (var(--lightness) - var(--_color-apexL)) / (1 - var(--_color-apexL))) * pi),
+				0.95
+			) *
+			var(--_color-apexC)
+		)
+	);
+	--color-text: oklch(
+		var(--lightness) calc(var(--_color-text-mc) * var(--chroma)) var(--_color-hue)
+	);
+	--_color-text-ybg: calc(
+		pow(var(--lightness), 3) *
+		(
+			1 +
+			var(--_color-fA) *
+			var(--chroma) +
+			var(--_color-fB) *
+			pow(var(--chroma), 2) +
+			var(--_color-fD) *
+			pow(var(--chroma), 3)
+		)
+	);
+	--_color-text-sc: pow(pow(var(--_color-text-ybg), 1.75) + 0.00009, 0.57143);
+	--_color-text-mc-fill: calc(
+		(1 - max(0, sign(var(--_cl-fill) - var(--_color-apexL)))) *
+		var(--_color-apexC) *
+		var(--_cl-fill) /
+		var(--_color-apexL) +
+		max(0, sign(var(--_cl-fill) - var(--_color-apexL))) *
+		(
+			var(--_color-apexC) *
+			(1 - var(--_cl-fill)) /
+			(1 - var(--_color-apexL)) +
+			var(--_color-tentK) *
+			pow(
+				sin(max(0, (var(--_cl-fill) - var(--_color-apexL)) / (1 - var(--_color-apexL))) * pi),
+				0.95
+			) *
+			var(--_color-apexC)
+		)
+	);
+	--_cl-fill: pow(
+		var(--_yt-fill) /
+		(
+			1 +
+			var(--_color-fA) *
+			var(--chroma) +
+			var(--_color-fB) *
+			pow(var(--chroma), 2) +
+			var(--_color-fD) *
+			pow(var(--chroma), 3)
+		),
+		0.33333
+	);
+	--_yt-fill: calc(
+		(
+			(
+				1 -
+				max(
+					1 -
+					var(--fill-invertable),
+					max(0, sign(0.08 - var(--_lcl-fill))) *
+					max(0, sign(0.08 - var(--_lcd-fill))),
+					max(0, -1 * sign(var(--contrast-fill))) *
+					max(0, sign(var(--_ydr-fill))) +
+					max(0, sign(var(--contrast-fill))) *
+					max(0, sign(1 - var(--_ylr-fill)))
+				)
+			) *
+			max(
+				0,
+				sign(
+					var(--_lcl-fill) -
+					var(--_lcd-fill) +
+					max(0, sign(var(--contrast-fill))) *
+					0.001 -
+					max(0, -1 * sign(var(--contrast-fill))) *
+					0.001
+				)
+			) +
+			max(
+				1 -
+				var(--fill-invertable),
+				max(0, sign(0.08 - var(--_lcl-fill))) *
+				max(0, sign(0.08 - var(--_lcd-fill))),
+				max(0, -1 * sign(var(--contrast-fill))) *
+				max(0, sign(var(--_ydr-fill))) +
+				max(0, sign(var(--contrast-fill))) *
+				max(0, sign(1 - var(--_ylr-fill)))
+			) *
+			max(0, sign(var(--contrast-fill)))
+		) *
+		var(--_yl-fill) +
+		(
+			(
+				1 -
+				max(
+					1 -
+					var(--fill-invertable),
+					max(0, sign(0.08 - var(--_lcl-fill))) *
+					max(0, sign(0.08 - var(--_lcd-fill))),
+					max(0, -1 * sign(var(--contrast-fill))) *
+					max(0, sign(var(--_ydr-fill))) +
+					max(0, sign(var(--contrast-fill))) *
+					max(0, sign(1 - var(--_ylr-fill)))
+				)
+			) *
+			max(
+				0,
+				sign(
+					-1 *
+					(
+						var(--_lcl-fill) -
+						var(--_lcd-fill) +
+						max(0, sign(var(--contrast-fill))) *
+						0.001 -
+						max(0, -1 * sign(var(--contrast-fill))) *
+						0.001
+					)
+				)
+			) +
+			max(
+				1 -
+				var(--fill-invertable),
+				max(0, sign(0.08 - var(--_lcl-fill))) *
+				max(0, sign(0.08 - var(--_lcd-fill))),
+				max(0, -1 * sign(var(--contrast-fill))) *
+				max(0, sign(var(--_ydr-fill))) +
+				max(0, sign(var(--contrast-fill))) *
+				max(0, sign(1 - var(--_ylr-fill)))
+			) *
+			max(0, -1 * sign(var(--contrast-fill)))
+		) *
+		var(--_yd-fill) +
+		(1 - max(max(0, sign(var(--contrast-fill))), max(0, -1 * sign(var(--contrast-fill))))) *
+		var(--_color-text-ybg)
+	);
+	--_lcl-fill: max(
+		0,
+		1.14 *
+		(
+			pow(pow(pow(var(--_yl-fill), 1.75) + 0.00009, 0.57143), 0.62) -
+			pow(pow(pow(var(--_color-text-ybg), 1.75) + 0.00009, 0.57143), 0.65)
+		) -
+		0.027
+	);
+	--_yl-fill: pow(max(0, pow(var(--_ylr-fill), 1.75) - 0.00009), 0.57143);
+	--_ylr-fill: clamp(
+		0,
+		(1 - max(0, sign(abs(var(--contrast-fill)) - 0.022))) *
+		(
+			(1 - pow(sin(min(abs(var(--contrast-fill)) / 0.022, 1) * 1.5708), 2.46)) *
+			var(--_color-text-sc) +
+			pow(sin(min(abs(var(--contrast-fill)) / 0.022, 1) * 1.5708), 2.46) *
+			pow(pow(var(--_color-text-sc), 0.65) + 0.04298, 1.6129)
+		) +
+		max(0, sign(abs(var(--contrast-fill)) - 0.022)) *
+		pow(pow(var(--_color-text-sc), 0.65) + (abs(var(--contrast-fill)) + 0.027) / 1.14, 1.6129),
+		1
+	);
+	--_lcd-fill: max(
+		0,
+		1.14 *
+		(
+			pow(pow(pow(var(--_color-text-ybg), 1.75) + 0.00009, 0.57143), 0.56) -
+			pow(pow(pow(var(--_yd-fill), 1.75) + 0.00009, 0.57143), 0.57)
+		) -
+		0.027
+	);
+	--_yd-fill: pow(max(0, pow(var(--_ydr-fill), 1.75) - 0.00009), 0.57143);
+	--_ydr-fill: clamp(
+		0,
+		(1 - max(0, sign(abs(var(--contrast-fill)) - 0.022))) *
+		(
+			(1 - pow(sin(min(abs(var(--contrast-fill)) / 0.022, 1) * 1.5708), 2.46)) *
+			var(--_color-text-sc) +
+			pow(sin(min(abs(var(--contrast-fill)) / 0.022, 1) * 1.5708), 2.46) *
+			pow(abs(pow(var(--_color-text-sc), 0.56) - 0.04298), 1.75439) *
+			sign(pow(var(--_color-text-sc), 0.56) - 0.04298)
+		) +
+		max(0, sign(abs(var(--contrast-fill)) - 0.022)) *
+		pow(
+			abs(pow(var(--_color-text-sc), 0.56) - (abs(var(--contrast-fill)) + 0.027) / 1.14),
+			1.75439
+		) *
+		sign(pow(var(--_color-text-sc), 0.56) - (abs(var(--contrast-fill)) + 0.027) / 1.14),
+		1
+	);
+	--color-fill: oklch(
+		var(--_cl-fill) calc(var(--_color-text-mc-fill) * var(--chroma)) var(--_color-hue)
+	);
+}
+
+.preview-hue {
+	:is(&, & *):is(.fill, .text) {
+		--_color-hue: 240;
+		--_color-apexL: 0.68;
+		--_color-apexC: 0.20342;
+		--_color-tentK: -0.02484;
+		--_color-yCoeffA: 0.15728;
+		--_color-yCoeffB: -0.27015;
+		--_color-yCoeffD: -0.10914;
+		--_color-fA: 0.04705;
+		--_color-fB: -0.02418;
+		--_color-fD: -0.00292;
+		--_color-maxChroma: calc(
+			(1 - max(0, sign(var(--lightness) - 0.68))) *
+			0.20342 *
+			var(--lightness) /
+			0.68 +
+			max(0, sign(var(--lightness) - 0.68)) *
+			(
+				0.20342 *
+				(1 - var(--lightness)) /
+				0.32 +
+				-0.02484 *
+				pow(sin(max(0, (var(--lightness) - 0.68) / 0.32) * pi), 0.95) *
+				0.20342
+			)
+		);
+	}
+}
