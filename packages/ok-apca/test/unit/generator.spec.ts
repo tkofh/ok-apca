@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { resolveColorSet } from '../../src/config.ts'
+import type { ResolvedRole } from '../../src/generator.ts'
 import { defineColors } from '../../src/index.ts'
 
 describe('defineColors validation', () => {
@@ -271,9 +272,9 @@ describe('defineColors API', () => {
 			],
 		})
 
-		const fill = resolved.roles.find((r) => r.name === 'fill')!
-		const text = resolved.roles.find((r) => r.name === 'text')!
-		const icon = resolved.roles.find((r) => r.name === 'icon')!
+		const fill = resolved.roles.find((r) => r.name === 'fill') as ResolvedRole
+		const text = resolved.roles.find((r) => r.name === 'text') as ResolvedRole
+		const icon = resolved.roles.find((r) => r.name === 'icon') as ResolvedRole
 
 		// text and icon both declare they appear on fill
 		expect(fill.contrastTargets).toContain('text')
@@ -292,9 +293,7 @@ describe('defineColors API', () => {
 		})
 
 		for (const role of resolved.roles) {
-			const otherNames = resolved.roles
-				.filter((r) => r.name !== role.name)
-				.map((r) => r.name)
+			const otherNames = resolved.roles.filter((r) => r.name !== role.name).map((r) => r.name)
 			expect(role.contrastTargets).toEqual(otherNames)
 		}
 	})
@@ -309,8 +308,8 @@ describe('defineColors API', () => {
 			],
 		})
 
-		const fill = resolved.roles.find((r) => r.name === 'fill')!
-		const text = resolved.roles.find((r) => r.name === 'text')!
+		const fill = resolved.roles.find((r) => r.name === 'fill') as ResolvedRole
+		const text = resolved.roles.find((r) => r.name === 'text') as ResolvedRole
 
 		// focus declared it appears on fill only
 		expect(fill.contrastTargets).toContain('focus')
@@ -320,15 +319,11 @@ describe('defineColors API', () => {
 	it('passive role without contrastsWith appears on all active roles', () => {
 		const resolved = resolveColorSet({
 			hues: [{ hue: 30 }],
-			roles: [
-				{ name: 'fill' },
-				{ name: 'text' },
-				{ name: 'focus', passive: true },
-			],
+			roles: [{ name: 'fill' }, { name: 'text' }, { name: 'focus', passive: true }],
 		})
 
-		const fill = resolved.roles.find((r) => r.name === 'fill')!
-		const text = resolved.roles.find((r) => r.name === 'text')!
+		const fill = resolved.roles.find((r) => r.name === 'fill') as ResolvedRole
+		const text = resolved.roles.find((r) => r.name === 'text') as ResolvedRole
 
 		expect(fill.contrastTargets).toContain('focus')
 		expect(text.contrastTargets).toContain('focus')
