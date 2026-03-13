@@ -63,3 +63,12 @@ export function toArray<T>(value: ZeroOrMore<T>): readonly T[] {
 	}
 	return [value] as never
 }
+
+export function withPrefix<const Prefix extends string, const B extends Record<string, unknown>>(
+	prefix: Prefix,
+	obj: B,
+): { [K in keyof B as `${Prefix}${string & K}`]: B[K] } {
+	return Object.fromEntries(
+		Object.entries(obj).map(([key, value]) => [`${prefix}${key}`, value]),
+	) as never
+}

@@ -6,7 +6,7 @@ import {
 	yBackground,
 } from './contrast.ts'
 import { computeGamutSlice, type GamutSlice, maxChromaExpr } from './gamut.ts'
-import { outdent } from './util.ts'
+import { outdent, withPrefix } from './util.ts'
 
 export interface ResolvedHue {
 	readonly name: string
@@ -132,17 +132,8 @@ function buildHueBlock(
 
 	const nestedDecls: string[] = []
 	for (const role of roles) {
-		const rolePrefix = `${prefix}${role.name}-`
 		const hueBlock = Properties.make()
-		Properties.numbers(hueBlock, {
-			[`${rolePrefix}hue`]: hue,
-			[`${rolePrefix}apexL`]: slice.apexL,
-			[`${rolePrefix}apexC`]: slice.apexC,
-			[`${rolePrefix}tentK`]: slice.tentK,
-			[`${rolePrefix}fA`]: slice.fA,
-			[`${rolePrefix}fB`]: slice.fB,
-			[`${rolePrefix}fD`]: slice.fD,
-		})
+		Properties.numbers(hueBlock, withPrefix(`${prefix}${role.name}-`, slice))
 		for (const [propName, entry] of Properties.entries(hueBlock)) {
 			if (entry.declaration !== undefined) {
 				nestedDecls.push(`\t\t${propName}: ${entry.declaration};`)
