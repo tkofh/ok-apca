@@ -69,49 +69,50 @@ const correctedLightness: Calc.Expression<'yTarget' | 'chroma' | 'fA' | 'fB' | '
  *
  * Unbound refs: `yBg`, `scYBg`, `{label}-invertable`, `contrast-{label}`, `chroma`, `fA`, `fB`, `fD`.
  */
+export function contrastTargetLightness(): Calc.Expression<
+	'yBg' | 'chroma' | 'fA' | 'fB' | 'fD' | 'scYBg' | 'invertable' | 'contrast'
+>
 export function contrastTargetLightness<const Label extends string>(
 	label: Label,
 ): Calc.Expression<
 	'yBg' | 'chroma' | 'fA' | 'fB' | 'fD' | 'scYBg' | `${Label}-invertable` | `contrast-${Label}`
-> {
-	const contrast = Calc.ref(`contrast-${label}` as const)
+>
+export function contrastTargetLightness(label?: string): Calc.Expression<string> {
+	const prop = <E extends Calc.Expression<string>>(name: string, expr: E): E =>
+		label ? (Properties.number(`${name}-${label}`, expr) as E) : expr
+
+	const contrast = Calc.ref(label ? `contrast-${label}` : 'contrast')
 
 	// Raw solver outputs in soft-clamped domain
-	const yLightRaw = Properties.number(
-		`_ylr-${label}`,
+	const yLightRaw = prop(
+		'_ylr',
 		Calc.clamp(0, Calc.bind(reversePolarity, { yBg: Calc.ref('scYBg'), contrast }), 1),
 	)
-	const yDarkRaw = Properties.number(
-		`_ydr-${label}`,
+	const yDarkRaw = prop(
+		'_ydr',
 		Calc.clamp(0, Calc.bind(normalPolarity, { yBg: Calc.ref('scYBg'), contrast }), 1),
 	)
 
 	// Unclamp to recover actual Y values
-	const yLight = Properties.number(`_yl-${label}`, Calc.bind(softUnclamp, { y: yLightRaw }))
-	const yDark = Properties.number(`_yd-${label}`, Calc.bind(softUnclamp, { y: yDarkRaw }))
+	const yLight = prop('_yl', Calc.bind(softUnclamp, { y: yLightRaw }))
+	const yDark = prop('_yd', Calc.bind(softUnclamp, { y: yDarkRaw }))
+
+	const invertable = Calc.ref(label ? `${label}-invertable` : 'invertable')
 
 	// Solver uses original Y_bg for zero-contrast fallback
-	const yTarget = Properties.number(
-		`_yt-${label}`,
-		Calc.bind(contrastSolver, {
-			contrast,
-			invertable: Calc.ref(`${label}-invertable` as const),
-			yLight,
-			yDark,
-			yLightRaw,
-			yDarkRaw,
-			lcLight: Properties.number(
-				`_lcl-${label}`,
-				Calc.bind(contrastMeasurementReverse, { yFg: yLight }),
-			),
-			lcDark: Properties.number(
-				`_lcd-${label}`,
-				Calc.bind(contrastMeasurementNormal, { yFg: yDark }),
-			),
-		}),
-	)
+	const yTargetExp = Calc.bind(contrastSolver, {
+		contrast,
+		invertable,
+		yLight,
+		yDark,
+		yLightRaw,
+		yDarkRaw,
+		lcLight: prop('_lcl', Calc.bind(contrastMeasurementReverse, { yFg: yLight })),
+		lcDark: prop('_lcd', Calc.bind(contrastMeasurementNormal, { yFg: yDark })),
+	})
+	const yTarget = prop('_yt', yTargetExp)
 
-	return Properties.number(`_cl-${label}`, Calc.bind(correctedLightness, { yTarget }))
+	return prop('_cl', Calc.bind(correctedLightness, { yTarget }))
 }
 
 /**
@@ -186,7 +187,7 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 		0,
 		Calc.solve(
 			Calc.bind(
-				Calc.bind(contrastTargetLightness('_'), {
+				Calc.bind(contrastTargetLightness(), {
 					yBg: yBackground,
 					scYBg: Calc.bind(softClampApprox, { y: yBackground }),
 				}),
@@ -195,8 +196,8 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 			{
 				lightness,
 				chroma: chromaRatio,
-				'_-invertable': invert ? 1 : 0,
-				'contrast-_': clampedContrast,
+				invertable: invert ? 1 : 0,
+				contrast: clampedContrast,
 			},
 		),
 		1,
