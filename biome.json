@@ -151,7 +151,8 @@
 	"html": {
 		"experimentalFullSupportEnabled": true,
 		"formatter": {
-			"indentScriptAndStyle": true
+			"enabled": true,
+			"indentScriptAndStyle": false
 		}
 	},
 	"files": {

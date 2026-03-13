@@ -16,7 +16,7 @@ const state = reactive({
 // Apply query string values
 for (const key of ['hue', 'chroma', 'lightness', 'contrast'] as const) {
 	if (typeof route.query[key] === 'string') {
-	const num = Number.parseFloat(route.query[key])
+		const num = Number.parseFloat(route.query[key])
 		if (!Number.isNaN(num)) {
 			state[key] = num
 		}
@@ -29,25 +29,25 @@ onMounted(() => {
 	}
 })
 
-const generatedCss = computed(() => defineColors({
-		hues: [{ name: 'current', hue: state.hue, selector: '.preview-hue' }],
-		roles: [
-			{ name: 'fill' },
-			{ name: 'text' },
-		],
-		noContrastInversion: state.noContrastInversion,
-	}).css)
+const generatedCss = computed(
+	() =>
+		defineColors({
+			hues: [{ name: 'current', hue: state.hue, selector: '.preview-hue' }],
+			roles: [{ name: 'fill' }, { name: 'text' }],
+			noContrastInversion: state.noContrastInversion,
+		}).css,
+)
 
 useHead({
-  style: [
-    {
-      id: 'preview-css',
-      innerHTML: generatedCss,
-    }
-  ]
+	style: [
+		{
+			id: 'preview-css',
+			innerHTML: generatedCss,
+		},
+	],
 })
 
-const contrastTarget = computed(() => state.activeRole === 'fill' ? 'text' : 'fill')
+const contrastTarget = computed(() => (state.activeRole === 'fill' ? 'text' : 'fill'))
 
 const previewStyle = computed(() => ({
 	'--lightness': Math.max(0, Math.min(state.lightness, 100)) / 100,
@@ -79,34 +79,36 @@ async function copyCss() {
 
 				<label>
 					Hue
-					<input v-model.number="state.hue" type="number" min="0" max="360" step="1" />
-					<input v-model.number="state.hue" type="range" min="0" max="360" step="1" />
+					<input v-model.number="state.hue" type="number" min="0" max="360" step="1">
+					<input v-model.number="state.hue" type="range" min="0" max="360" step="1">
 				</label>
 
 				<label>
 					Chroma (% of max)
-					<input v-model.number="state.chroma" type="number" min="0" max="100" step="1" />
-					<input v-model.number="state.chroma" type="range" min="0" max="100" step="1" />
+					<input v-model.number="state.chroma" type="number" min="0" max="100" step="1">
+					<input v-model.number="state.chroma" type="range" min="0" max="100" step="1">
 					<span class="hint">Percentage of maximum chroma available at current lightness</span>
 				</label>
 
 				<label>
 					Lightness
-					<input v-model.number="state.lightness" type="number" min="0" max="100" step="1" />
-					<input v-model.number="state.lightness" type="range" min="0" max="100" step="1" />
+					<input v-model.number="state.lightness" type="number" min="0" max="100" step="1">
+					<input v-model.number="state.lightness" type="range" min="0" max="100" step="1">
 				</label>
 
 				<label>
 					Contrast (signed)
-					<input v-model.number="state.contrast" type="number" min="-108" max="108" step="1" />
-					<input v-model.number="state.contrast" type="range" min="-108" max="108" step="1" />
+					<input v-model.number="state.contrast" type="number" min="-108" max="108" step="1">
+					<input v-model.number="state.contrast" type="range" min="-108" max="108" step="1">
 					<span class="hint">Positive = light text, Negative = dark text</span>
 				</label>
 
 				<label>
-					<input v-model="state.noContrastInversion" type="checkbox" />
+					<input v-model="state.noContrastInversion" type="checkbox">
 					Disable contrast inversion
-					<span class="hint">When checked, always follow requested polarity (may result in lower contrast)</span>
+					<span class="hint"
+						>When checked, always follow requested polarity (may result in lower contrast)</span
+					>
 				</label>
 
 				<button class="copy-button" @click="copyCss" type="button">
@@ -230,7 +232,9 @@ body {
 	border-radius: 4px;
 	color: #f0f0f0;
 	cursor: pointer;
-	transition: background 0.15s, border-color 0.15s;
+	transition:
+		background 0.15s,
+		border-color 0.15s;
 	margin-top: 0.5rem;
 }
 
@@ -257,7 +261,7 @@ body {
 }
 
 .preview-text {
-   	background: var(--color-fill);
+	background: var(--color-fill);
 	color: var(--color-text);
 	font-size: 2rem;
 	font-weight: 600;

@@ -1,4 +1,6 @@
 import {
+	type ApplyBindings,
+	type BindingsInput,
 	bindImpl,
 	type ExpressionInput,
 	isConstantNode,
@@ -6,7 +8,6 @@ import {
 	mergeRefs,
 	type NumberExpression,
 	nodeOf,
-	type RelevantBindingRefs,
 	reference,
 	refsOf,
 	serializeImpl,
@@ -31,43 +32,34 @@ import {
 
 export type { NumberExpression as Expression } from './expression.ts'
 
-export type Input<Refs extends string = never> = ExpressionInput<Refs>
+export type Input<Refs extends string = string> = ExpressionInput<Refs>
 
 export function ref<Name extends string>(name: Name): NumberExpression<Name> {
 	return reference(name)
 }
 
-export function bind<Refs extends string, const B>(
+export function bind<Refs extends string, const B extends BindingsInput>(
 	expr: NumberExpression<Refs>,
-	bindings: B & Partial<Record<Refs, ExpressionInput<string>>>,
-): NumberExpression<Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>> {
+	bindings: B,
+): NumberExpression<ApplyBindings<Refs, B>> {
 	const result = bindImpl(nodeOf(expr), refsOf(expr), bindings)
-	return makeNumber(result.node, result.refs) as NumberExpression<
-		Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>
-	>
+	return makeNumber(result.node, result.refs)
 }
 
 export function solve(expr: NumberExpression): number
-export function solve<Refs extends string, B extends Record<Refs, ExpressionInput<string>>>(
+export function solve<Refs extends string, B extends BindingsInput<Refs>>(
 	expr: NumberExpression<Refs>,
 	bindings: B,
 ): number
-export function solve(
-	expr: NumberExpression<string>,
-	bindings?: Record<string, ExpressionInput<string>>,
-): number {
+export function solve(expr: NumberExpression, bindings?: BindingsInput): number {
 	return solveImpl(nodeOf(expr), refsOf(expr), bindings)
 }
 
 export function serialize<Refs extends string>(
 	expr: NumberExpression<Refs>,
-	bindings?: Partial<Record<Refs, ExpressionInput<string>>>,
+	bindings?: Partial<BindingsInput<Refs>>,
 ): string {
-	return serializeImpl(
-		nodeOf(expr),
-		refsOf(expr),
-		bindings as Record<string, ExpressionInput<string>>,
-	)
+	return serializeImpl(nodeOf(expr), refsOf(expr), bindings as BindingsInput)
 }
 
 export function add<A = never, B = never>(
@@ -86,9 +78,9 @@ export function add<A = never, B = never, C = never, D = never>(
 	d: ExpressionInput<D & string>,
 ): NumberExpression<(A & string) | (B & string) | (C & string) | (D & string)>
 export function add(
-	...args: [ExpressionInput<string>, ExpressionInput<string>, ...ExpressionInput<string>[]]
-): NumberExpression<string>
-export function add(...args: ExpressionInput<string>[]): NumberExpression<string> {
+	...args: [ExpressionInput, ExpressionInput, ...ExpressionInput[]]
+): NumberExpression
+export function add(...args: ExpressionInput[]): NumberExpression {
 	const exprs = args.map((a) => toExpression(a))
 	const nodes = exprs.map((e) => nodeOf(e))
 	if (nodes.every(isConstantNode)) {
@@ -212,9 +204,9 @@ export function max<A = never, B = never, C = never, D = never>(
 	d: ExpressionInput<D & string>,
 ): NumberExpression<(A & string) | (B & string) | (C & string) | (D & string)>
 export function max(
-	...args: [ExpressionInput<string>, ExpressionInput<string>, ...ExpressionInput<string>[]]
-): NumberExpression<string>
-export function max(...args: ExpressionInput<string>[]): NumberExpression<string> {
+	...args: [ExpressionInput, ExpressionInput, ...ExpressionInput[]]
+): NumberExpression
+export function max(...args: ExpressionInput[]): NumberExpression {
 	const exprs = args.map((a) => toExpression(a))
 	const nodes = exprs.map((e) => nodeOf(e))
 	if (nodes.every(isConstantNode)) {
@@ -240,9 +232,9 @@ export function min<A = never, B = never, C = never, D = never>(
 	d: ExpressionInput<D & string>,
 ): NumberExpression<(A & string) | (B & string) | (C & string) | (D & string)>
 export function min(
-	...args: [ExpressionInput<string>, ExpressionInput<string>, ...ExpressionInput<string>[]]
-): NumberExpression<string>
-export function min(...args: ExpressionInput<string>[]): NumberExpression<string> {
+	...args: [ExpressionInput, ExpressionInput, ...ExpressionInput[]]
+): NumberExpression
+export function min(...args: ExpressionInput[]): NumberExpression {
 	const exprs = args.map((a) => toExpression(a))
 	const nodes = exprs.map((e) => nodeOf(e))
 	if (nodes.every(isConstantNode)) {

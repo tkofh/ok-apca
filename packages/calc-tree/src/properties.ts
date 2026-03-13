@@ -98,10 +98,7 @@ export function make(parent?: Properties): Properties {
  * Walk an expression's property nodes and register all `@property` rules
  * and declarations into the given property set.
  */
-export function collect(
-	set: Properties,
-	expr: NumberExpression<string> | ColorExpression<string>,
-): void {
+export function collect(set: Properties, expr: NumberExpression | ColorExpression): void {
 	const s = internal(set)
 	const declarations: Record<string, string> = {}
 	const properties: Record<string, PropertyRule> = {}
@@ -127,9 +124,9 @@ export function number<Refs extends string>(
 ): NumberExpression<Refs>
 export function number(
 	setOrName: Properties | string,
-	nameOrValue?: string | NumberExpression<string> | number,
-	value?: NumberExpression<string> | number,
-): NumberExpression<string> {
+	nameOrValue?: string | NumberExpression | number,
+	value?: NumberExpression | number,
+): NumberExpression {
 	// No-set overloads: number(name) or number(name, value)
 	if (typeof setOrName === 'string') {
 		const name = setOrName
@@ -139,8 +136,8 @@ export function number(
 		}
 		const expr = typeof nameOrValue === 'number' ? toExpression(nameOrValue) : nameOrValue
 		return makeNumber(
-			new PropertyNode(name, nodeOf(expr as NumberExpression<string>), '<number>', inherits),
-			refsOf(expr as NumberExpression<string>),
+			new PropertyNode(name, nodeOf(expr as NumberExpression), '<number>', inherits),
+			refsOf(expr as NumberExpression),
 		)
 	}
 
@@ -165,13 +162,13 @@ export function color<Refs extends string>(
 ): ColorExpression<Refs>
 export function color(
 	setOrName: Properties | string,
-	nameOrValue: string | ColorExpression<string>,
-	value?: ColorExpression<string>,
-): ColorExpression<string> {
+	nameOrValue: string | ColorExpression,
+	value?: ColorExpression,
+): ColorExpression {
 	// No-set overload: color(name, value)
 	if (typeof setOrName === 'string') {
 		const name = setOrName
-		const expr = nameOrValue as ColorExpression<string>
+		const expr = nameOrValue as ColorExpression
 		return makeColor(
 			new PropertyNode(name, nodeOf(expr), '<color>', inheritsFromName(name)),
 			refsOf(expr),
@@ -181,17 +178,14 @@ export function color(
 	// Set overload: delegate to no-set, then collect
 	const set = setOrName
 	const name = nameOrValue as string
-	const colorValue = value as ColorExpression<string>
+	const colorValue = value as ColorExpression
 	const result = color(name, colorValue)
 	collect(set, result)
 	return result
 }
 
 /** Batch-define numeric properties from a record of values. */
-export function numbers(
-	set: Properties,
-	values: Record<string, number | NumberExpression<string>>,
-): void {
+export function numbers(set: Properties, values: Record<string, number | NumberExpression>): void {
 	const s = internal(set)
 	for (const [name, value] of Object.entries(values)) {
 		if (typeof value === 'number') {

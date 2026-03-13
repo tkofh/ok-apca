@@ -1,11 +1,12 @@
 import {
+	type ApplyBindings,
+	type BindingsInput,
 	bindImpl,
 	type ColorExpression,
 	type ExpressionInput,
 	makeColor,
 	mergeRefs,
 	nodeOf,
-	type RelevantBindingRefs,
 	refsOf,
 	serializeImpl,
 	toExpression,
@@ -14,25 +15,19 @@ import { OklchNode } from './nodes.ts'
 
 export type { ColorExpression as Expression } from './expression.ts'
 
-export function bind<Refs extends string, const B>(
+export function bind<Refs extends string, const B extends BindingsInput>(
 	expr: ColorExpression<Refs>,
-	bindings: B & Partial<Record<Refs, ExpressionInput<string>>>,
-): ColorExpression<Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>> {
+	bindings: B,
+): ColorExpression<ApplyBindings<Refs, B>> {
 	const result = bindImpl(nodeOf(expr), refsOf(expr), bindings)
-	return makeColor(result.node, result.refs) as ColorExpression<
-		Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>
-	>
+	return makeColor(result.node, result.refs)
 }
 
 export function serialize<Refs extends string>(
 	expr: ColorExpression<Refs>,
-	bindings?: Partial<Record<Refs, ExpressionInput<string>>>,
+	bindings?: Partial<BindingsInput<Refs>>,
 ): string {
-	return serializeImpl(
-		nodeOf(expr),
-		refsOf(expr),
-		bindings as Record<string, ExpressionInput<string>>,
-	)
+	return serializeImpl(nodeOf(expr), refsOf(expr), bindings as BindingsInput)
 }
 
 export function oklch<L = never, C = never, H = never>(

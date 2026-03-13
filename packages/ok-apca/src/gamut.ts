@@ -34,7 +34,7 @@ const S_PRIME_KB = -1.2914855480194092
  * All hue-dependent data: gamut boundary geometry and Y correction coefficients.
  * Computed once per hue and cached. Use {@link computeGamutSlice} to create.
  */
-export interface GamutSlice {
+export type GamutSlice = {
 	/** The hue angle (0–360). */
 	readonly hue: number
 	/** Lightness at the gamut boundary apex (maximum chroma point). */
