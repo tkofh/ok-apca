@@ -20,7 +20,7 @@ import { computeGamutSlice, gamutMap } from './gamut.ts'
 import { clampNumber } from './util.ts'
 
 /**
- * Y-correction polynomial: 1 + fA·chroma + fB·chroma² + fD·chroma³
+ * Y-correction polynomial: 1 + fA·chroma + fB·chroma^2 + fD·chroma^3
  *
  * Converts between OKLCH lightness and CIE Y using pre-scaled coefficients.
  * fA, fB, fD are hue-dependent and incorporate the gamut boundary slope
@@ -34,7 +34,7 @@ const fCorrection: Calc.Expression<'chroma' | 'fA' | 'fB' | 'fD'> = Calc.add(
 )
 
 /**
- * Y background: L³ · f(chroma)
+ * Y background: L^3 · f(chroma)
  *
  * Computes CIE Y luminance from OKLCH lightness and chroma ratio.
  * Exact on the left half of the gamut tent where k = (apexC/apexL) · chromaRatio

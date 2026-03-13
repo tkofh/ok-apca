@@ -44,20 +44,20 @@ export type GamutSlice = {
 	/**
 	 * Curvature correction for the right half of the tent.
 	 * The actual gamut boundary curves inward from the linear tent approximation.
-	 * Applied via pow(sin(t * π), exponent) basis function.
+	 * Applied via pow(sin(t * pi), exponent) basis function.
 	 * Always negative (actual boundary is inside linear approximation).
 	 */
 	readonly tentK: number
-	/** Y polynomial coefficient for L²·C term. */
+	/** Y polynomial coefficient for L^2·C term. */
 	readonly yCoeffA: number
-	/** Y polynomial coefficient for L·C² term. */
+	/** Y polynomial coefficient for L·C^2 term. */
 	readonly yCoeffB: number
-	/** Y polynomial coefficient for C³ term. */
+	/** Y polynomial coefficient for C^3 term. */
 	readonly yCoeffD: number
 	/**
 	 * Pre-scaled Y correction coefficients for the k-polynomial.
-	 * k = (apexC / apexL) · chromaRatio, so the polynomial 1 + A·k + B·k² + D·k³
-	 * becomes 1 + fA·chroma + fB·chroma² + fD·chroma³.
+	 * k = (apexC / apexL) · chromaRatio, so the polynomial 1 + A·k + B·k^2 + D·k^3
+	 * becomes 1 + fA·chroma + fB·chroma^2 + fD·chroma^3.
 	 */
 	readonly fA: number
 	readonly fB: number
@@ -150,7 +150,7 @@ function findMaxChromaAtLightness(hue: number, lightness: number): number {
  * The correction models how the actual gamut boundary curves inward
  * from the linear tent approximation.
  *
- * Uses pow(sin(t * π), 0.95) as the basis function, which:
+ * Uses pow(sin(t * pi), 0.95) as the basis function, which:
  * - Peaks at t=0.5 (like t*(1-t))
  * - Optimal exponent determined by testing across all 360 hues
  * - Allows single evaluation of t in CSS (sin only uses t once)
