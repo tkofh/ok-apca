@@ -27,25 +27,9 @@ import {
 	SubtractNode,
 } from './nodes.ts'
 
-// =============================================================================
-// Re-exported Types
-// =============================================================================
-
 export type { NumberExpression as Expression } from './expression.ts'
 
 export type Input<Refs extends string = never> = ExpressionInput<Refs>
-
-export type { InferRefs } from './expression.ts'
-
-// =============================================================================
-// Utilities
-// =============================================================================
-
-export { formatNumber } from './nodes.ts'
-
-// =============================================================================
-// Expression Operations
-// =============================================================================
 
 export function bind<Refs extends string, const B>(
 	expr: NumberExpression<Refs>,
@@ -75,10 +59,6 @@ export function serialize<Refs extends string>(
 ): string {
 	return serializeImpl(expr._node, expr._refs, bindings as Record<string, ExpressionInput<never>>)
 }
-
-// =============================================================================
-// Math Constructors
-// =============================================================================
 
 export function add<A extends ExpressionInput<string>, B extends ExpressionInput<string>>(
 	a: A,

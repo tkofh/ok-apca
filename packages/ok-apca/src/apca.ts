@@ -1,9 +1,5 @@
 import { Calc } from '@ok-apca/calc-tree'
 
-// =============================================================================
-// APCA Algorithm Constants
-// =============================================================================
-
 /** Exponents for Y (luminance) in APCA contrast formula. */
 export const APCA_BG_EXP_NORMAL = 0.56
 export const APCA_FG_EXP_NORMAL = 0.57
@@ -41,10 +37,6 @@ const APCA_SMOOTH_POWER = 2.46
  */
 const INVERSION_THRESHOLD = 0.08 // ~8 Lc
 
-// =============================================================================
-// Soft Clamp Approximation Constants
-// =============================================================================
-
 /**
  * Lp-norm approximation of the APCA soft black clamp.
  * pow(pow(Y, p) + K^p, 1/p) approximates sc(Y) with a single reference to Y.
@@ -53,19 +45,21 @@ const LP_SOFT_CLAMP_P = 1.75
 const LP_SOFT_CLAMP_KP = 0.005 ** LP_SOFT_CLAMP_P
 const LP_SOFT_CLAMP_INV_P = 1 / LP_SOFT_CLAMP_P
 
-const absContrast = Calc.abs('contrast')
-const contrastDelta = Calc.divide(Calc.add(absContrast, APCA_OFFSET), APCA_SCALE)
+const contrastDelta = Calc.divide(Calc.add(Calc.abs('contrast'), APCA_OFFSET), APCA_SCALE)
 
 const smoothingBlend = Calc.pow(
 	Calc.sin(
-		Calc.multiply(Calc.min(Calc.divide(absContrast, APCA_SMOOTH_THRESHOLD), 1), Math.PI / 2),
+		Calc.multiply(
+			Calc.min(Calc.divide(Calc.abs('contrast'), APCA_SMOOTH_THRESHOLD), 1),
+			Math.PI / 2,
+		),
 	),
 	APCA_SMOOTH_POWER,
 )
 
 const aboveSmoothThreshold = Calc.max(
 	0,
-	Calc.sign(Calc.subtract(absContrast, APCA_SMOOTH_THRESHOLD)),
+	Calc.sign(Calc.subtract(Calc.abs('contrast'), APCA_SMOOTH_THRESHOLD)),
 )
 
 export const normalPolarity: Calc.Expression<'yBg' | 'contrast'> = Calc.lerp(
@@ -151,8 +145,8 @@ export const softUnclamp: Calc.Expression<'y'> = Calc.pow(
 // solver so each Y input is referenced once instead of twice. Measurements are
 // only used for comparison (which direction achieved higher contrast), so the
 // monotonic Lp-norm preserves ranking while halving expansion.
-const yBgClamped = Calc.bind(softClampApprox, { y: 'yBg' })
-const yFgClamped = Calc.bind(softClampApprox, { y: 'yFg' })
+const yBgSoftclamped = Calc.bind(softClampApprox, { y: 'yBg' })
+const yFgSoftclamped = Calc.bind(softClampApprox, { y: 'yFg' })
 
 /**
  * Measure achieved contrast for reverse polarity (light text on dark background).
@@ -165,8 +159,8 @@ export const contrastMeasurementReverse: Calc.Expression<'yBg' | 'yFg'> = Calc.m
 		Calc.multiply(
 			APCA_SCALE,
 			Calc.subtract(
-				Calc.pow(yFgClamped, APCA_FG_EXP_REVERSE),
-				Calc.pow(yBgClamped, APCA_BG_EXP_REVERSE),
+				Calc.pow(yFgSoftclamped, APCA_FG_EXP_REVERSE),
+				Calc.pow(yBgSoftclamped, APCA_BG_EXP_REVERSE),
 			),
 		),
 		APCA_OFFSET,
@@ -184,8 +178,8 @@ export const contrastMeasurementNormal: Calc.Expression<'yBg' | 'yFg'> = Calc.ma
 		Calc.multiply(
 			APCA_SCALE,
 			Calc.subtract(
-				Calc.pow(yBgClamped, APCA_BG_EXP_NORMAL),
-				Calc.pow(yFgClamped, APCA_FG_EXP_NORMAL),
+				Calc.pow(yBgSoftclamped, APCA_BG_EXP_NORMAL),
+				Calc.pow(yFgSoftclamped, APCA_FG_EXP_NORMAL),
 			),
 		),
 		APCA_OFFSET,

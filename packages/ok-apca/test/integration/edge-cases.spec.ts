@@ -10,7 +10,7 @@ describe('Edge cases', () => {
 
 	beforeEach(() => {
 		harness = createTestHarness({
-			options: { variants: ['text'] },
+			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue: 240,
 		})
 	})
@@ -57,7 +57,6 @@ describe('Edge cases', () => {
 
 		// With inversion enabled, positive contrast on very light background
 		// should invert to dark because light direction has no headroom
-		// The dark direction can achieve much more contrast
 		expect(textLightness).toBeLessThan(baseLightness)
 	})
 
@@ -71,7 +70,6 @@ describe('Edge cases', () => {
 
 		// With inversion enabled, negative contrast on very dark background
 		// should invert to light because dark direction has no headroom
-		// The light direction can achieve much more contrast
 		expect(textLightness).toBeGreaterThan(baseLightness)
 	})
 
@@ -89,9 +87,6 @@ describe('Edge cases', () => {
 		harness.setVar('contrast-text', -0.05)
 		const smallNegLightness = harness.getColor('text').get('oklch.l')
 
-		// At mid-tone with very small contrast values, both directions have
-		// essentially equal achievable contrast, so preference should be followed
-		// However, the difference is so small that both should be very close to base
 		expect(Math.abs(smallPosLightness - baseLightness)).toBeLessThan(0.1)
 		expect(Math.abs(smallNegLightness - baseLightness)).toBeLessThan(0.1)
 	})
@@ -120,7 +115,7 @@ describe('Gamut mapping', () => {
 
 	it('keeps contrast colors within Display P3 gamut', () => {
 		const harness = createTestHarness({
-			options: { variants: ['text'] },
+			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue: 150, // Green - another challenging hue
 		})
 
@@ -146,7 +141,7 @@ describe('Different hues', () => {
 	for (const hue of testHues) {
 		it(`produces correct colors for hue ${hue}`, () => {
 			const harness = createTestHarness({
-				options: { variants: ['text'] },
+				options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 				hue,
 			})
 
@@ -178,13 +173,12 @@ describe('Different hues', () => {
 
 	it('produces different gamut boundaries for different hues', () => {
 		// Orange and cyan have very different gamut shapes
-		// Use unique selectors to avoid CSS conflicts
 		const orangeHarness = createTestHarness({
-			options: { baseSelector: '.test-orange' },
+			options: { roles: [{ name: 'fill', selector: '.test-orange' }] },
 			hue: 30,
 		})
 		const cyanHarness = createTestHarness({
-			options: { baseSelector: '.test-cyan' },
+			options: { roles: [{ name: 'fill', selector: '.test-cyan' }] },
 			hue: 200,
 		})
 

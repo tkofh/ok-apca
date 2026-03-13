@@ -11,15 +11,7 @@ import {
 } from './expression.ts'
 import { OklchNode } from './nodes.ts'
 
-// =============================================================================
-// Re-exported Types
-// =============================================================================
-
 export type { ColorExpression as Expression } from './expression.ts'
-
-// =============================================================================
-// Expression Operations
-// =============================================================================
 
 export function bind<Refs extends string, const B>(
 	expr: ColorExpression<Refs>,
@@ -37,10 +29,6 @@ export function serialize<Refs extends string>(
 ): string {
 	return serializeImpl(expr._node, expr._refs, bindings as Record<string, ExpressionInput<never>>)
 }
-
-// =============================================================================
-// Color Constructor
-// =============================================================================
 
 export function oklch<
 	L extends ExpressionInput<string>,

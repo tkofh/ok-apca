@@ -1,10 +1,6 @@
 import type { ExpressionNode } from './nodes.ts'
 import { ConstantNode, ReferenceNode } from './nodes.ts'
 
-// =============================================================================
-// Opaque Expression Types
-// =============================================================================
-
 export interface NumberExpression<Refs extends string = never> {
 	/** @internal */ readonly _node: ExpressionNode
 	/** @internal */ readonly _refs: ReadonlySet<Refs>
@@ -16,10 +12,6 @@ export interface ColorExpression<Refs extends string = never> {
 	/** @internal */ readonly _refs: ReadonlySet<Refs>
 	readonly kind: 'ColorExpression'
 }
-
-// =============================================================================
-// Internal Factory Functions
-// =============================================================================
 
 export function makeNumber<R extends string>(
 	node: ExpressionNode,
@@ -35,10 +27,6 @@ export function makeColor<R extends string>(
 	return { _node: node, _refs: refs, kind: 'ColorExpression' } as ColorExpression<R>
 }
 
-// =============================================================================
-// Input Types
-// =============================================================================
-
 export type ExpressionInput<Refs extends string = never> = NumberExpression<Refs> | number | string
 
 export type InferRefs<T> =
@@ -50,11 +38,6 @@ export type InferRefs<T> =
 				: T
 			: never
 
-// =============================================================================
-// Binding Helper Types
-// =============================================================================
-
-/** Extract refs from a single binding value. */
 export type ValueRefs<V> =
 	V extends NumberExpression<infer R>
 		? R
@@ -64,17 +47,11 @@ export type ValueRefs<V> =
 				: V
 			: never
 
-/** Extract the union of all refs from values in a binding record. */
 export type BindingRefs<T> = T extends Record<string, infer V> ? ValueRefs<V> : never
 
-/** Pick only the binding entries that match actual expression refs. */
 export type RelevantBindingRefs<B, Refs extends string> = BindingRefs<
 	Pick<B, Extract<keyof B & string, Refs>>
 >
-
-// =============================================================================
-// Internal Helpers (constant, reference, toExpression)
-// =============================================================================
 
 class ConstantValueTypeError extends TypeError {
 	readonly value: unknown
@@ -118,10 +95,6 @@ export function toExpression<A extends ExpressionInput<string>>(
 	}
 	return input as NumberExpression<InferRefs<A>>
 }
-
-// =============================================================================
-// Shared Implementation Helpers
-// =============================================================================
 
 export function mergeRefs(...exprs: NumberExpression<string>[]): Set<string> {
 	const refs = new Set<string>()

@@ -10,6 +10,7 @@ const state = reactive({
 	lightness: 50,
 	contrast: 60,
 	noContrastInversion: false,
+	activeRole: 'fill' as 'fill' | 'text',
 })
 
 // Apply query string values
@@ -29,9 +30,11 @@ onMounted(() => {
 })
 
 const generatedCss = computed(() => defineColors({
-		baseSelector: '.preview',
-		hues: [{ name: 'current', hue: state.hue, selector: '.preview' }],
-		variants: ['text'],
+		hues: [{ name: 'current', hue: state.hue, selector: '.preview-hue' }],
+		roles: [
+			{ name: 'fill' },
+			{ name: 'text' },
+		],
 		noContrastInversion: state.noContrastInversion,
 	}).css)
 
@@ -44,10 +47,12 @@ useHead({
   ]
 })
 
+const contrastTarget = computed(() => state.activeRole === 'fill' ? 'text' : 'fill')
+
 const previewStyle = computed(() => ({
 	'--lightness': Math.max(0, Math.min(state.lightness, 100)) / 100,
 	'--chroma': Math.max(0, Math.min(state.chroma, 100)) / 100,
-	'--contrast-text': Math.max(-108, Math.min(state.contrast, 108)) / 100,
+	[`--contrast-${contrastTarget.value}`]: Math.max(-108, Math.min(state.contrast, 108)) / 100,
 }))
 
 const copied = ref(false)
@@ -64,6 +69,14 @@ async function copyCss() {
 	<div class="playground">
 		<div class="sidebar">
 			<div class="controls">
+				<label>
+					Active role
+					<select v-model="state.activeRole">
+						<option value="fill">Fill (background anchors text)</option>
+						<option value="text">Text (text anchors background)</option>
+					</select>
+				</label>
+
 				<label>
 					Hue
 					<input v-model.number="state.hue" type="number" min="0" max="360" step="1" />
@@ -102,8 +115,10 @@ async function copyCss() {
 			</div>
 		</div>
 
-		<div class="preview" :style="previewStyle">
-			<span class="preview-text">Sample Contrast Text</span>
+		<div class="preview-hue">
+			<div :class="['preview', state.activeRole]" :style="previewStyle">
+				<span class="preview-text">Sample Contrast Text</span>
+			</div>
 		</div>
 	</div>
 </template>
@@ -231,7 +246,7 @@ body {
 .preview {
 	aspect-ratio: 1;
 	max-height: calc(100vh - 4rem);
-	background: var(--color);
+	background: var(--color-fill);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -242,7 +257,7 @@ body {
 }
 
 .preview-text {
-   	background: var(--color);
+   	background: var(--color-fill);
 	color: var(--color-text);
 	font-size: 2rem;
 	font-weight: 600;

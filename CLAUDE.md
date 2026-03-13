@@ -45,23 +45,24 @@ The main library that uses `@ok-apca/calc-tree` to generate CSS for OKLCH colors
   - `normalPolarity`, `reversePolarity` - polarity direction solvers
   - `softClampApprox`, `softUnclamp` - Lp-norm approximation of APCA soft black clamp
 
-- **`generator.ts`** - Builds complete CSS from hue definitions using `Properties` namespace:
-  - Uses `Properties.make()` to collect `@property` rules and declarations
-  - Builds base color expressions with gamut mapping
-  - Builds contrast color expressions using APCA polarity selection
+- **`generator.ts`** - Builds complete CSS from role definitions using `Properties` namespace:
+  - Creates a parent `Properties` for shared `@property` rules
+  - Per active role: creates a child `Properties` with namespaced gamut inputs, base color, Y_bg, and contrast targets
+  - Hue selectors use `:is(&, & *):is(.role1, .role2)` nesting to assign gamut constants directly to role elements
 
 - **`color.ts`** - Gamut boundary computation using colorjs.io:
   - `findGamutSlice(hue)` returns `{ apex: { lightness, chroma }, curvature }`
 
 - **`contrast.ts`** - TypeScript runtime for contrast computation:
-  - `measureContrast(baseColor, contrastColor)` - measure APCA contrast
-  - `computeContrastColor(color, contrast, invert?)` - compute contrast color
+  - `measureContrast(baseColor, contrastColor)` - measure APCA contrast between role colors
+  - `computeContrastColor(color, contrast, invert?)` - compute contrast color relative to an anchor role
 
-- **`correction.ts`** - Y-to-L correction pipeline (OKLab polynomial)
-
-- **`constants.ts`** - All shared constants (APCA, gamut, soft clamp)
-
-- **`defineHue(options)`** - Main API entry point (in `index.ts`)
+- **`index.ts`** - Main API entry point:
+  - `defineColors(options)` - accepts `ColorSetOptions` (single set) or `{ sets }` (multiple sets)
+  - `ColorSetOptions`: `name` (property namespace), `hues`, `roles` (array of `ActiveRoleEntry | PassiveRoleEntry`), `noContrastInversion`
+  - Active roles get a CSS selector (default `.{name}`), passive roles are contrast-only targets
+  - `contrastsWith` on roles filters which contrast pairs are generated
+  - Validates role names, uniqueness, contrastsWith references, at least one active role
 
 ### `playground`
 
@@ -70,10 +71,11 @@ A Nuxt app for interactive testing and visualization.
 ## How It Works
 
 1. Given a fixed hue, compute the Display P3 gamut boundary (L_apex, C_apex, curvature)
-2. Build expression trees for gamut-mapped colors and APCA contrast solving
-3. Serialize expressions to CSS with intermediate values as custom properties
-4. Generated CSS accepts `--lightness` and `--chroma` as runtime inputs
-5. Contrast colors accept `--contrast-{label}` inputs (-1.08 to 1.08)
+2. For each active role, build expression trees for the active color and its contrast targets
+3. Serialize per-role expressions to CSS with intermediate values as `@property` declarations
+4. Each active role gets a selector block; hue selectors use `:is()` nesting to set gamut constants on role elements
+5. Runtime inputs: `--lightness` (0–1), `--chroma` (0–1), `--contrast-{role}` (-1.08 to 1.08)
+6. Outputs: `--{name}-{role}` color properties (e.g., `--color-fill`, `--color-text`)
 
 ## CSS Expression Size Constraint
 

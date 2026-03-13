@@ -7,39 +7,67 @@ import {
 	type ColorsDefinition,
 	generateColorsCss,
 	type HueEntry,
+	type ResolvedActiveRole,
 } from './generator.ts'
 
 export type { Color } from './color.ts'
 export { computeContrastColor, measureContrast } from './contrast.ts'
 export type { ColorSystem, HueEntry } from './generator.ts'
 
-export interface DefineColorsOptions {
+interface ActiveRoleEntry {
+	/** Semantic name (e.g., 'fill', 'text', 'border'). */
+	readonly name: string
 	/**
-	 * Base name for output CSS custom properties.
+	 * CSS selector for this role's active-color class.
+	 * @default `.${name}`
+	 */
+	readonly selector?: string
+	readonly passive?: false
+	/**
+	 * Which other roles this role generates contrast outputs for when active.
+	 * Defaults to all other roles. Narrowing this skips CSS for unlikely
+	 * pairings (e.g., a focus ring doesn't need contrast against icons).
+	 * Duplicates are silently deduplicated.
+	 */
+	readonly contrastsWith?: readonly string[]
+}
+
+interface PassiveRoleEntry {
+	/** Semantic name (e.g., 'focus', 'border'). */
+	readonly name: string
+	readonly passive: true
+	/**
+	 * Which active roles this passive role should appear as a contrast
+	 * target for. Defaults to all active roles.
+	 * Duplicates are silently deduplicated.
+	 */
+	readonly contrastsWith?: readonly string[]
+}
+
+export type RoleEntry = ActiveRoleEntry | PassiveRoleEntry
+
+export interface ColorSetOptions {
+	/**
+	 * Property namespace. Prefixes all output properties.
 	 * @default 'color'
 	 */
-	readonly output?: string
-	/** Selector for the base color + variant declarations. */
-	readonly baseSelector: string
+	readonly name?: string
 	/** Hue definitions. Each gets a selector setting gamut constants. */
 	readonly hues: readonly HueEntry[]
-	/**
-	 * Contrast variant labels (e.g., `['text', 'fill', 'stroke']`).
-	 * Each produces a `--{output}-{variant}` color output.
-	 */
-	readonly variants?: readonly string[]
+	/** Color roles in this set. */
+	readonly roles: readonly RoleEntry[]
 	/**
 	 * Disables automatic contrast polarity inversion.
-	 *
-	 * By default, when the preferred polarity direction cannot achieve as much
-	 * contrast as the opposite direction, the system automatically inverts to
-	 * maximize contrast. Set this to `true` to always use the preferred polarity
-	 * direction, clamping to black/white if necessary.
-	 *
 	 * @default false
 	 */
 	readonly noContrastInversion?: boolean
 }
+
+type NonEmptyArray<T> = readonly [T, ...T[]]
+
+export type DefineColorsOptions =
+	| ColorSetOptions
+	| { readonly sets: NonEmptyArray<ColorSetOptions> }
 
 const LABEL_REGEX = /^[a-z][a-z0-9_-]*$/i
 
@@ -61,51 +89,130 @@ function validateUniqueLabels(labels: readonly string[], context: string): void 
 	}
 }
 
+function validateContrastRefs(roles: readonly RoleEntry[], roleNameSet: Set<string>): void {
+	for (const role of roles) {
+		if (role.contrastsWith) {
+			for (const ref of role.contrastsWith) {
+				if (!roleNameSet.has(ref)) {
+					throw new Error(`Role '${role.name}' references unknown role '${ref}' in contrastsWith.`)
+				}
+				if (ref === role.name) {
+					throw new Error(`Role '${role.name}' must not reference itself in contrastsWith.`)
+				}
+			}
+		}
+	}
+}
+
+function validateRoles(roles: readonly RoleEntry[], roleNames: readonly string[]): void {
+	const activeRoles = roles.filter((r) => !r.passive)
+	const passiveRoles = roles.filter((r) => r.passive)
+
+	if (activeRoles.length === 0) {
+		throw new Error('At least one active role is required.')
+	}
+
+	for (const role of passiveRoles) {
+		if ('selector' in role && role.selector !== undefined) {
+			throw new Error(`Passive role '${role.name}' must not specify a selector.`)
+		}
+	}
+
+	validateContrastRefs(roles, new Set(roleNames))
+}
+
+function buildPassiveAllowedMap(
+	passiveRoles: readonly PassiveRoleEntry[],
+): Map<string, Set<string> | null> {
+	const map = new Map<string, Set<string> | null>()
+	for (const role of passiveRoles) {
+		map.set(role.name, role.contrastsWith ? new Set(role.contrastsWith) : null)
+	}
+	return map
+}
+
+function resolveActiveRole(
+	role: ActiveRoleEntry,
+	roleNames: readonly string[],
+	passiveAllowedBy: Map<string, Set<string> | null>,
+): ResolvedActiveRole {
+	const selector = role.selector ?? `.${role.name}`
+	let contrastTargets = role.contrastsWith
+		? [...new Set(role.contrastsWith)]
+		: roleNames.filter((n) => n !== role.name)
+
+	contrastTargets = contrastTargets.filter((target) => {
+		const allowed = passiveAllowedBy.get(target)
+		if (allowed === undefined) {
+			return true
+		}
+		if (allowed === null) {
+			return true
+		}
+		return allowed.has(role.name)
+	})
+
+	return { name: role.name, selector, contrastTargets }
+}
+
+function resolveColorSet(options: ColorSetOptions): ColorsDefinition {
+	const name = options.name ?? 'color'
+	const noContrastInversion = options.noContrastInversion ?? false
+
+	const hueNames = options.hues.map((h) => h.name)
+	for (const hueName of hueNames) {
+		validateLabel(hueName, 'hue name')
+	}
+	validateUniqueLabels(hueNames, 'hue name')
+
+	const roleNames = options.roles.map((r) => r.name)
+	for (const roleName of roleNames) {
+		validateLabel(roleName, 'role name')
+	}
+	validateUniqueLabels(roleNames, 'role name')
+	validateRoles(options.roles, roleNames)
+
+	const activeRoles = options.roles.filter((r) => !r.passive) as ActiveRoleEntry[]
+	const passiveRoles = options.roles.filter((r) => r.passive) as PassiveRoleEntry[]
+	const passiveAllowedBy = buildPassiveAllowedMap(passiveRoles)
+
+	return {
+		name,
+		hues: options.hues,
+		activeRoles: activeRoles.map((role) => resolveActiveRole(role, roleNames, passiveAllowedBy)),
+		noContrastInversion,
+	}
+}
+
 /**
- * Define a multi-hue color system with APCA-based contrast variants.
- *
- * Generates CSS where the base selector contains all color math (using
- * CSS custom properties for gamut constants), and each hue gets a
- * selector that sets those constants.
+ * Define a multi-hue color system with APCA-based contrast roles.
  *
  * @example
  * ```ts
  * const system = defineColors({
- *   baseSelector: '.color',
  *   hues: [
- *     { name: 'red', hue: 25, selector: '.color-red' },
- *     { name: 'blue', hue: 240, selector: '.color-blue' },
+ *     { name: 'red', hue: 25, selector: '.red' },
+ *     { name: 'blue', hue: 240, selector: '.blue' },
  *   ],
- *   variants: ['text', 'fill'],
+ *   roles: [
+ *     { name: 'fill' },
+ *     { name: 'text' },
+ *   ],
  * })
  * console.log(system.css) // Generated CSS string
  * ```
  */
-export function defineColors(options: DefineColorsOptions): ColorSystem {
-	const output = options.output ?? 'color'
-	const variants: readonly string[] = options.variants ?? []
-	const noContrastInversion = options.noContrastInversion ?? false
-
-	// Validate hue names
-	const hueNames = options.hues.map((h) => h.name)
-	for (const name of hueNames) {
-		validateLabel(name, 'hue name')
+export function defineColors(options: ColorSetOptions): ColorSystem
+export function defineColors(options: {
+	readonly sets: NonEmptyArray<ColorSetOptions>
+}): NonEmptyArray<ColorSystem>
+export function defineColors(
+	options: DefineColorsOptions,
+): ColorSystem | NonEmptyArray<ColorSystem> {
+	if ('sets' in options) {
+		return options.sets.map((set) =>
+			generateColorsCss(resolveColorSet(set)),
+		) as unknown as NonEmptyArray<ColorSystem>
 	}
-	validateUniqueLabels(hueNames, 'hue name')
-
-	// Validate variant labels
-	for (const variant of variants) {
-		validateLabel(variant, 'variant label')
-	}
-	validateUniqueLabels(variants, 'variant label')
-
-	const definition: ColorsDefinition = {
-		output,
-		baseSelector: options.baseSelector,
-		hues: options.hues,
-		variants,
-		noContrastInversion,
-	}
-
-	return generateColorsCss(definition)
+	return generateColorsCss(resolveColorSet(options))
 }

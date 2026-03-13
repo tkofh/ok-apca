@@ -10,7 +10,7 @@ describe('Contrast color computation', () => {
 
 	beforeEach(() => {
 		harness = createTestHarness({
-			options: { variants: ['text'] },
+			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue: 240,
 		})
 	})
@@ -119,15 +119,13 @@ describe('Contrast inversion timing', () => {
 	beforeEach(() => {
 		harness = createTestHarness({
 			options: {
-				baseSelector: '.test-inv',
-				variants: ['text'],
+				roles: [{ name: 'fill', selector: '.test-inv' }, { name: 'text' }],
 			},
 			hue: 240,
 		})
 		harnessNoInversion = createTestHarness({
 			options: {
-				baseSelector: '.test-noinv',
-				variants: ['text'],
+				roles: [{ name: 'fill', selector: '.test-noinv' }, { name: 'text' }],
 				noContrastInversion: true,
 			},
 			hue: 240,
@@ -140,11 +138,6 @@ describe('Contrast inversion timing', () => {
 	})
 
 	it('should not invert until non-inverted path reaches true black (CSS)', () => {
-		// Regression: soft clamping in contrast measurement underestimated
-		// dark-direction contrast near Y=0, causing premature polarity inversion.
-		//
-		// At hue=240, L=0.5, negative contrast should keep going darker until
-		// the non-inverted path is fully clamped to black.
 		const lightness = 0.5
 		const chroma = 0.5
 
@@ -216,63 +209,56 @@ describe('Multiple contrast colors', () => {
 
 	beforeEach(() => {
 		harness = createTestHarness({
-			options: { variants: ['text', 'fill', 'stroke'] },
+			options: {
+				roles: [{ name: 'fill' }, { name: 'text' }, { name: 'stroke' }],
+			},
 			hue: 30,
 		})
 	})
 
 	afterEach(() => harness.cleanup())
 
-	it('generates independent contrast colors for each label', () => {
+	it('generates independent contrast colors for each role', () => {
 		harness.setVar('lightness', 0.4)
 		harness.setVar('chroma', 0.5)
 		harness.setVar('contrast-text', 0.6)
-		harness.setVar('contrast-fill', 0.3)
 		harness.setVar('contrast-stroke', -0.4)
 
 		const baseLightness = harness.getColor().get('oklch.l')
 		const textLightness = harness.getColor('text').get('oklch.l')
-		const fillLightness = harness.getColor('fill').get('oklch.l')
 		const strokeLightness = harness.getColor('stroke').get('oklch.l')
 
-		// text has highest positive contrast, should be lightest
-		expect(textLightness).toBeGreaterThan(fillLightness)
-		// stroke has negative contrast - with inversion, what matters is contrast achieved
-		// From L=0.4 base, both directions have room, so preference should be followed
+		// text has highest positive contrast, should be lighter than base
+		expect(textLightness).toBeGreaterThan(baseLightness)
+		// stroke has negative contrast - should achieve some contrast
 		const strokeDiff = Math.abs(strokeLightness - baseLightness)
-		expect(strokeDiff).toBeGreaterThan(0.1) // Should achieve some contrast
+		expect(strokeDiff).toBeGreaterThan(0.1)
 	})
 
 	it('shares chroma percentage across all contrast colors', () => {
 		harness.setVar('lightness', 0.4)
 		harness.setVar('chroma', 0.6)
 		harness.setVar('contrast-text', 0.5)
-		harness.setVar('contrast-fill', 0.5)
 		harness.setVar('contrast-stroke', 0.5)
 
 		const textChroma = harness.getColor('text').get('oklch.c')
-		const fillChroma = harness.getColor('fill').get('oklch.c')
 		const strokeChroma = harness.getColor('stroke').get('oklch.c')
 
 		// All should have similar chroma (may differ slightly due to gamut mapping at different lightnesses)
-		expect(textChroma).toBeCloseTo(fillChroma, 1)
-		expect(fillChroma).toBeCloseTo(strokeChroma, 1)
+		expect(textChroma).toBeCloseTo(strokeChroma, 1)
 	})
 
 	it('maintains correct hue for all contrast colors', () => {
 		harness.setVar('lightness', 0.5)
 		harness.setVar('chroma', 0.5)
 		harness.setVar('contrast-text', 0.4)
-		harness.setVar('contrast-fill', 0.6)
 		harness.setVar('contrast-stroke', -0.3)
 
 		const baseHue = harness.getColor().get('oklch.h')
 		const textHue = harness.getColor('text').get('oklch.h')
-		const fillHue = harness.getColor('fill').get('oklch.h')
 		const strokeHue = harness.getColor('stroke').get('oklch.h')
 
 		expect(textHue).toBeCloseTo(baseHue, 0)
-		expect(fillHue).toBeCloseTo(baseHue, 0)
 		expect(strokeHue).toBeCloseTo(baseHue, 0)
 	})
 })

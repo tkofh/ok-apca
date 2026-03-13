@@ -5,8 +5,8 @@
  * results that match the CSS computed by the browser.
  *
  * The CSS is the source of truth - it computes:
- * - Base color chroma as: maxChroma(lightness) * chromaPercentage
- * - Contrast color chroma as: maxChroma(contrastLightness) * chromaPercentage
+ * - Active role chroma as: maxChroma(lightness) * chromaPercentage
+ * - Contrast role chroma as: maxChroma(contrastLightness) * chromaPercentage
  *
  * The TypeScript functions should be used to match this behavior.
  */
@@ -132,7 +132,7 @@ describe('computeContrastColor parity with CSS', () => {
 
 			// Get result from CSS in browser (contrast input is normalized)
 			const harness = createTestHarness({
-				options: { variants: ['text'] },
+				options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 				hue,
 			})
 			harness.setVar('lightness', lightness)
@@ -170,7 +170,7 @@ describe('computeContrastColor parity with CSS', () => {
 			const tsResult = computeContrastColor(baseColor, contrast)
 
 			const harness = createTestHarness({
-				options: { variants: ['text'] },
+				options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 				hue,
 			})
 			harness.setVar('lightness', lightness)
@@ -196,7 +196,7 @@ describe('computeContrastColor parity with CSS', () => {
 describe('chroma percentage preservation parity', () => {
 	afterEach(() => cleanupAll())
 
-	it('preserves chroma percentage from base to contrast color', () => {
+	it('preserves chroma percentage from active role to contrast color', () => {
 		const hue = 240
 		const lightness = 0.4
 		const chroma = 0.5 // 50% of max chroma
@@ -204,7 +204,7 @@ describe('chroma percentage preservation parity', () => {
 
 		// CSS computation
 		const harness = createTestHarness({
-			options: { variants: ['text'] },
+			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue,
 		})
 		harness.setVar('lightness', lightness)
@@ -249,7 +249,7 @@ describe('edge case parity', () => {
 		const tsResult = computeContrastColor(baseColor, contrast)
 
 		const harness = createTestHarness({
-			options: { variants: ['text'] },
+			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue,
 		})
 		harness.setVar('lightness', lightness)
@@ -275,7 +275,7 @@ describe('edge case parity', () => {
 		const tsResult = computeContrastColor(baseColor, contrast)
 
 		const harness = createTestHarness({
-			options: { variants: ['text'] },
+			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue,
 		})
 		harness.setVar('lightness', lightness)

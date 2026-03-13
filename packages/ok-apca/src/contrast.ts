@@ -20,10 +20,6 @@ import { type Color, createColor, getLuminance } from './color.ts'
 import { computeGamutSlice, gamutMap } from './gamut.ts'
 import { clampNumber } from './util.ts'
 
-// =============================================================================
-// Shared Expression Trees
-// =============================================================================
-
 /**
  * Y-correction polynomial: 1 + fA·chroma + fB·chroma² + fD·chroma³
  *
@@ -60,10 +56,6 @@ export const yBackground: Calc.Expression<'lightness' | 'chroma' | 'fA' | 'fB' |
 export const correctedLightness: Calc.Expression<'yTarget' | 'chroma' | 'fA' | 'fB' | 'fD'> =
 	Calc.pow(Calc.divide('yTarget', fCorrection), 1 / 3)
 
-// =============================================================================
-// Contrast Target Lightness Factories
-// =============================================================================
-
 /**
  * Build contrast target lightness expression (simple solver, no inversion).
  *
@@ -94,20 +86,19 @@ export function contrastTargetLightness<const Label extends string>(label: Label
  *
  * Unbound refs: `yBg`, `scYBg`, `contrast-{label}`, `chroma`, `fA`, `fB`, `fD`.
  */
-export function contrastTargetLightnessWithInversion<const Label extends string>(label: Label) {
+export function contrastTargetLightnessWithInversion<const Label extends string>(
+	label: Label,
+): Calc.Expression<'yBg' | 'chroma' | 'fA' | 'fB' | 'fD' | 'scYBg' | `contrast-${Label}`> {
 	const contrastRef = `contrast-${label}` as const
-
-	// Polarity solvers use soft-clamped Y_bg
-	const polarityBinding = { yBg: 'scYBg' as const, contrast: contrastRef }
 
 	// Raw solver outputs in soft-clamped domain
 	const yLightRaw = Properties.number(
 		`_ylr-${label}`,
-		Calc.clamp(0, Calc.bind(reversePolarity, polarityBinding), 1),
+		Calc.clamp(0, Calc.bind(reversePolarity, { yBg: 'scYBg' as const, contrast: contrastRef }), 1),
 	)
 	const yDarkRaw = Properties.number(
 		`_ydr-${label}`,
-		Calc.clamp(0, Calc.bind(normalPolarity, polarityBinding), 1),
+		Calc.clamp(0, Calc.bind(normalPolarity, { yBg: 'scYBg' as const, contrast: contrastRef }), 1),
 	)
 
 	// Unclamp to recover actual Y values
@@ -138,15 +129,11 @@ export function contrastTargetLightnessWithInversion<const Label extends string>
 		}),
 	)
 
-	return Properties.number(`_cl-${label}`, Calc.bind(correctedLightness, { yTarget }))
+	return Properties.number(`_cl-${label}`, Calc.bind(correctedLightness, { yTarget })) as never
 }
 
-// =============================================================================
-// Measure Contrast
-// =============================================================================
-
 /**
- * Measure APCA contrast between colors.
+ * Measure APCA contrast between two role colors.
  * Returns signed Lc value: positive = dark on light, negative = light on dark.
  * Range: -1.08 to 1.08.
  *
@@ -195,15 +182,12 @@ export function measureContrast(
 	)
 }
 
-// =============================================================================
-// Compute Contrast Color (JS runtime)
-// =============================================================================
-
 /**
- * Compute contrast color achieving target APCA Lc value.
- * Positive contrast = lighter text, negative = darker text.
+ * Compute a contrast color achieving target APCA Lc value relative to
+ * an anchor role color.
+ * Positive contrast = lighter result, negative = darker result.
  *
- * @param color - The base color to compute contrast from
+ * @param color - The anchor (active) role color
  * @param contrast - Signed contrast value (-1.08 to 1.08)
  * @param invert - Whether to enable automatic polarity inversion (default: true)
  *
@@ -215,19 +199,18 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 	const maxChromaAtBase = Calc.solve(slice.maxChroma, { lightness })
 	const chromaRatio = maxChromaAtBase > 0 ? clampNumber(0, chroma / maxChromaAtBase, 1) : 0
 
-	const targetLExpr = invert
-		? contrastTargetLightnessWithInversion('_')
-		: contrastTargetLightness('_')
-
 	const clampedContrast = clampNumber(-1.08, contrast, 1.08)
 	const targetLightness = clampNumber(
 		0,
 		Calc.solve(
 			Calc.bind(
-				Calc.bind(targetLExpr, {
-					yBg: yBackground,
-					scYBg: Calc.bind(softClampApprox, { y: yBackground }),
-				}),
+				Calc.bind(
+					invert ? contrastTargetLightnessWithInversion('_') : contrastTargetLightness('_'),
+					{
+						yBg: yBackground,
+						scYBg: Calc.bind(softClampApprox, { y: yBackground }),
+					},
+				),
 				slice,
 			),
 			{

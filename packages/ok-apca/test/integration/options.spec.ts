@@ -11,8 +11,8 @@ describe('Custom output name', () => {
 	beforeEach(() => {
 		harness = createTestHarness({
 			options: {
-				output: 'accent',
-				variants: ['text'],
+				name: 'accent',
+				roles: [{ name: 'fill' }, { name: 'text' }],
 			},
 		})
 	})
@@ -23,7 +23,7 @@ describe('Custom output name', () => {
 		harness.setVar('lightness', 0.5)
 		harness.setVar('chroma', 0.5)
 
-		const color = harness.getColor() // Gets --accent
+		const color = harness.getColor() // Gets --accent-fill
 		expect(color.get('oklch.l')).toBeCloseTo(0.5, 1)
 	})
 
@@ -37,35 +37,27 @@ describe('Custom output name', () => {
 	})
 })
 
-describe('No variants', () => {
+describe('No contrast targets', () => {
 	let harness: TestHarness
 
 	beforeEach(() => {
 		harness = createTestHarness({
-			options: {},
+			options: {
+				roles: [{ name: 'fill', contrastsWith: [] }],
+			},
 			hue: 120,
 		})
 	})
 
 	afterEach(() => harness.cleanup())
 
-	it('generates only base color without contrast', () => {
+	it('generates only active color without contrast', () => {
 		harness.setVar('lightness', 0.6)
 		harness.setVar('chroma', 0.7)
 
 		const color = harness.getColor()
 		expect(color.get('oklch.l')).toBeCloseTo(0.6, 1)
 		expect(color.get('oklch.h')).toBeCloseTo(120, 0)
-	})
-
-	it('ignores contrast variables when no variants configured', () => {
-		harness.setVar('lightness', 0.5)
-		harness.setVar('chroma', 0.5)
-		harness.setVar('contrast-text', 0.6) // Should be ignored
-
-		// Should not throw, and base color should still work
-		const color = harness.getColor()
-		expect(color.get('oklch.l')).toBeCloseTo(0.5, 1)
 	})
 })
 
