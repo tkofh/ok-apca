@@ -243,11 +243,8 @@ describe('defineColors API', () => {
 			roles: [{ name: 'fill' }],
 		})
 
-		expect(system.hues).toHaveLength(2)
-		expect(system.hues[0].name).toBe('red')
-		expect(system.hues[0].hue).toBe(25)
-		expect(system.hues[0].slice).toBeDefined()
-		expect(system.hues[1].name).toBe('blue')
+		expect(system.hues).toEqual({ red: '.red', blue: '.blue' })
+		expect(system.roles).toEqual({ fill: '.fill' })
 	})
 
 	it('does not generate contrast output for passive roles', () => {

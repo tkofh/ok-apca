@@ -135,6 +135,7 @@ describe('computeContrastColor parity with CSS', () => {
 				options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 				hue,
 			})
+			harness.setVar('text-invertable', 1)
 			harness.setVar('lightness', lightness)
 			harness.setVar('chroma', chroma)
 			harness.setVar('contrast-text', contrast)
@@ -173,6 +174,7 @@ describe('computeContrastColor parity with CSS', () => {
 				options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 				hue,
 			})
+			harness.setVar('text-invertable', 1)
 			harness.setVar('lightness', lightness)
 			harness.setVar('chroma', chroma)
 			harness.setVar('contrast-text', contrast)
@@ -207,6 +209,7 @@ describe('chroma percentage preservation parity', () => {
 			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue,
 		})
+		harness.setVar('text-invertable', 1)
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
 		harness.setVar('contrast-text', contrast)
@@ -252,6 +255,7 @@ describe('edge case parity', () => {
 			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue,
 		})
+		harness.setVar('text-invertable', 1)
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
 		harness.setVar('contrast-text', contrast)
@@ -278,6 +282,7 @@ describe('edge case parity', () => {
 			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue,
 		})
+		harness.setVar('text-invertable', 1)
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
 		harness.setVar('contrast-text', contrast)

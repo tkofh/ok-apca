@@ -13,6 +13,7 @@ describe('Edge cases', () => {
 			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue: 240,
 		})
+		harness.setVar('text-invertable', 1)
 	})
 
 	afterEach(() => harness.cleanup())
@@ -119,6 +120,7 @@ describe('Gamut mapping', () => {
 			hue: 150, // Green - another challenging hue
 		})
 
+		harness.setVar('text-invertable', 1)
 		harness.setVar('lightness', 0.4)
 		harness.setVar('chroma', 1)
 
@@ -145,6 +147,7 @@ describe('Different hues', () => {
 				hue,
 			})
 
+			harness.setVar('text-invertable', 1)
 			harness.setVar('lightness', 0.5)
 			harness.setVar('chroma', 0.5)
 			harness.setVar('contrast-text', 0.6)

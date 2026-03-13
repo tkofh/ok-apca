@@ -9,7 +9,6 @@ import {
 	contrastMeasurementNormal,
 	contrastMeasurementReverse,
 	contrastSolver,
-	contrastSolverWithInversion,
 	normalPolarity,
 	reversePolarity,
 	softClampApprox,
@@ -57,38 +56,24 @@ const correctedLightness: Calc.Expression<'yTarget' | 'chroma' | 'fA' | 'fB' | '
 )
 
 /**
- * Build contrast target lightness expression (simple solver, no inversion).
- *
- * Returns a property-wrapped expression tree for the corrected lightness of
- * a contrast color. The label parameterizes property names and the contrast
- * input ref (`contrast-{label}`).
- *
- * Unbound refs: `scYBg`, `contrast-{label}`, `chroma`, `fA`, `fB`, `fD`.
- */
-export function contrastTargetLightness<const Label extends string>(label: Label) {
-	const yRaw = Properties.number(
-		`_yr-${label}`,
-		Calc.bind(contrastSolver, { yBg: Calc.ref('scYBg'), contrast: Calc.ref(`contrast-${label}`) }),
-	)
-	const yTarget = Properties.number(`_yt-${label}`, Calc.bind(softUnclamp, { y: yRaw }))
-	return Properties.number(`_cl-${label}`, Calc.bind(correctedLightness, { yTarget }))
-}
-
-/**
- * Build contrast target lightness expression with automatic polarity inversion.
+ * Build contrast target lightness expression with optional polarity inversion.
  *
  * Computes both polarity solutions, measures achieved contrast for each,
- * and selects the one that achieves higher absolute contrast.
+ * and selects based on the `{label}-invertable` ref:
+ * - `1`: picks whichever direction achieves higher contrast
+ * - `0`: always follows the contrast sign (no inversion)
  *
  * Uses two distinct Y_bg refs:
  * - `scYBg`: soft-clamped Y_bg for the polarity solvers (operates in clamped domain)
  * - `yBg`: original Y_bg for contrast measurement and zero-contrast fallback
  *
- * Unbound refs: `yBg`, `scYBg`, `contrast-{label}`, `chroma`, `fA`, `fB`, `fD`.
+ * Unbound refs: `yBg`, `scYBg`, `{label}-invertable`, `contrast-{label}`, `chroma`, `fA`, `fB`, `fD`.
  */
-export function contrastTargetLightnessWithInversion<const Label extends string>(
+export function contrastTargetLightness<const Label extends string>(
 	label: Label,
-): Calc.Expression<'yBg' | 'chroma' | 'fA' | 'fB' | 'fD' | 'scYBg' | `contrast-${Label}`> {
+): Calc.Expression<
+	'yBg' | 'chroma' | 'fA' | 'fB' | 'fD' | 'scYBg' | `${Label}-invertable` | `contrast-${Label}`
+> {
 	const contrast = Calc.ref(`contrast-${label}` as const)
 
 	// Raw solver outputs in soft-clamped domain
@@ -105,11 +90,12 @@ export function contrastTargetLightnessWithInversion<const Label extends string>
 	const yLight = Properties.number(`_yl-${label}`, Calc.bind(softUnclamp, { y: yLightRaw }))
 	const yDark = Properties.number(`_yd-${label}`, Calc.bind(softUnclamp, { y: yDarkRaw }))
 
-	// Inversion solver uses original Y_bg for zero-contrast fallback
+	// Solver uses original Y_bg for zero-contrast fallback
 	const yTarget = Properties.number(
 		`_yt-${label}`,
-		Calc.bind(contrastSolverWithInversion, {
+		Calc.bind(contrastSolver, {
 			contrast,
+			invertable: Calc.ref(`${label}-invertable` as const),
 			yLight,
 			yDark,
 			yLightRaw,
@@ -200,18 +186,16 @@ export function computeContrastColor(color: Color, contrast: number, invert = tr
 		0,
 		Calc.solve(
 			Calc.bind(
-				Calc.bind(
-					invert ? contrastTargetLightnessWithInversion('_') : contrastTargetLightness('_'),
-					{
-						yBg: yBackground,
-						scYBg: Calc.bind(softClampApprox, { y: yBackground }),
-					},
-				),
+				Calc.bind(contrastTargetLightness('_'), {
+					yBg: yBackground,
+					scYBg: Calc.bind(softClampApprox, { y: yBackground }),
+				}),
 				slice,
 			),
 			{
 				lightness,
 				chroma: chromaRatio,
+				'_-invertable': invert ? 1 : 0,
 				'contrast-_': clampedContrast,
 			},
 		),

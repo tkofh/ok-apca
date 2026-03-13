@@ -1,4 +1,3 @@
-import type { ColorsDefinition, ResolvedHue, ResolvedRole } from './generator.ts'
 import { invariant, type OneOrMore, toArray, type ZeroOrMore } from './util.ts'
 
 interface BaseRoleEntry {
@@ -52,11 +51,24 @@ export interface ColorSetOptions {
 	readonly hues: OneOrMore<HueEntry>
 	/** Color roles in this set. */
 	readonly roles: OneOrMore<RoleEntry>
-	/**
-	 * Disables automatic contrast polarity inversion.
-	 * @default false
-	 */
-	readonly noContrastInversion?: boolean | undefined
+}
+
+export interface ResolvedHue {
+	readonly name: string
+	readonly hue: number
+	readonly selector: string
+}
+
+export interface ResolvedRole {
+	readonly name: string
+	readonly selector: string
+	readonly contrastTargets: readonly string[]
+}
+
+export interface ColorsDefinition {
+	readonly prefix: string
+	readonly hues: readonly ResolvedHue[]
+	readonly roles: readonly ResolvedRole[]
 }
 
 const LABEL_REGEX = /^[a-z][a-z0-9_-]*$/i
@@ -145,6 +157,5 @@ export function resolveColorSet(options: ColorSetOptions): ColorsDefinition {
 		prefix: options.prefix ?? 'color',
 		hues: processHues(toArray(options.hues)),
 		roles: processRoles(toArray(options.roles)),
-		noContrastInversion: options.noContrastInversion ?? false,
 	}
 }

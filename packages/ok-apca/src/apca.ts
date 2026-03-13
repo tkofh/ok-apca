@@ -99,16 +99,6 @@ const contrastPreferLight = Calc.max(0, contrastSign)
 const contrastPreferDark = Calc.max(0, Calc.multiply(-1, contrastSign))
 const contrastIsZero = Calc.subtract(1, Calc.max(contrastPreferLight, contrastPreferDark))
 
-export const contrastSolver: Calc.Expression<'yBg' | 'contrast'> = Calc.clamp(
-	0,
-	Calc.add(
-		Calc.multiply(contrastPreferLight, reversePolarity),
-		Calc.multiply(contrastPreferDark, normalPolarity),
-		Calc.multiply(contrastIsZero, Calc.ref('yBg')),
-	),
-	1,
-)
-
 /**
  * True APCA soft black clamp: Y + max(0, threshold - Y)^1.414.
  * Used for accurate reference values in the TypeScript runtime.
@@ -190,8 +180,10 @@ export const contrastMeasurementNormal: Calc.Expression<'yBg' | 'yFg'> = Calc.ma
 )
 
 // Use preference when the preferred direction still has headroom,
-// or when both contrasts are below the inversion threshold
+// or when both contrasts are below the inversion threshold.
+// When invertable=0, force usePreference=1 (always follow contrast sign, no inversion).
 const usePreference = Calc.max(
+	Calc.subtract(1, Calc.ref('invertable')),
 	Calc.multiply(
 		Calc.max(0, Calc.sign(Calc.subtract(INVERSION_THRESHOLD, Calc.ref('lcLight')))),
 		Calc.max(0, Calc.sign(Calc.subtract(INVERSION_THRESHOLD, Calc.ref('lcDark')))),
@@ -217,11 +209,15 @@ const compDiff = Calc.add(
 )
 
 /**
- * Contrast solver with automatic polarity inversion.
+ * Contrast solver with optional polarity inversion.
  *
- * Uses the preferred polarity direction as long as it has headroom (hasn't
- * been clamped to the Y boundary). Only when the preferred direction is
- * exhausted does it compare achieved contrasts to pick the better one.
+ * When `invertable=1`, uses the preferred polarity direction as long as it
+ * has headroom (hasn't been clamped to the Y boundary). Only when the
+ * preferred direction is exhausted does it compare achieved contrasts to
+ * pick the better one.
+ *
+ * When `invertable=0`, always follows the contrast sign (positive = lighter,
+ * negative = darker) without inversion.
  *
  * At low contrast values (both < INVERSION_THRESHOLD), preference is used
  * directly because APCA formula asymmetry makes comparisons unreliable.
@@ -233,8 +229,16 @@ const compDiff = Calc.add(
  * - Lc_dark: achieved contrast for dark solution
  * - Selection: preference when not exhausted, comparison when exhausted
  */
-export const contrastSolverWithInversion: Calc.Expression<
-	'yBg' | 'contrast' | 'yLight' | 'yDark' | 'yLightRaw' | 'yDarkRaw' | 'lcLight' | 'lcDark'
+export const contrastSolver: Calc.Expression<
+	| 'yBg'
+	| 'contrast'
+	| 'invertable'
+	| 'yLight'
+	| 'yDark'
+	| 'yLightRaw'
+	| 'yDarkRaw'
+	| 'lcLight'
+	| 'lcDark'
 > = Calc.add(
 	Calc.multiply(
 		Calc.lerp(Calc.max(0, Calc.sign(compDiff)), contrastPreferLight, usePreference),

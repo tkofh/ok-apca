@@ -1,42 +1,14 @@
 import { Calc, Colors, Properties } from '@ok-apca/calc-tree'
 import { softClampApprox } from './apca.ts'
-import {
-	contrastTargetLightness,
-	contrastTargetLightnessWithInversion,
-	yBackground,
-} from './contrast.ts'
-import { computeGamutSlice, type GamutSlice, maxChromaExpr } from './gamut.ts'
+import type { ColorsDefinition, ResolvedHue, ResolvedRole } from './config.ts'
+import { contrastTargetLightness, yBackground } from './contrast.ts'
+import { computeGamutSlice, maxChromaExpr } from './gamut.ts'
 import { outdent, withPrefix } from './util.ts'
-
-export interface ResolvedHue {
-	readonly name: string
-	readonly hue: number
-	readonly selector: string
-}
-
-export interface ResolvedRole {
-	readonly name: string
-	readonly selector: string
-	readonly contrastTargets: readonly string[]
-}
-
-export interface ColorsDefinition {
-	readonly prefix: string
-	readonly hues: readonly ResolvedHue[]
-	readonly roles: readonly ResolvedRole[]
-	readonly noContrastInversion: boolean
-}
-
-export interface GeneratedHue {
-	readonly name: string
-	readonly hue: number
-	readonly selector: string
-	readonly slice: GamutSlice
-}
 
 export interface ColorSystem {
 	readonly css: string
-	readonly hues: readonly GeneratedHue[]
+	readonly hues: Record<string, string>
+	readonly roles: Record<string, string>
 }
 
 /**
@@ -45,14 +17,8 @@ export interface ColorSystem {
  * Creates a child Properties with namespaced gamut inputs, base color, and
  * contrast target expressions.
  */
-function buildRoleBlock(
-	parent: Properties.Properties,
-	role: ResolvedRole,
-	outputPrefix: string,
-	prefix: string,
-	noContrastInversion: boolean,
-): string {
-	const rolePrefix = `${prefix}${role.name}-`
+function buildRoleBlock(parent: Properties.Properties, role: ResolvedRole, prefix: string): string {
+	const rolePrefix = `_${prefix}-${role.name}-`
 	const child = Properties.make(parent)
 
 	// Gamut slice input properties (inherits: false via _ prefix)
@@ -79,7 +45,7 @@ function buildRoleBlock(
 	// Active role's base color output
 	Properties.color(
 		child,
-		`${outputPrefix}-${role.name}`,
+		`${prefix}-${role.name}`,
 		Colors.oklch(Calc.ref('lightness'), Calc.multiply(maxChromaProp, Calc.ref('chroma')), hue),
 	)
 
@@ -93,12 +59,7 @@ function buildRoleBlock(
 		)
 
 		for (const target of role.contrastTargets) {
-			const conL = Calc.bind(
-				noContrastInversion
-					? contrastTargetLightness(target)
-					: contrastTargetLightnessWithInversion(target),
-				{ fA, fB, fD, yBg, scYBg },
-			)
+			const conL = Calc.bind(contrastTargetLightness(target), { fA, fB, fD, yBg, scYBg })
 
 			const conCMax = Properties.number(
 				child,
@@ -108,7 +69,7 @@ function buildRoleBlock(
 
 			Properties.color(
 				child,
-				`${outputPrefix}-${target}`,
+				`${prefix}-${target}`,
 				Colors.oklch(conL, Calc.multiply(conCMax, Calc.ref('chroma')), hue),
 			)
 		}
@@ -122,18 +83,17 @@ function buildRoleBlock(
  * directly to role elements.
  */
 function buildHueBlock(
-	hueEntry: ResolvedHue,
+	hue: ResolvedHue,
 	roles: readonly ResolvedRole[],
 	prefix: string,
 	roleSelectorList: string,
-): { block: string; generatedHue: GeneratedHue } {
-	const { hue } = hueEntry
-	const slice = computeGamutSlice(hue)
+): string {
+	const slice = computeGamutSlice(hue.hue)
 
 	const nestedDecls: string[] = []
 	for (const role of roles) {
 		const hueBlock = Properties.make()
-		Properties.numbers(hueBlock, withPrefix(`${prefix}${role.name}-`, slice))
+		Properties.numbers(hueBlock, withPrefix(`_${prefix}-${role.name}-`, slice))
 		for (const [propName, entry] of Properties.entries(hueBlock)) {
 			if (entry.declaration !== undefined) {
 				nestedDecls.push(`\t\t${propName}: ${entry.declaration};`)
@@ -142,12 +102,9 @@ function buildHueBlock(
 	}
 
 	const nestedSelector = `:is(&, & *):is(${roleSelectorList})`
-	const block = `${hueEntry.selector} {\n\t${nestedSelector} {\n${nestedDecls.join('\n')}\n\t}\n}`
+	const block = `${hue.selector} {\n\t${nestedSelector} {\n${nestedDecls.join('\n')}\n\t}\n}`
 
-	return {
-		block,
-		generatedHue: { name: hueEntry.name, hue, selector: hueEntry.selector, slice },
-	}
+	return block
 }
 
 /**
@@ -167,28 +124,18 @@ function buildHueBlock(
  * Outputs:
  * - `--{prefix}-{role}` (e.g., `--color-fill`, `--color-text`)
  */
-export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
-	const { prefix, hues, roles, noContrastInversion } = definition
-	const p = `_${prefix}-`
-
+export function generateColorSystem(definition: ColorsDefinition): ColorSystem {
+	const { prefix, hues, roles } = definition
 	const parent = Properties.make()
 
-	// Shared input properties
 	Properties.number(parent, 'lightness')
 	Properties.number(parent, 'chroma')
 
-	// Contrast input properties for all target roles
-	const allContrastTargets = new Set<string>()
-	for (const role of roles) {
-		for (const target of role.contrastTargets) {
-			allContrastTargets.add(target)
-		}
-	}
-	for (const target of allContrastTargets) {
+	for (const target of new Set<string>(roles.flatMap((role) => role.contrastTargets))) {
 		Properties.number(parent, `contrast-${target}`)
+		Properties.number(parent, `${target}-invertable`)
 	}
 
-	// Output color properties on parent for @property rule collection
 	const allRoleNames = new Set<string>()
 	for (const role of roles) {
 		allRoleNames.add(role.name)
@@ -200,27 +147,18 @@ export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
 		Properties.color(parent, `${prefix}-${roleName}`, Colors.oklch(0.5, 0, 0))
 	}
 
-	// Per-active-role selector blocks
-	const roleBlocks = roles.map((role) =>
-		buildRoleBlock(parent, role, prefix, p, noContrastInversion),
-	)
-
-	// Hue selector blocks with :is() nesting
 	const roleSelectorList = roles.map((r) => r.selector).join(', ')
-	const generatedHues: GeneratedHue[] = []
-	const hueBlocks: string[] = []
 
-	for (const hueEntry of hues) {
-		const { block, generatedHue } = buildHueBlock(hueEntry, roles, p, roleSelectorList)
-		hueBlocks.push(block)
-		generatedHues.push(generatedHue)
+	return {
+		css: outdent`
+			${Properties.toAtRules(parent)}
+
+			${[
+				...roles.map((role) => buildRoleBlock(parent, role, prefix)),
+				...hues.map((hueEntry) => buildHueBlock(hueEntry, roles, prefix, roleSelectorList)),
+			].join('\n\n')}
+		`,
+		hues: Object.fromEntries(hues.map((h) => [h.name, h.selector])),
+		roles: Object.fromEntries(roles.map((r) => [r.name, r.selector])),
 	}
-
-	const css = outdent`
-		${Properties.toAtRules(parent)}
-
-		${[...roleBlocks, ...hueBlocks].join('\n\n')}
-	`
-
-	return { css, hues: generatedHues }
 }

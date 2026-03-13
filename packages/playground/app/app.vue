@@ -9,7 +9,7 @@ const state = reactive({
 	chroma: 50,
 	lightness: 50,
 	contrast: 60,
-	noContrastInversion: false,
+	invert: true,
 	activeRole: 'fill' as 'fill' | 'text',
 })
 
@@ -34,7 +34,6 @@ const generatedCss = computed(
 		defineColors({
 			hues: [{ name: 'current', hue: state.hue, selector: '.preview-hue' }],
 			roles: [{ name: 'fill' }, { name: 'text' }],
-			noContrastInversion: state.noContrastInversion,
 		}).css,
 )
 
@@ -52,6 +51,7 @@ const contrastTarget = computed(() => (state.activeRole === 'fill' ? 'text' : 'f
 const previewStyle = computed(() => ({
 	'--lightness': Math.max(0, Math.min(state.lightness, 100)) / 100,
 	'--chroma': Math.max(0, Math.min(state.chroma, 100)) / 100,
+	[`--${contrastTarget.value}-invertable`]: state.invert ? 1 : 0,
 	[`--contrast-${contrastTarget.value}`]: Math.max(-108, Math.min(state.contrast, 108)) / 100,
 }))
 
@@ -104,11 +104,9 @@ async function copyCss() {
 				</label>
 
 				<label>
-					<input v-model="state.noContrastInversion" type="checkbox">
-					Disable contrast inversion
-					<span class="hint"
-						>When checked, always follow requested polarity (may result in lower contrast)</span
-					>
+					<input v-model="state.invert" type="checkbox">
+					Allow contrast inversion
+					<span class="hint">When checked, automatically invert polarity to maximize contrast</span>
 				</label>
 
 				<button class="copy-button" @click="copyCss" type="button">

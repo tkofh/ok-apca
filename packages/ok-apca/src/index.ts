@@ -1,5 +1,5 @@
 import { type ColorSetOptions, resolveColorSet } from './config.ts'
-import { type ColorSystem, generateColorsCss } from './generator.ts'
+import { type ColorSystem, generateColorSystem } from './generator.ts'
 import type { NonEmptyArray, OneOrMore } from './util.ts'
 
 export type { Color } from './color.ts'
@@ -30,7 +30,7 @@ export function defineColors(options: ColorSetOptions): ColorSystem
 export function defineColors(options: NonEmptyArray<ColorSetOptions>): NonEmptyArray<ColorSystem>
 export function defineColors(options: OneOrMore<ColorSetOptions>): OneOrMore<ColorSystem> {
 	if (Array.isArray(options)) {
-		return options.map((set) => generateColorsCss(resolveColorSet(set))) as never
+		return options.map((set) => generateColorSystem(resolveColorSet(set))) as never
 	}
-	return generateColorsCss(resolveColorSet(options as ColorSetOptions))
+	return generateColorSystem(resolveColorSet(options as ColorSetOptions))
 }
