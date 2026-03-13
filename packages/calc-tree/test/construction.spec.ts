@@ -140,19 +140,19 @@ describe('construction', () => {
 		})
 
 		it('adds three expressions with references', () => {
-			const expr = Calc.add('a', 'b', 'c')
+			const expr = Calc.add(Calc.ref('a'), Calc.ref('b'), Calc.ref('c'))
 			const result = Calc.solve(expr, { a: 10, b: 20, c: 30 })
 			expect(result).toBe(60)
 		})
 
 		it('finds max with references', () => {
-			const expr = Calc.max('x', 0, 'y')
+			const expr = Calc.max(Calc.ref('x'), 0, Calc.ref('y'))
 			const result = Calc.solve(expr, { x: -5, y: 3 })
 			expect(result).toBe(3)
 		})
 
 		it('finds min with references', () => {
-			const expr = Calc.min('x', 100, 'y')
+			const expr = Calc.min(Calc.ref('x'), 100, Calc.ref('y'))
 			const result = Calc.solve(expr, { x: 50, y: 25 })
 			expect(result).toBe(25)
 		})
@@ -160,14 +160,14 @@ describe('construction', () => {
 
 	describe('reference merging', () => {
 		it('merges references from operations', () => {
-			const expr = Calc.add('x', 'y')
+			const expr = Calc.add(Calc.ref('x'), Calc.ref('y'))
 			// Needs both x and y to evaluate
 			const result = Calc.solve(expr, { x: 1, y: 2 })
 			expect(result).toBe(3)
 		})
 
 		it('deduplicates references', () => {
-			const x = 'x'
+			const x = Calc.ref('x')
 			const expr = Calc.add(x, x)
 			// Only needs x once
 			const result = Calc.solve(expr, { x: 5 })
@@ -175,7 +175,10 @@ describe('construction', () => {
 		})
 
 		it('merges references from nested operations', () => {
-			const expr = Calc.add(Calc.multiply('a', 'b'), Calc.subtract('c', 'd'))
+			const expr = Calc.add(
+				Calc.multiply(Calc.ref('a'), Calc.ref('b')),
+				Calc.subtract(Calc.ref('c'), Calc.ref('d')),
+			)
 			const result = Calc.solve(expr, {
 				a: 2,
 				b: 3,

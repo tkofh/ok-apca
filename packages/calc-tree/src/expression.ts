@@ -27,25 +27,9 @@ export function makeColor<R extends string>(
 	return { _node: node, _refs: refs, kind: 'ColorExpression' } as ColorExpression<R>
 }
 
-export type ExpressionInput<Refs extends string = never> = NumberExpression<Refs> | number | string
+export type ExpressionInput<Refs extends string = never> = NumberExpression<Refs> | number
 
-export type InferRefs<T> =
-	T extends NumberExpression<infer R>
-		? R
-		: T extends string
-			? string extends T
-				? never
-				: T
-			: never
-
-export type ValueRefs<V> =
-	V extends NumberExpression<infer R>
-		? R
-		: V extends string
-			? string extends V
-				? never // exclude bare 'string' type — only track literal refs
-				: V
-			: never
+export type ValueRefs<V> = V extends NumberExpression<infer R> ? R : never
 
 export type BindingRefs<T> = T extends Record<string, infer V> ? ValueRefs<V> : never
 
@@ -84,16 +68,13 @@ export function reference<Name extends string>(name: Name): NumberExpression<Nam
 	return expr
 }
 
-export function toExpression<A extends ExpressionInput<string>>(
-	input: A,
-): NumberExpression<InferRefs<A>> {
+export function toExpression<Refs extends string>(
+	input: ExpressionInput<Refs>,
+): NumberExpression<Refs> {
 	if (typeof input === 'number') {
-		return constant(input) as NumberExpression<InferRefs<A>>
+		return constant(input) as NumberExpression<Refs>
 	}
-	if (typeof input === 'string') {
-		return reference(input) as NumberExpression<InferRefs<A>>
-	}
-	return input as NumberExpression<InferRefs<A>>
+	return input as NumberExpression<Refs>
 }
 
 export function mergeRefs(...exprs: NumberExpression<string>[]): Set<string> {
@@ -112,14 +93,14 @@ export function isConstantNode(node: unknown): node is ConstantNode {
 
 function applyBindings(
 	node: ExpressionNode,
-	bindings: Record<string, ExpressionInput<never>> | undefined,
+	bindings: Record<string, ExpressionInput<string>> | undefined,
 	refs: ReadonlySet<string>,
 ): ExpressionNode {
 	if (!bindings) {
 		return node
 	}
 	const nodeBindings: Record<string, ExpressionNode> = {}
-	for (const [key, value] of Object.entries(bindings) as [string, ExpressionInput<never>][]) {
+	for (const [key, value] of Object.entries(bindings) as [string, ExpressionInput<string>][]) {
 		if (refs.has(key)) {
 			nodeBindings[key] = toExpression(value)._node
 		}
@@ -154,9 +135,9 @@ export function bindImpl<Refs extends string, B>(
 export function serializeImpl(
 	node: ExpressionNode,
 	refs: ReadonlySet<string>,
-	bindings?: Record<string, ExpressionInput<never>>,
+	bindings?: Record<string, ExpressionInput<string>>,
 ): string {
-	const substituted = applyBindings(node, bindings as Record<string, ExpressionInput<never>>, refs)
+	const substituted = applyBindings(node, bindings as Record<string, ExpressionInput<string>>, refs)
 	const declarations: Record<string, string> = {}
 	const raw = substituted.serialize(declarations)
 	return substituted.needsCalcWrap() ? `calc(${raw})` : raw
@@ -165,9 +146,9 @@ export function serializeImpl(
 export function solveImpl(
 	node: ExpressionNode,
 	refs: ReadonlySet<string>,
-	bindings?: Record<string, ExpressionInput<never>>,
+	bindings?: Record<string, ExpressionInput<string>>,
 ): number {
-	const substituted = applyBindings(node, bindings as Record<string, ExpressionInput<never>>, refs)
+	const substituted = applyBindings(node, bindings as Record<string, ExpressionInput<string>>, refs)
 
 	if (!substituted.isConstant()) {
 		throw new Error('Cannot convert expression to number: unbound references remain')

@@ -32,73 +32,104 @@ describe('serialization', () => {
 
 	describe('references', () => {
 		it('serializes references as var()', () => {
-			expect(Calc.serialize(Calc.bind(reference('x'), { x: 'x' }))).toBe('var(--x)')
+			expect(Calc.serialize(Calc.bind(reference('x'), { x: Calc.ref('x') }))).toBe('var(--x)')
 		})
 
 		it('serializes multi-word references', () => {
 			expect(
-				Calc.serialize(Calc.bind(reference('my-variable'), { 'my-variable': 'my-variable' })),
+				Calc.serialize(
+					Calc.bind(reference('my-variable'), { 'my-variable': Calc.ref('my-variable') }),
+				),
 			).toBe('var(--my-variable)')
 		})
 	})
 
 	describe('binary operations', () => {
 		it('serializes addition', () => {
-			expect(Calc.serialize(Calc.bind(Calc.add('x', 5), { x: 'x' }))).toBe('calc(var(--x) + 5)')
+			expect(Calc.serialize(Calc.bind(Calc.add(Calc.ref('x'), 5), { x: Calc.ref('x') }))).toBe(
+				'calc(var(--x) + 5)',
+			)
 		})
 
 		it('serializes subtraction', () => {
-			expect(Calc.serialize(Calc.bind(Calc.subtract('x', 5), { x: 'x' }))).toBe(
+			expect(Calc.serialize(Calc.bind(Calc.subtract(Calc.ref('x'), 5), { x: Calc.ref('x') }))).toBe(
 				'calc(var(--x) - 5)',
 			)
 		})
 
 		it('serializes multiplication', () => {
-			expect(Calc.serialize(Calc.bind(Calc.multiply('x', 2), { x: 'x' }))).toBe(
+			expect(Calc.serialize(Calc.bind(Calc.multiply(Calc.ref('x'), 2), { x: Calc.ref('x') }))).toBe(
 				'calc(var(--x) * 2)',
 			)
 		})
 
 		it('serializes division', () => {
-			expect(Calc.serialize(Calc.bind(Calc.divide('x', 2), { x: 'x' }))).toBe('calc(var(--x) / 2)')
+			expect(Calc.serialize(Calc.bind(Calc.divide(Calc.ref('x'), 2), { x: Calc.ref('x') }))).toBe(
+				'calc(var(--x) / 2)',
+			)
 		})
 
 		it('serializes power', () => {
-			expect(Calc.serialize(Calc.bind(Calc.pow('x', 2), { x: 'x' }))).toBe('pow(var(--x), 2)')
+			expect(Calc.serialize(Calc.bind(Calc.pow(Calc.ref('x'), 2), { x: Calc.ref('x') }))).toBe(
+				'pow(var(--x), 2)',
+			)
 		})
 
 		it('serializes max', () => {
-			expect(Calc.serialize(Calc.bind(Calc.max('x', 0), { x: 'x' }))).toBe('max(var(--x), 0)')
+			expect(Calc.serialize(Calc.bind(Calc.max(Calc.ref('x'), 0), { x: Calc.ref('x') }))).toBe(
+				'max(var(--x), 0)',
+			)
 		})
 
 		it('serializes min', () => {
-			expect(Calc.serialize(Calc.bind(Calc.min('x', 100), { x: 'x' }))).toBe('min(var(--x), 100)')
+			expect(Calc.serialize(Calc.bind(Calc.min(Calc.ref('x'), 100), { x: Calc.ref('x') }))).toBe(
+				'min(var(--x), 100)',
+			)
 		})
 	})
 
 	describe('variadic operations', () => {
 		it('serializes variadic addition', () => {
-			expect(Calc.serialize(Calc.bind(Calc.add('x', 'y', 5), { x: 'x', y: 'y' }))).toBe(
-				'calc(var(--x) + var(--y) + 5)',
-			)
+			expect(
+				Calc.serialize(
+					Calc.bind(Calc.add(Calc.ref('x'), Calc.ref('y'), 5), {
+						x: Calc.ref('x'),
+						y: Calc.ref('y'),
+					}),
+				),
+			).toBe('calc(var(--x) + var(--y) + 5)')
 		})
 
 		it('serializes variadic max', () => {
-			expect(Calc.serialize(Calc.bind(Calc.max('x', 0, 'y'), { x: 'x', y: 'y' }))).toBe(
-				'max(var(--x), 0, var(--y))',
-			)
+			expect(
+				Calc.serialize(
+					Calc.bind(Calc.max(Calc.ref('x'), 0, Calc.ref('y')), {
+						x: Calc.ref('x'),
+						y: Calc.ref('y'),
+					}),
+				),
+			).toBe('max(var(--x), 0, var(--y))')
 		})
 
 		it('serializes variadic min', () => {
-			expect(Calc.serialize(Calc.bind(Calc.min('x', 100, 'y'), { x: 'x', y: 'y' }))).toBe(
-				'min(var(--x), 100, var(--y))',
-			)
+			expect(
+				Calc.serialize(
+					Calc.bind(Calc.min(Calc.ref('x'), 100, Calc.ref('y')), {
+						x: Calc.ref('x'),
+						y: Calc.ref('y'),
+					}),
+				),
+			).toBe('min(var(--x), 100, var(--y))')
 		})
 
 		it('parenthesizes variadic add inside multiply', () => {
 			expect(
 				Calc.serialize(
-					Calc.bind(Calc.multiply(Calc.add('a', 'b', 'c'), 2), { a: 'a', b: 'b', c: 'c' }),
+					Calc.bind(Calc.multiply(Calc.add(Calc.ref('a'), Calc.ref('b'), Calc.ref('c')), 2), {
+						a: Calc.ref('a'),
+						b: Calc.ref('b'),
+						c: Calc.ref('c'),
+					}),
 				),
 			).toBe('calc((var(--a) + var(--b) + var(--c)) * 2)')
 		})
@@ -106,37 +137,47 @@ describe('serialization', () => {
 
 	describe('unary operations', () => {
 		it('serializes sin', () => {
-			expect(Calc.serialize(Calc.bind(Calc.sin('x'), { x: 'x' }))).toBe('sin(var(--x))')
+			expect(Calc.serialize(Calc.bind(Calc.sin(Calc.ref('x')), { x: Calc.ref('x') }))).toBe(
+				'sin(var(--x))',
+			)
 		})
 
 		it('serializes abs', () => {
-			expect(Calc.serialize(Calc.bind(Calc.abs('x'), { x: 'x' }))).toBe('abs(var(--x))')
+			expect(Calc.serialize(Calc.bind(Calc.abs(Calc.ref('x')), { x: Calc.ref('x') }))).toBe(
+				'abs(var(--x))',
+			)
 		})
 
 		it('serializes sign', () => {
-			expect(Calc.serialize(Calc.bind(Calc.sign('x'), { x: 'x' }))).toBe('sign(var(--x))')
+			expect(Calc.serialize(Calc.bind(Calc.sign(Calc.ref('x')), { x: Calc.ref('x') }))).toBe(
+				'sign(var(--x))',
+			)
 		})
 	})
 
 	describe('clamp', () => {
 		it('serializes clamp', () => {
-			expect(Calc.serialize(Calc.bind(Calc.clamp(0, 'x', 100), { x: 'x' }))).toBe(
-				'clamp(0, var(--x), 100)',
-			)
+			expect(
+				Calc.serialize(Calc.bind(Calc.clamp(0, Calc.ref('x'), 100), { x: Calc.ref('x') })),
+			).toBe('clamp(0, var(--x), 100)')
 		})
 	})
 
 	describe('parenthesization', () => {
 		it('does not add parens around function arguments', () => {
-			expect(Calc.serialize(Calc.bind(Calc.sin(Calc.add('x', 1)), { x: 'x' }))).toBe(
-				'sin(var(--x) + 1)',
-			)
+			expect(
+				Calc.serialize(Calc.bind(Calc.sin(Calc.add(Calc.ref('x'), 1)), { x: Calc.ref('x') })),
+			).toBe('sin(var(--x) + 1)')
 		})
 
 		it('adds parens to add/subtract when used in multiply', () => {
 			expect(
 				Calc.serialize(
-					Calc.bind(Calc.multiply(Calc.add('a', 'b'), 'c'), { a: 'a', b: 'b', c: 'c' }),
+					Calc.bind(Calc.multiply(Calc.add(Calc.ref('a'), Calc.ref('b')), Calc.ref('c')), {
+						a: Calc.ref('a'),
+						b: Calc.ref('b'),
+						c: Calc.ref('c'),
+					}),
 				),
 			).toBe('calc((var(--a) + var(--b)) * var(--c))')
 		})
@@ -144,7 +185,11 @@ describe('serialization', () => {
 		it('adds parens to subtract when used in divide', () => {
 			expect(
 				Calc.serialize(
-					Calc.bind(Calc.divide(Calc.subtract('a', 'b'), 'c'), { a: 'a', b: 'b', c: 'c' }),
+					Calc.bind(Calc.divide(Calc.subtract(Calc.ref('a'), Calc.ref('b')), Calc.ref('c')), {
+						a: Calc.ref('a'),
+						b: Calc.ref('b'),
+						c: Calc.ref('c'),
+					}),
 				),
 			).toBe('calc((var(--a) - var(--b)) / var(--c))')
 		})
@@ -152,7 +197,11 @@ describe('serialization', () => {
 		it('does not add parens to multiply when used in add', () => {
 			expect(
 				Calc.serialize(
-					Calc.bind(Calc.add(Calc.multiply('a', 'b'), 'c'), { a: 'a', b: 'b', c: 'c' }),
+					Calc.bind(Calc.add(Calc.multiply(Calc.ref('a'), Calc.ref('b')), Calc.ref('c')), {
+						a: Calc.ref('a'),
+						b: Calc.ref('b'),
+						c: Calc.ref('c'),
+					}),
 				),
 			).toBe('calc(var(--a) * var(--b) + var(--c))')
 		})
@@ -160,12 +209,18 @@ describe('serialization', () => {
 		it('handles deeply nested expressions', () => {
 			expect(
 				Calc.serialize(
-					Calc.bind(Calc.multiply(Calc.add('a', 'b'), Calc.subtract('c', 'd')), {
-						a: 'a',
-						b: 'b',
-						c: 'c',
-						d: 'd',
-					}),
+					Calc.bind(
+						Calc.multiply(
+							Calc.add(Calc.ref('a'), Calc.ref('b')),
+							Calc.subtract(Calc.ref('c'), Calc.ref('d')),
+						),
+						{
+							a: Calc.ref('a'),
+							b: Calc.ref('b'),
+							c: Calc.ref('c'),
+							d: Calc.ref('d'),
+						},
+					),
 				),
 			).toBe('calc((var(--a) + var(--b)) * (var(--c) - var(--d)))')
 		})
@@ -174,17 +229,25 @@ describe('serialization', () => {
 	describe('complex expressions', () => {
 		it('serializes quadratic formula components', () => {
 			expect(
-				Calc.serialize(Calc.bind(Calc.multiply('a', Calc.pow('x', 2)), { a: 'a', x: 'x' })),
+				Calc.serialize(
+					Calc.bind(Calc.multiply(Calc.ref('a'), Calc.pow(Calc.ref('x'), 2)), {
+						a: Calc.ref('a'),
+						x: Calc.ref('x'),
+					}),
+				),
 			).toBe('calc(var(--a) * pow(var(--x), 2))')
 		})
 
 		it('serializes distance formula', () => {
 			expect(
 				Calc.serialize(
-					Calc.bind(Calc.pow(Calc.add(Calc.pow('x', 2), Calc.pow('y', 2)), 0.5), {
-						x: 'x',
-						y: 'y',
-					}),
+					Calc.bind(
+						Calc.pow(Calc.add(Calc.pow(Calc.ref('x'), 2), Calc.pow(Calc.ref('y'), 2)), 0.5),
+						{
+							x: Calc.ref('x'),
+							y: Calc.ref('y'),
+						},
+					),
 				),
 			).toBe('pow(pow(var(--x), 2) + pow(var(--y), 2), 0.5)')
 		})

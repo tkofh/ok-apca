@@ -28,20 +28,20 @@ describe('evaluation', () => {
 
 	describe('bound evaluation', () => {
 		it('evaluates with all bindings constant', () => {
-			const expr = Calc.add('x', 5)
+			const expr = Calc.add(Calc.ref('x'), 5)
 			const result = Calc.solve(expr, { x: 10 })
 
 			expect(result).toBe(15)
 		})
 
 		it('throws for non-constant bindings', () => {
-			const expr = Calc.add('x', 5)
+			const expr = Calc.add(Calc.ref('x'), 5)
 
-			expect(() => Calc.solve(expr, { x: 'runtime' })).toThrow()
+			expect(() => Calc.solve(expr, { x: Calc.ref('runtime') })).toThrow()
 		})
 
 		it('evaluates multiple bindings', () => {
-			const expr = Calc.add('x', 'y')
+			const expr = Calc.add(Calc.ref('x'), Calc.ref('y'))
 			const result = Calc.solve(expr, {
 				x: 10,
 				y: 20,
@@ -54,7 +54,7 @@ describe('evaluation', () => {
 	describe('complex expressions', () => {
 		it('evaluates nested operations', () => {
 			// f(x) = (x + 1) * (x - 1) = x^2 - 1
-			const x = 'x'
+			const x = Calc.ref('x')
 			const expr = Calc.multiply(Calc.add(x, 1), Calc.add(x, -1))
 			const result = Calc.solve(expr, { x: 5 })
 
@@ -63,7 +63,7 @@ describe('evaluation', () => {
 
 		it('evaluates pow expressions', () => {
 			// f(x, y) = (x^2 + y^2)^0.5
-			const expr = Calc.pow(Calc.add(Calc.pow('x', 2), Calc.pow('y', 2)), 0.5)
+			const expr = Calc.pow(Calc.add(Calc.pow(Calc.ref('x'), 2), Calc.pow(Calc.ref('y'), 2)), 0.5)
 			const result = Calc.solve(expr, {
 				x: 3,
 				y: 4,
@@ -87,15 +87,15 @@ describe('evaluation', () => {
 
 	describe('css output', () => {
 		it('serialize returns expression string', () => {
-			const expr = Calc.add('x', 5)
+			const expr = Calc.add(Calc.ref('x'), 5)
 			const css = Calc.serialize(Calc.bind(expr, { x: 10 }))
 
 			expect(typeof css).toBe('string')
 		})
 
 		it('serialize with non-constant bindings produces css', () => {
-			const expr = Calc.add('x', 5)
-			const css = Calc.serialize(Calc.bind(expr, { x: 'runtime' }))
+			const expr = Calc.add(Calc.ref('x'), 5)
+			const css = Calc.serialize(Calc.bind(expr, { x: Calc.ref('runtime') }))
 
 			expect(typeof css).toBe('string')
 		})
@@ -131,8 +131,8 @@ describe('evaluation', () => {
 
 		it('produces simplified CSS output', () => {
 			// 2*3 should fold to 6
-			const expr = Calc.add(Calc.multiply(2, 3), 'x')
-			const css = Calc.serialize(Calc.bind(expr, { x: 'x' }))
+			const expr = Calc.add(Calc.multiply(2, 3), Calc.ref('x'))
+			const css = Calc.serialize(Calc.bind(expr, { x: Calc.ref('x') }))
 
 			// Should have simplified 2*3 to 6
 			expect(css).toContain('6')

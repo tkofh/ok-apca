@@ -5,7 +5,7 @@ import { Calc, Colors, Properties } from '../src/index.ts'
 describe('property wrapping', () => {
 	describe('basic wrapping', () => {
 		it('wraps expression as property', () => {
-			const expr = Calc.multiply('x', 2)
+			const expr = Calc.multiply(Calc.ref('x'), 2)
 
 			// Evaluate before wrapping
 			const result = Calc.solve(expr, { x: 5 })
@@ -13,7 +13,10 @@ describe('property wrapping', () => {
 		})
 
 		it('includes property declaration in CSS output', () => {
-			const expr = Properties.number('doubled', Calc.bind(Calc.multiply('x', 2), { x: 'runtime' }))
+			const expr = Properties.number(
+				'doubled',
+				Calc.bind(Calc.multiply(Calc.ref('x'), 2), { x: Calc.ref('runtime') }),
+			)
 
 			expect(Calc.serialize(expr)).toBe('var(--doubled)')
 
@@ -24,7 +27,7 @@ describe('property wrapping', () => {
 		})
 
 		it('leaves unbound references as CSS variables', () => {
-			const expr = Properties.number('sum', Calc.add('x', 'y'))
+			const expr = Properties.number('sum', Calc.add(Calc.ref('x'), Calc.ref('y')))
 
 			expect(Calc.serialize(expr)).toBe('var(--sum)')
 
@@ -37,7 +40,10 @@ describe('property wrapping', () => {
 
 	describe('nested properties', () => {
 		it('handles nested properties', () => {
-			const inner = Properties.number('doubled', Calc.bind(Calc.multiply('x', 2), { x: 'runtime' }))
+			const inner = Properties.number(
+				'doubled',
+				Calc.bind(Calc.multiply(Calc.ref('x'), 2), { x: Calc.ref('runtime') }),
+			)
 			const outer = Properties.number('result', Calc.add(inner, 5))
 
 			expect(Calc.serialize(outer)).toBe('var(--result)')
@@ -50,8 +56,8 @@ describe('property wrapping', () => {
 		})
 
 		it('handles deeply nested properties', () => {
-			const xSquared = Properties.number('x-squared', Calc.pow('x', 2))
-			const ySquared = Properties.number('y-squared', Calc.pow('y', 2))
+			const xSquared = Properties.number('x-squared', Calc.pow(Calc.ref('x'), 2))
+			const ySquared = Properties.number('y-squared', Calc.pow(Calc.ref('y'), 2))
 			const distance = Properties.number('distance', Calc.pow(Calc.add(xSquared, ySquared), 0.5))
 
 			expect(Calc.serialize(distance)).toBe('var(--distance)')
@@ -65,7 +71,7 @@ describe('property wrapping', () => {
 		})
 
 		it('collects declarations in correct order', () => {
-			const a = Properties.number('a', Calc.bind(reference('x'), { x: 'input' }))
+			const a = Properties.number('a', Calc.bind(reference('x'), { x: Calc.ref('input') }))
 			const b = Properties.number('b', Calc.add(a, 1))
 			const c = Properties.number('c', Calc.multiply(b, 2))
 
@@ -118,8 +124,11 @@ describe('property wrapping', () => {
 
 	describe('binding with properties', () => {
 		it('binding works before property wrapping', () => {
-			const inner = Properties.number('sum', Calc.bind(Calc.add('x', 'y'), { x: 5, y: 10 }))
-			const expr = Calc.multiply(inner, 'z')
+			const inner = Properties.number(
+				'sum',
+				Calc.bind(Calc.add(Calc.ref('x'), Calc.ref('y')), { x: 5, y: 10 }),
+			)
+			const expr = Calc.multiply(inner, Calc.ref('z'))
 
 			const result = Calc.solve(expr, { z: 2 })
 
@@ -127,7 +136,10 @@ describe('property wrapping', () => {
 		})
 
 		it('binding updates property declarations', () => {
-			const inner = Properties.number('sum', Calc.bind(Calc.add('x', 'y'), { x: 5 }))
+			const inner = Properties.number(
+				'sum',
+				Calc.bind(Calc.add(Calc.ref('x'), Calc.ref('y')), { x: 5 }),
+			)
 			const expr = Calc.multiply(inner, 2)
 
 			const set = Properties.make()
@@ -139,10 +151,10 @@ describe('property wrapping', () => {
 
 	describe('integration', () => {
 		it('generates CSS with complex nested properties', () => {
-			const xSquared = Properties.number('x2', Calc.pow('x', 2))
-			const axSquared = Properties.number('ax2', Calc.multiply('a', xSquared))
-			const bx = Properties.number('bx', Calc.multiply('b', 'x'))
-			const quadratic = Properties.number('quadratic', Calc.add(axSquared, bx, 'c'))
+			const xSquared = Properties.number('x2', Calc.pow(Calc.ref('x'), 2))
+			const axSquared = Properties.number('ax2', Calc.multiply(Calc.ref('a'), xSquared))
+			const bx = Properties.number('bx', Calc.multiply(Calc.ref('b'), Calc.ref('x')))
+			const quadratic = Properties.number('quadratic', Calc.add(axSquared, bx, Calc.ref('c')))
 
 			expect(Calc.serialize(quadratic)).toBe('var(--quadratic)')
 
@@ -158,7 +170,7 @@ describe('property wrapping', () => {
 
 	describe('inherits convention', () => {
 		it('_ prefix properties have inherits: false', () => {
-			const expr = Properties.number('_internal', Calc.multiply('x', 2))
+			const expr = Properties.number('_internal', Calc.multiply(Calc.ref('x'), 2))
 
 			const set = Properties.make()
 			Properties.collect(set, expr)
@@ -217,7 +229,7 @@ describe('Properties namespace', () => {
 
 		it('declares computed property with expression value', () => {
 			const set = Properties.make()
-			const expr = Properties.number(set, '_doubled', Calc.multiply('x', 2))
+			const expr = Properties.number(set, '_doubled', Calc.multiply(Calc.ref('x'), 2))
 
 			expect(Calc.serialize(expr)).toBe('var(--_doubled)')
 
@@ -239,7 +251,7 @@ describe('Properties namespace', () => {
 
 		it('collects nested property declarations', () => {
 			const set = Properties.make()
-			const inner = Properties.number('_inner', Calc.multiply('x', 2))
+			const inner = Properties.number('_inner', Calc.multiply(Calc.ref('x'), 2))
 			Properties.number(set, '_outer', Calc.add(inner, 5))
 
 			const ruleset = Properties.toRuleset(set, '.test')
@@ -284,7 +296,7 @@ describe('Properties namespace', () => {
 
 	describe('collect', () => {
 		it('registers all property nodes from an expression', () => {
-			const inner = Properties.number('_a', Calc.multiply('x', 2))
+			const inner = Properties.number('_a', Calc.multiply(Calc.ref('x'), 2))
 			const outer = Properties.number('_b', Calc.add(inner, 1))
 
 			const set = Properties.make()
@@ -319,7 +331,7 @@ describe('Properties namespace', () => {
 			Properties.number(parent, 'lightness')
 
 			const child = Properties.make(parent)
-			Properties.number(child, '_mc', Calc.multiply('lightness', 2))
+			Properties.number(child, '_mc', Calc.multiply(Calc.ref('lightness'), 2))
 
 			const atRules = Properties.toAtRules(parent)
 			expect(atRules).toContain('--lightness')
@@ -331,7 +343,7 @@ describe('Properties namespace', () => {
 			Properties.number(parent, 'lightness')
 
 			const child = Properties.make(parent)
-			Properties.number(child, '_mc', Calc.multiply('lightness', 2))
+			Properties.number(child, '_mc', Calc.multiply(Calc.ref('lightness'), 2))
 
 			const parentRuleset = Properties.toRuleset(parent, '.parent')
 			const childRuleset = Properties.toRuleset(child, '.child')
@@ -345,10 +357,10 @@ describe('Properties namespace', () => {
 			Properties.number(parent, 'lightness')
 
 			const fill = Properties.make(parent)
-			Properties.number(fill, '_fill-mc', Calc.multiply('lightness', 2))
+			Properties.number(fill, '_fill-mc', Calc.multiply(Calc.ref('lightness'), 2))
 
 			const text = Properties.make(parent)
-			Properties.number(text, '_text-mc', Calc.multiply('lightness', 3))
+			Properties.number(text, '_text-mc', Calc.multiply(Calc.ref('lightness'), 3))
 
 			const atRules = Properties.toAtRules(parent)
 			expect(atRules).toContain('--lightness')
@@ -398,7 +410,7 @@ describe('Properties namespace', () => {
 		it('renders @property rules as CSS', () => {
 			const set = Properties.make()
 			Properties.number(set, 'lightness')
-			Properties.number(set, '_mc', Calc.multiply('lightness', 2))
+			Properties.number(set, '_mc', Calc.multiply(Calc.ref('lightness'), 2))
 
 			const css = Properties.toAtRules(set)
 

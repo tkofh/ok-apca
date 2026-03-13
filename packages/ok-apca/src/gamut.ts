@@ -176,18 +176,24 @@ function fitCurvature(hue: number, apexL: number, apexC: number): number {
 }
 
 export const maxChromaExpr: Calc.Expression<'lightness' | 'apexL' | 'apexC' | 'tentK'> = Calc.lerp(
-	Calc.divide(Calc.multiply('apexC', 'lightness'), 'apexL'),
+	Calc.divide(Calc.multiply(Calc.ref('apexC'), Calc.ref('lightness')), Calc.ref('apexL')),
 	Calc.add(
-		Calc.divide(Calc.multiply('apexC', Calc.subtract(1, 'lightness')), Calc.subtract(1, 'apexL')),
+		Calc.divide(
+			Calc.multiply(Calc.ref('apexC'), Calc.subtract(1, Calc.ref('lightness'))),
+			Calc.subtract(1, Calc.ref('apexL')),
+		),
 		Calc.multiply(
 			Calc.multiply(
-				'tentK',
+				Calc.ref('tentK'),
 				Calc.pow(
 					Calc.sin(
 						Calc.multiply(
 							Calc.max(
 								0,
-								Calc.divide(Calc.subtract('lightness', 'apexL'), Calc.subtract(1, 'apexL')),
+								Calc.divide(
+									Calc.subtract(Calc.ref('lightness'), Calc.ref('apexL')),
+									Calc.subtract(1, Calc.ref('apexL')),
+								),
 							),
 							Math.PI,
 						),
@@ -195,10 +201,10 @@ export const maxChromaExpr: Calc.Expression<'lightness' | 'apexL' | 'apexC' | 't
 					GAMUT_SINE_CURVATURE_EXPONENT,
 				),
 			),
-			'apexC',
+			Calc.ref('apexC'),
 		),
 	),
-	Calc.max(0, Calc.sign(Calc.subtract('lightness', 'apexL'))),
+	Calc.max(0, Calc.sign(Calc.subtract(Calc.ref('lightness'), Calc.ref('apexL')))),
 )
 
 /**

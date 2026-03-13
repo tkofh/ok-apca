@@ -29,9 +29,9 @@ import { clampNumber } from './util.ts'
  */
 const fCorrection: Calc.Expression<'chroma' | 'fA' | 'fB' | 'fD'> = Calc.add(
 	1,
-	Calc.multiply('fA', 'chroma'),
-	Calc.multiply('fB', Calc.pow('chroma', 2)),
-	Calc.multiply('fD', Calc.pow('chroma', 3)),
+	Calc.multiply(Calc.ref('fA'), Calc.ref('chroma')),
+	Calc.multiply(Calc.ref('fB'), Calc.pow(Calc.ref('chroma'), 2)),
+	Calc.multiply(Calc.ref('fD'), Calc.pow(Calc.ref('chroma'), 3)),
 )
 
 /**
@@ -42,7 +42,7 @@ const fCorrection: Calc.Expression<'chroma' | 'fA' | 'fB' | 'fD'> = Calc.add(
  * is constant; close approximation on the right half.
  */
 export const yBackground: Calc.Expression<'lightness' | 'chroma' | 'fA' | 'fB' | 'fD'> =
-	Calc.multiply(Calc.pow('lightness', 3), fCorrection)
+	Calc.multiply(Calc.pow(Calc.ref('lightness'), 3), fCorrection)
 
 /**
  * Corrected lightness from target Y: L = pow(Y / f(chroma), 1/3)
@@ -54,7 +54,7 @@ export const yBackground: Calc.Expression<'lightness' | 'chroma' | 'fA' | 'fB' |
  * Unbound refs: `yTarget`, `chroma`, `fA`, `fB`, `fD`.
  */
 export const correctedLightness: Calc.Expression<'yTarget' | 'chroma' | 'fA' | 'fB' | 'fD'> =
-	Calc.pow(Calc.divide('yTarget', fCorrection), 1 / 3)
+	Calc.pow(Calc.divide(Calc.ref('yTarget'), fCorrection), 1 / 3)
 
 /**
  * Build contrast target lightness expression (simple solver, no inversion).
@@ -68,7 +68,7 @@ export const correctedLightness: Calc.Expression<'yTarget' | 'chroma' | 'fA' | '
 export function contrastTargetLightness<const Label extends string>(label: Label) {
 	const yRaw = Properties.number(
 		`_yr-${label}`,
-		Calc.bind(contrastSolver, { yBg: 'scYBg', contrast: `contrast-${label}` }),
+		Calc.bind(contrastSolver, { yBg: Calc.ref('scYBg'), contrast: Calc.ref(`contrast-${label}`) }),
 	)
 	const yTarget = Properties.number(`_yt-${label}`, Calc.bind(softUnclamp, { y: yRaw }))
 	return Properties.number(`_cl-${label}`, Calc.bind(correctedLightness, { yTarget }))
@@ -89,47 +89,43 @@ export function contrastTargetLightness<const Label extends string>(label: Label
 export function contrastTargetLightnessWithInversion<const Label extends string>(
 	label: Label,
 ): Calc.Expression<'yBg' | 'chroma' | 'fA' | 'fB' | 'fD' | 'scYBg' | `contrast-${Label}`> {
-	const contrastRef = `contrast-${label}` as const
+	const contrast = Calc.ref(`contrast-${label}` as const)
 
 	// Raw solver outputs in soft-clamped domain
 	const yLightRaw = Properties.number(
 		`_ylr-${label}`,
-		Calc.clamp(0, Calc.bind(reversePolarity, { yBg: 'scYBg' as const, contrast: contrastRef }), 1),
+		Calc.clamp(0, Calc.bind(reversePolarity, { yBg: Calc.ref('scYBg'), contrast }), 1),
 	)
 	const yDarkRaw = Properties.number(
 		`_ydr-${label}`,
-		Calc.clamp(0, Calc.bind(normalPolarity, { yBg: 'scYBg' as const, contrast: contrastRef }), 1),
+		Calc.clamp(0, Calc.bind(normalPolarity, { yBg: Calc.ref('scYBg'), contrast }), 1),
 	)
 
 	// Unclamp to recover actual Y values
 	const yLight = Properties.number(`_yl-${label}`, Calc.bind(softUnclamp, { y: yLightRaw }))
 	const yDark = Properties.number(`_yd-${label}`, Calc.bind(softUnclamp, { y: yDarkRaw }))
 
-	// Measure achieved contrast using original Y_bg (yBg ref, not scYBg)
-	const lcLight = Properties.number(
-		`_lcl-${label}`,
-		Calc.bind(contrastMeasurementReverse, { yFg: yLight }),
-	)
-	const lcDark = Properties.number(
-		`_lcd-${label}`,
-		Calc.bind(contrastMeasurementNormal, { yFg: yDark }),
-	)
-
 	// Inversion solver uses original Y_bg for zero-contrast fallback
 	const yTarget = Properties.number(
 		`_yt-${label}`,
 		Calc.bind(contrastSolverWithInversion, {
-			contrast: contrastRef,
+			contrast,
 			yLight,
 			yDark,
 			yLightRaw,
 			yDarkRaw,
-			lcLight,
-			lcDark,
+			lcLight: Properties.number(
+				`_lcl-${label}`,
+				Calc.bind(contrastMeasurementReverse, { yFg: yLight }),
+			),
+			lcDark: Properties.number(
+				`_lcd-${label}`,
+				Calc.bind(contrastMeasurementNormal, { yFg: yDark }),
+			),
 		}),
 	)
 
-	return Properties.number(`_cl-${label}`, Calc.bind(correctedLightness, { yTarget })) as never
+	return Properties.number(`_cl-${label}`, Calc.bind(correctedLightness, { yTarget }))
 }
 
 /**

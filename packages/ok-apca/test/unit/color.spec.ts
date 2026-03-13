@@ -116,15 +116,15 @@ describe('gamutMap', () => {
 			)
 		})
 
-		it('left half is linear, right half has curvature correction', () => {
+		it('left half is linear, right half has tentK correction', () => {
 			fc.assert(
 				fc.property(fc.integer({ min: 0, max: 359 }), (hue) => {
 					const hueData = computeGamutSlice(hue)
 
 					// Curvature can be positive (gamut bulges out) or negative (curves in)
 					// depending on the hue - this models the real P3 gamut shape
-					expect(typeof hueData.curvature).toBe('number')
-					expect(Number.isFinite(hueData.curvature)).toBe(true)
+					expect(typeof hueData.tentK).toBe('number')
+					expect(Number.isFinite(hueData.tentK)).toBe(true)
 
 					// Left half: linear from L=0 to apex
 					// Right half: linear + curvature correction from apex to L=1

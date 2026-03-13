@@ -2,7 +2,6 @@ import {
 	bindImpl,
 	type ColorExpression,
 	type ExpressionInput,
-	type InferRefs,
 	makeColor,
 	mergeRefs,
 	type RelevantBindingRefs,
@@ -25,16 +24,16 @@ export function bind<Refs extends string, const B>(
 
 export function serialize<Refs extends string>(
 	expr: ColorExpression<Refs>,
-	bindings?: Partial<Record<Refs, ExpressionInput<never>>>,
+	bindings?: Partial<Record<Refs, ExpressionInput<string>>>,
 ): string {
-	return serializeImpl(expr._node, expr._refs, bindings as Record<string, ExpressionInput<never>>)
+	return serializeImpl(expr._node, expr._refs, bindings as Record<string, ExpressionInput<string>>)
 }
 
-export function oklch<
-	L extends ExpressionInput<string>,
-	C extends ExpressionInput<string>,
-	H extends ExpressionInput<string>,
->(lightness: L, chroma: C, hue: H): ColorExpression<InferRefs<L> | InferRefs<C> | InferRefs<H>> {
+export function oklch<L = never, C = never, H = never>(
+	lightness: ExpressionInput<L & string>,
+	chroma: ExpressionInput<C & string>,
+	hue: ExpressionInput<H & string>,
+): ColorExpression<(L & string) | (C & string) | (H & string)> {
 	const l = toExpression(lightness)
 	const c = toExpression(chroma)
 	const h = toExpression(hue)

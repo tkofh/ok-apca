@@ -80,7 +80,7 @@ function buildRoleBlock(
 	Properties.color(
 		child,
 		`${name}-${role.name}`,
-		Colors.oklch('lightness', Calc.multiply(maxChromaProp, 'chroma'), hue),
+		Colors.oklch(Calc.ref('lightness'), Calc.multiply(maxChromaProp, Calc.ref('chroma')), hue),
 	)
 
 	// Contrast colors
@@ -109,7 +109,7 @@ function buildRoleBlock(
 			Properties.color(
 				child,
 				`${name}-${target}`,
-				Colors.oklch(conL, Calc.multiply(conCMax, 'chroma'), hue),
+				Colors.oklch(conL, Calc.multiply(conCMax, Calc.ref('chroma')), hue),
 			)
 		}
 	}
