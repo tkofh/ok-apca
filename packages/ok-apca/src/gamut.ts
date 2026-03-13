@@ -1,4 +1,4 @@
-import * as ct from '@ok-apca/calc-tree'
+import { Calc } from '@ok-apca/calc-tree'
 import { type Color, createColor, inP3 } from './color.ts'
 import { clampNumber } from './util.ts'
 
@@ -10,15 +10,31 @@ import { clampNumber } from './util.ts'
  */
 const GAMUT_SINE_CURVATURE_EXPONENT = 0.95
 
-// =============================================================================
-// Hue Data
-// =============================================================================
+/**
+ * CIE Y extraction weights for each LMS cone channel.
+ * Second row of the LMS→XYZ matrix (recalculated D65, from colorjs.io).
+ */
+const Y_FROM_L = -0.0405757452148008
+const Y_FROM_M = 1.112286803280317
+const Y_FROM_S = -0.0717110580655164
+
+/**
+ * OKLab→LMS' chroma coefficients for each cone channel.
+ * Each cone's response to chroma is: k_i = KA_i·cos(hue) + KB_i·sin(hue).
+ * The lightness coefficient is implicitly 1 for all channels.
+ */
+const L_PRIME_KA = 0.3963377773761749
+const L_PRIME_KB = 0.2158037573099136
+const M_PRIME_KA = -0.1055613458156586
+const M_PRIME_KB = -0.0638541728258133
+const S_PRIME_KA = -0.0894841775298119
+const S_PRIME_KB = -1.2914855480194092
 
 /**
  * All hue-dependent data: gamut boundary geometry and Y correction coefficients.
  * Computed once per hue and cached. Use {@link computeGamutSlice} to create.
  */
-export interface GamutSlice {
+export type GamutSlice = {
 	/** The hue angle (0–360). */
 	readonly hue: number
 	/** Lightness at the gamut boundary apex (maximum chroma point). */
@@ -28,26 +44,26 @@ export interface GamutSlice {
 	/**
 	 * Curvature correction for the right half of the tent.
 	 * The actual gamut boundary curves inward from the linear tent approximation.
-	 * Applied via pow(sin(t * π), exponent) basis function.
+	 * Applied via pow(sin(t * pi), exponent) basis function.
 	 * Always negative (actual boundary is inside linear approximation).
 	 */
-	readonly curvature: number
-	/** Y polynomial coefficient for L²·C term. */
+	readonly tentK: number
+	/** Y polynomial coefficient for L^2·C term. */
 	readonly yCoeffA: number
-	/** Y polynomial coefficient for L·C² term. */
+	/** Y polynomial coefficient for L·C^2 term. */
 	readonly yCoeffB: number
-	/** Y polynomial coefficient for C³ term. */
+	/** Y polynomial coefficient for C^3 term. */
 	readonly yCoeffD: number
 	/**
 	 * Pre-scaled Y correction coefficients for the k-polynomial.
-	 * k = (apexC / apexL) · chromaRatio, so the polynomial 1 + A·k + B·k² + D·k³
-	 * becomes 1 + fA·chroma + fB·chroma² + fD·chroma³.
+	 * k = (apexC / apexL) · chromaRatio, so the polynomial 1 + A·k + B·k^2 + D·k^3
+	 * becomes 1 + fA·chroma + fB·chroma^2 + fD·chroma^3.
 	 */
 	readonly fA: number
 	readonly fB: number
 	readonly fD: number
 	/** Max chroma expression tree pre-bound to this slice's geometry. */
-	readonly maxChroma: ct.NumberExpression<'lightness'>
+	readonly maxChroma: Calc.Expression<'lightness'>
 }
 
 const gamutSliceCache = new Map<number, GamutSlice>()
@@ -64,20 +80,20 @@ export function computeGamutSlice(hue: number): GamutSlice {
 
 	// Gamut boundary
 	const samples = 1000
-	let maxC = 0
-	let lightnessAtMaxChroma = 0
+	let apexC = 0
+	let apexL = 0
 
 	for (let i = 0; i <= samples; i++) {
 		const l = i / samples
 		const c = findMaxChromaAtLightness(hue, l)
 
-		if (c > maxC) {
-			maxC = c
-			lightnessAtMaxChroma = l
+		if (c > apexC) {
+			apexC = c
+			apexL = l
 		}
 	}
 
-	const curvature = fitCurvature(hue, lightnessAtMaxChroma, maxC)
+	const tentK = fitCurvature(hue, apexL, apexC)
 
 	// Y correction coefficients
 	const hRad = (hue * Math.PI) / 180
@@ -92,33 +108,25 @@ export function computeGamutSlice(hue: number): GamutSlice {
 	const yCoeffB = 3 * (Y_FROM_L * kL * kL + Y_FROM_M * kM * kM + Y_FROM_S * kS * kS)
 	const yCoeffD = Y_FROM_L * kL ** 3 + Y_FROM_M * kM ** 3 + Y_FROM_S * kS ** 3
 
-	const kScale = maxC / lightnessAtMaxChroma
+	const kScale = apexC / apexL
 
 	const slice: GamutSlice = {
 		hue,
-		apexL: lightnessAtMaxChroma,
-		apexC: maxC,
-		curvature,
+		apexL,
+		apexC,
+		tentK,
 		yCoeffA,
 		yCoeffB,
 		yCoeffD,
 		fA: yCoeffA * kScale,
 		fB: yCoeffB * kScale ** 2,
 		fD: yCoeffD * kScale ** 3,
-		maxChroma: maxChromaExpr.bind({
-			apexL: lightnessAtMaxChroma,
-			apexC: maxC,
-			curvature,
-		}),
+		maxChroma: Calc.bind(maxChromaExpr, { apexL, apexC, tentK }),
 	}
 
 	gamutSliceCache.set(hue, slice)
 	return slice
 }
-
-// =============================================================================
-// Gamut Boundary Computation (colorjs.io)
-// =============================================================================
 
 function findMaxChromaAtLightness(hue: number, lightness: number): number {
 	let low = 0
@@ -142,7 +150,7 @@ function findMaxChromaAtLightness(hue: number, lightness: number): number {
  * The correction models how the actual gamut boundary curves inward
  * from the linear tent approximation.
  *
- * Uses pow(sin(t * π), 0.95) as the basis function, which:
+ * Uses pow(sin(t * pi), 0.95) as the basis function, which:
  * - Peaks at t=0.5 (like t*(1-t))
  * - Optimal exponent determined by testing across all 360 hues
  * - Allows single evaluation of t in CSS (sin only uses t once)
@@ -167,35 +175,37 @@ function fitCurvature(hue: number, apexL: number, apexC: number): number {
 	return sumProduct / sumBasisSquared
 }
 
-// =============================================================================
-// Max Chroma Expression Tree
-// =============================================================================
-
-const oneMinusApexL = ct.subtract(1, 'apexL')
-
-export const maxChromaExpr: ct.NumberExpression<'lightness' | 'apexL' | 'apexC' | 'curvature'> =
-	ct.lerp(
-		ct.divide(ct.multiply('apexC', 'lightness'), 'apexL'),
-		ct.add(
-			ct.divide(ct.multiply('apexC', ct.subtract(1, 'lightness')), oneMinusApexL),
-			ct.multiply(
-				ct.multiply(
-					'curvature',
-					ct.pow(
-						ct.sin(
-							ct.multiply(
-								ct.max(0, ct.divide(ct.subtract('lightness', 'apexL'), oneMinusApexL)),
-								Math.PI,
-							),
-						),
-						GAMUT_SINE_CURVATURE_EXPONENT,
-					),
-				),
-				'apexC',
-			),
+export const maxChromaExpr: Calc.Expression<'lightness' | 'apexL' | 'apexC' | 'tentK'> = Calc.lerp(
+	Calc.divide(Calc.multiply(Calc.ref('apexC'), Calc.ref('lightness')), Calc.ref('apexL')),
+	Calc.add(
+		Calc.divide(
+			Calc.multiply(Calc.ref('apexC'), Calc.subtract(1, Calc.ref('lightness'))),
+			Calc.subtract(1, Calc.ref('apexL')),
 		),
-		ct.max(0, ct.sign(ct.subtract('lightness', 'apexL'))),
-	)
+		Calc.multiply(
+			Calc.multiply(
+				Calc.ref('tentK'),
+				Calc.pow(
+					Calc.sin(
+						Calc.multiply(
+							Calc.max(
+								0,
+								Calc.divide(
+									Calc.subtract(Calc.ref('lightness'), Calc.ref('apexL')),
+									Calc.subtract(1, Calc.ref('apexL')),
+								),
+							),
+							Math.PI,
+						),
+					),
+					GAMUT_SINE_CURVATURE_EXPONENT,
+				),
+			),
+			Calc.ref('apexC'),
+		),
+	),
+	Calc.max(0, Calc.sign(Calc.subtract(Calc.ref('lightness'), Calc.ref('apexL')))),
+)
 
 /**
  * Clamp chroma to Display P3 gamut boundary using tent function
@@ -207,53 +217,7 @@ export function gamutMap(color: Color): Color {
 
 	return createColor({
 		hue,
-		chroma: clampNumber(0, chroma, slice.maxChroma.solve({ lightness })),
+		chroma: clampNumber(0, chroma, Calc.solve(slice.maxChroma, { lightness })),
 		lightness,
 	})
 }
-
-// =============================================================================
-// OKLab → CIE Y Constants
-// =============================================================================
-
-/**
- * CIE Y extraction weights for each LMS cone channel.
- * Second row of the LMS→XYZ matrix (recalculated D65, from colorjs.io).
- */
-const Y_FROM_L = -0.0405757452148008
-const Y_FROM_M = 1.112286803280317
-const Y_FROM_S = -0.0717110580655164
-
-/**
- * OKLab→LMS' chroma coefficients for each cone channel.
- * Each cone's response to chroma is: k_i = KA_i·cos(hue) + KB_i·sin(hue).
- * The lightness coefficient is implicitly 1 for all channels.
- */
-const L_PRIME_KA = 0.3963377773761749
-const L_PRIME_KB = 0.2158037573099136
-const M_PRIME_KA = -0.1055613458156586
-const M_PRIME_KB = -0.0638541728258133
-const S_PRIME_KA = -0.0894841775298119
-const S_PRIME_KB = -1.2914855480194092
-
-// =============================================================================
-// Y Expression Trees
-// =============================================================================
-
-/**
- * Exact CIE Y from OKLCH lightness and chroma at a fixed hue.
- *
- * Y = L³ + A·L²·C + B·L·C² + D·C³
- *
- * Coefficients A, B, D are derived from the OKLab→XYZ matrices and depend
- * only on hue (precomputed at build time). For achromatic colors (C=0),
- * this reduces to Y = L³.
- */
-export const exactY: ct.NumberExpression<
-	'lightness' | 'yChroma' | 'yCoeffA' | 'yCoeffB' | 'yCoeffD'
-> = ct.add(
-	ct.pow('lightness', 3),
-	ct.multiply('yCoeffA', ct.multiply(ct.pow('lightness', 2), 'yChroma')),
-	ct.multiply('yCoeffB', ct.multiply('lightness', ct.pow('yChroma', 2))),
-	ct.multiply('yCoeffD', ct.pow('yChroma', 3)),
-)

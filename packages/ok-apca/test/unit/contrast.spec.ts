@@ -1,3 +1,4 @@
+import { Calc } from '@ok-apca/calc-tree'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { computeContrastColor, measureContrast } from '../../src/contrast.ts'
@@ -353,10 +354,10 @@ describe('computeContrastColor', () => {
 					contrastArb,
 					(input, contrast) => {
 						const result = computeContrastColor(input, contrast)
-						const maxAtInput = computeGamutSlice(input.hue).maxChroma.solve({
+						const maxAtInput = Calc.solve(computeGamutSlice(input.hue).maxChroma, {
 							lightness: input.lightness,
 						})
-						const maxAtResult = computeGamutSlice(result.hue).maxChroma.solve({
+						const maxAtResult = Calc.solve(computeGamutSlice(result.hue).maxChroma, {
 							lightness: result.lightness,
 						})
 						if (maxAtInput <= 0 || maxAtResult <= 0) {

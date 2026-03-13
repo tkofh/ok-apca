@@ -151,7 +151,8 @@
 	"html": {
 		"experimentalFullSupportEnabled": true,
 		"formatter": {
-			"indentScriptAndStyle": true
+			"enabled": true,
+			"indentScriptAndStyle": false
 		}
 	},
 	"files": {
@@ -169,6 +170,16 @@
 		]
 	},
 	"overrides": [
+		{
+			"includes": ["packages/calc-tree/**/*.ts"],
+			"linter": {
+				"rules": {
+					"performance": {
+						"noReExportAll": "off"
+					}
+				}
+			}
+		},
 		{
 			"includes": ["*.config.ts", "*.config.js", "**/*.config.ts", "**/*.config.js"],
 			"linter": {

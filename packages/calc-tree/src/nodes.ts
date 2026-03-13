@@ -1,4 +1,14 @@
-import type { ExpressionNode, PropertyRule } from './types.ts'
+import type { PropertyRule } from './properties.ts'
+
+export interface ExpressionNode {
+	readonly kind: string
+
+	substitute(bindings: Record<string, ExpressionNode>): ExpressionNode
+	isConstant(): boolean
+	evaluateConstant(): number
+	serialize(declarations: Record<string, string>, properties?: Record<string, PropertyRule>): string
+	needsCalcWrap(): boolean
+}
 
 export function formatNumber(n: number): string {
 	if (Math.abs(n - Math.PI) < 1e-10) {

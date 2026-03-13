@@ -18,9 +18,6 @@
 			"persistent": true,
 			"interruptible": true
 		},
-		"lint": {
-			"dependsOn": ["^lint"]
-		},
 		"test": {
 			"dependsOn": ["^build"],
 			"inputs": ["$TURBO_DEFAULT$", ".env*"]

@@ -12,17 +12,24 @@ This is a turborepo monorepo using pnpm workspaces with three packages:
 
 ### `@ok-apca/calc-tree`
 
-A standalone expression tree library for building CSS `calc()` expressions. It provides:
+A standalone expression tree library for building CSS `calc()` expressions. Organized into three namespaces with expressions as opaque data types:
 
-- **Expression construction**: `add`, `subtract`, `multiply`, `divide`, `pow`, `signedPow`, `clamp`, `min`, `max`, `abs`, `sign`, `sin`
-- **Color construction**: `oklch(l, c, h)` returns a `ColorExpression`
-- **References**: String literals (e.g. `'lightness'`) used as function arguments become unbound variables tracked at the type level
-- **Two expression types**:
-  - `NumberExpression<Refs>` - numeric expressions that can be evaluated with `.solve()` or serialized to CSS
-  - `ColorExpression<Refs>` - color expressions that can only be serialized to CSS (prevents misuse in arithmetic)
-- **Binding API**: `.bind({ key1: value1, key2: value2 })` substitutes references
-- **CSS output**: `.toCss()` returns `{ expression, declarations, toDeclarationBlock() }`
-- **Property wrapping**: `.asProperty('name')` wraps expression as a CSS custom property
+- **`Calc` namespace** — math constructors and expression operations:
+  - Constructors: `add`, `subtract`, `multiply`, `divide`, `pow`, `signedPow`, `clamp`, `min`, `max`, `abs`, `sign`, `sin`, `lerp`
+  - Operations: `Calc.bind(expr, bindings)`, `Calc.solve(expr, bindings?)`, `Calc.serialize(expr, bindings?)`
+  - References: String literals (e.g. `'lightness'`) become unbound variables tracked at the type level
+- **`Colors` namespace** — color expression constructors:
+  - `Colors.oklch(l, c, h)` returns a `ColorExpression`
+  - `Colors.bind(expr, bindings)`, `Colors.serialize(expr, bindings?)`
+- **`Properties` namespace** — CSS `@property` rule generation:
+  - `Properties.number(name)` — declare numeric input property (returns expression)
+  - `Properties.number(name, expr)` — declare computed numeric property (registers rule + declaration)
+  - `Properties.color(name, expr)` — declare computed color property
+  - The `_` prefix convention determines `inherits`: names starting with `_` get `inherits: false`, others get `inherits: true`
+- **Two opaque expression types** (interfaces with `@internal` fields, phantom `Refs` type parameter):
+  - `NumberExpression<Refs>` — numeric expressions
+  - `ColorExpression<Refs>` — color expressions (prevents misuse in arithmetic)
+- **File structure**: `calc.ts` (Calc namespace), `colors.ts` (Colors namespace), `expression.ts` (types + factories), `properties.ts` (Properties namespace), `nodes.ts` (AST internals)
 
 ### `ok-apca`
 
@@ -38,23 +45,24 @@ The main library that uses `@ok-apca/calc-tree` to generate CSS for OKLCH colors
   - `normalPolarity`, `reversePolarity` - polarity direction solvers
   - `softClampApprox`, `softUnclamp` - Lp-norm approximation of APCA soft black clamp
 
-- **`generator.ts`** - Builds complete CSS from hue definitions:
-  - Generates `@property` declarations for type-safe custom properties
-  - Builds base color expressions with gamut mapping
-  - Builds contrast color expressions using APCA polarity selection
+- **`generator.ts`** - Builds complete CSS from role definitions using `Properties` namespace:
+  - Creates a parent `Properties` for shared `@property` rules
+  - Per active role: creates a child `Properties` with namespaced gamut inputs, base color, Y_bg, and contrast targets
+  - Hue selectors use `:is(&, & *):is(.role1, .role2)` nesting to assign gamut constants directly to role elements
 
 - **`color.ts`** - Gamut boundary computation using colorjs.io:
   - `findGamutSlice(hue)` returns `{ apex: { lightness, chroma }, curvature }`
 
 - **`contrast.ts`** - TypeScript runtime for contrast computation:
-  - `measureContrast(baseColor, contrastColor)` - measure APCA contrast
-  - `computeContrastColor(color, contrast, invert?)` - compute contrast color
+  - `measureContrast(baseColor, contrastColor)` - measure APCA contrast between role colors
+  - `computeContrastColor(color, contrast, invert?)` - compute contrast color relative to an anchor role
 
-- **`correction.ts`** - Y-to-L correction pipeline (OKLab polynomial)
-
-- **`constants.ts`** - All shared constants (APCA, gamut, soft clamp)
-
-- **`defineHue(options)`** - Main API entry point (in `index.ts`)
+- **`index.ts`** - Main API entry point:
+  - `defineColors(options)` - accepts `ColorSetOptions` (single set) or `{ sets }` (multiple sets)
+  - `ColorSetOptions`: `name` (property namespace), `hues`, `roles` (array of `ActiveRoleEntry | PassiveRoleEntry`), `noContrastInversion`
+  - Active roles get a CSS selector (default `.{name}`), passive roles are contrast-only targets
+  - `contrastsWith` on roles filters which contrast pairs are generated
+  - Validates role names, uniqueness, contrastsWith references, at least one active role
 
 ### `playground`
 
@@ -63,10 +71,11 @@ A Nuxt app for interactive testing and visualization.
 ## How It Works
 
 1. Given a fixed hue, compute the Display P3 gamut boundary (L_apex, C_apex, curvature)
-2. Build expression trees for gamut-mapped colors and APCA contrast solving
-3. Serialize expressions to CSS with intermediate values as custom properties
-4. Generated CSS accepts `--lightness` and `--chroma` as runtime inputs
-5. Contrast colors accept `--contrast-{label}` inputs (-1.08 to 1.08)
+2. For each active role, build expression trees for the active color and its contrast targets
+3. Serialize per-role expressions to CSS with intermediate values as `@property` declarations
+4. Each active role gets a selector block; hue selectors use `:is()` nesting to set gamut constants on role elements
+5. Runtime inputs: `--lightness` (0–1), `--chroma` (0–1), `--contrast-{role}` (-1.08 to 1.08)
+6. Outputs: `--{name}-{role}` color properties (e.g., `--color-fill`, `--color-text`)
 
 ## CSS Expression Size Constraint
 

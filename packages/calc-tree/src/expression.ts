@@ -1,189 +1,174 @@
-import { type ExpressionInput, toExpression } from './constructors.ts'
-import type { CSSResult, ExpressionNode, PropertyRule } from './types.ts'
+import type { ExpressionNode } from './nodes.ts'
+import { ConstantNode, ReferenceNode } from './nodes.ts'
 
-function createCSSResult(
-	expression: string,
-	declarations: Record<string, string>,
-	properties: Record<string, PropertyRule>,
-): CSSResult {
-	return {
-		expression,
-		declarations,
-		properties,
-		toDeclarationBlock() {
-			return Object.entries(declarations)
-				.map(([name, value]) => `${name}: ${value};`)
-				.join('\n')
-		},
-		toPropertyRules() {
-			return Object.entries(properties)
-				.map(
-					([name, rule]) =>
-						`@property ${name} {\n\tinherits: ${rule.inherits ? 'true' : 'false'};\n\tinitial-value: ${rule.initialValue};\n\tsyntax: '${rule.syntax}';\n}`,
-				)
-				.join('\n')
-		},
+declare const refs: unique symbol
+
+export interface NumberExpression<Refs extends string = string> {
+	readonly kind: 'NumberExpression'
+	readonly [refs]?: Refs
+}
+
+export interface ColorExpression<Refs extends string = string> {
+	readonly kind: 'ColorExpression'
+	readonly [refs]?: Refs
+}
+
+interface InternalNumberExpression<Refs extends string = string> extends NumberExpression<Refs> {
+	readonly _node: ExpressionNode
+	readonly _refs: ReadonlySet<Refs>
+}
+
+export function nodeOf(expr: NumberExpression | ColorExpression): ExpressionNode {
+	return (expr as InternalNumberExpression)._node
+}
+
+export function refsOf<R extends string>(
+	expr: NumberExpression<R> | ColorExpression<R>,
+): ReadonlySet<R> {
+	return (expr as InternalNumberExpression<R>)._refs
+}
+
+export function makeNumber<R extends string>(
+	node: ExpressionNode,
+	refs: ReadonlySet<string> = new Set(),
+): NumberExpression<R> {
+	return { _node: node, _refs: refs, kind: 'NumberExpression' } as NumberExpression<R>
+}
+
+export function makeColor<R extends string>(
+	node: ExpressionNode,
+	refs: ReadonlySet<string> = new Set(),
+): ColorExpression<R> {
+	return { _node: node, _refs: refs, kind: 'ColorExpression' } as ColorExpression<R>
+}
+
+export type ExpressionInput<Refs extends string = string> = NumberExpression<Refs> | number
+export type BindingsInput<Refs extends string = string> = Record<Refs, ExpressionInput>
+
+type ValueRefs<V> = V extends NumberExpression<infer R> ? R : never
+
+type BindingRefs<T> = T extends Record<string, infer V> ? ValueRefs<V> : never
+
+export type ApplyBindings<Refs extends string, B> =
+	| Exclude<Refs, keyof B & string>
+	| BindingRefs<Pick<B, Extract<keyof B, Refs>>>
+
+class ConstantValueTypeError extends TypeError {
+	readonly value: unknown
+	constructor(value: unknown) {
+		super(`Constant value must be a finite number, got ${value}`)
+		this.value = value
 	}
+}
+
+export function constant(value: number | string): NumberExpression<never> {
+	const num = typeof value === 'string' ? Number(value) : value
+	if (!Number.isFinite(num)) {
+		throw new ConstantValueTypeError(value)
+	}
+	return makeNumber(new ConstantNode(num))
+}
+
+const referenceCache = new Map<string, NumberExpression>()
+
+export function reference<Name extends string>(name: Name): NumberExpression<Name> {
+	const cached = referenceCache.get(name)
+	if (cached) {
+		return cached as NumberExpression<Name>
+	}
+	if (name.length === 0) {
+		throw new TypeError('Reference name must be a non-empty string')
+	}
+	const expr = makeNumber<Name>(new ReferenceNode(name), new Set([name]))
+	referenceCache.set(name, expr)
+	return expr
+}
+
+export function toExpression<Refs extends string>(
+	input: ExpressionInput<Refs>,
+): NumberExpression<Refs> {
+	if (typeof input === 'number') {
+		return constant(input) as NumberExpression<Refs>
+	}
+	return input as NumberExpression<Refs>
+}
+
+export function mergeRefs(...exprs: NumberExpression[]): Set<string> {
+	const merged = new Set<string>()
+	for (const expr of exprs) {
+		for (const ref of refsOf(expr)) {
+			merged.add(ref)
+		}
+	}
+	return merged
+}
+
+export function isConstantNode(node: unknown): node is ConstantNode {
+	return node instanceof ConstantNode
 }
 
 function applyBindings(
 	node: ExpressionNode,
-	bindings: Record<string, ExpressionInput<never>> | undefined,
-	refs: ReadonlySet<string>,
+	bindings: Record<string, ExpressionInput> | undefined,
+	exprRefs: ReadonlySet<string>,
 ): ExpressionNode {
 	if (!bindings) {
 		return node
 	}
 	const nodeBindings: Record<string, ExpressionNode> = {}
-	for (const [key, value] of Object.entries(bindings) as [string, ExpressionInput<never>][]) {
-		if (refs.has(key)) {
-			nodeBindings[key] = toExpression(value).node
+	for (const [key, value] of Object.entries(bindings) as [string, ExpressionInput][]) {
+		if (exprRefs.has(key)) {
+			nodeBindings[key] = nodeOf(toExpression(value))
 		}
 	}
 	return node.substitute(nodeBindings)
 }
 
-// Extract the union of all refs from values in a binding record
-type ValueRefs<V> =
-	V extends NumberExpression<infer R>
-		? R
-		: V extends string
-			? string extends V
-				? never // exclude bare 'string' type — only track literal refs
-				: V
-			: never
-type BindingRefs<T> = T extends Record<string, infer V> ? ValueRefs<V> : never
+export function bindImpl(
+	node: ExpressionNode,
+	exprRefs: ReadonlySet<string>,
+	bindings: Record<string, unknown>,
+): { node: ExpressionNode; refs: ReadonlySet<string> } {
+	const nodeBindings: Record<string, ExpressionNode> = {}
+	const newRefs = new Set(exprRefs)
 
-// Pick only the binding entries that match actual expression refs
-type RelevantBindingRefs<B, Refs extends string> = BindingRefs<
-	Pick<B, Extract<keyof B & string, Refs>>
->
-
-/**
- * Abstract base class for expression trees.
- * Provides shared functionality for binding and CSS generation.
- */
-export abstract class BaseExpression<Refs extends string = never> {
-	readonly node: ExpressionNode
-	readonly refs: ReadonlySet<string>
-
-	constructor(node: ExpressionNode, refs: ReadonlySet<string> = new Set()) {
-		this.node = node
-		this.refs = refs
-	}
-
-	/**
-	 * Factory method for creating new instances of the same type.
-	 * Subclasses must implement this to return their own type.
-	 */
-	protected abstract create<R extends string>(
-		node: ExpressionNode,
-		refs: ReadonlySet<string>,
-	): BaseExpression<R>
-
-	bind<B>(
-		bindings: B & Partial<Record<Refs, ExpressionInput<string>>>,
-	): BaseExpression<Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>> {
-		const nodeBindings: Record<string, ExpressionNode> = {}
-		const newRefs = new Set(this.refs)
-
-		for (const [key, val] of Object.entries(bindings as Record<string, ExpressionInput<string>>)) {
-			if (!this.refs.has(key)) {
-				continue
-			}
-			const expr = toExpression(val)
-			nodeBindings[key] = expr.node
-			newRefs.delete(key)
-			for (const ref of expr.refs) {
-				newRefs.add(ref)
-			}
+	for (const [key, val] of Object.entries(bindings)) {
+		if (val === undefined || !exprRefs.has(key)) {
+			continue
 		}
-
-		const newNode = this.node.substitute(nodeBindings)
-		return this.create(newNode, newRefs) as BaseExpression<
-			Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>
-		>
+		const expr = toExpression(val as ExpressionInput)
+		nodeBindings[key] = nodeOf(expr)
+		newRefs.delete(key)
+		for (const ref of refsOf(expr)) {
+			newRefs.add(ref)
+		}
 	}
 
-	/**
-	 * Generate CSS from the expression.
-	 * Optionally accepts bindings to substitute before serialization.
-	 */
-	toCss(bindings?: Partial<Record<Refs, ExpressionInput<never>>>): CSSResult {
-		const substituted = applyBindings(
-			this.node,
-			bindings as Record<string, ExpressionInput<never>>,
-			this.refs,
-		)
-		const declarations: Record<string, string> = {}
-		const properties: Record<string, PropertyRule> = {}
-		const rawExpression = substituted.serialize(declarations, properties)
-		const expression = substituted.needsCalcWrap() ? `calc(${rawExpression})` : rawExpression
-		return createCSSResult(expression, declarations, properties)
-	}
+	const newNode = node.substitute(nodeBindings)
+	return { node: newNode, refs: newRefs }
 }
 
-/**
- * Expression tree for numeric calculations.
- * Can be evaluated to a number or serialized to CSS calc().
- */
-export class NumberExpression<Refs extends string = never> extends BaseExpression<Refs> {
-	protected override create<R extends string>(
-		node: ExpressionNode,
-		refs: ReadonlySet<string>,
-	): NumberExpression<R> {
-		return new NumberExpression<R>(node, refs)
-	}
-
-	override bind<const B>(
-		bindings: B & Partial<Record<Refs, ExpressionInput<string>>>,
-	): NumberExpression<Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>> {
-		return super.bind(bindings) as NumberExpression<
-			Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>
-		>
-	}
-
-	/**
-	 * Evaluate the expression to a numeric value.
-	 * Throws if the expression contains unbound references after applying bindings.
-	 */
-	solve<B = Record<string, never>>(
-		bindings: [Refs] extends [never]
-			? Record<string, never> | undefined
-			: B & Record<Refs, ExpressionInput<never>> = {} as never,
-	): number {
-		const substituted = applyBindings(
-			this.node,
-			bindings as Record<string, ExpressionInput<never>>,
-			this.refs,
-		)
-
-		if (!substituted.isConstant()) {
-			throw new Error('Cannot convert expression to number: unbound references remain')
-		}
-
-		return substituted.evaluateConstant()
-	}
+export function serializeImpl(
+	node: ExpressionNode,
+	exprRefs: ReadonlySet<string>,
+	bindings?: Record<string, ExpressionInput>,
+): string {
+	const substituted = applyBindings(node, bindings as Record<string, ExpressionInput>, exprRefs)
+	const declarations: Record<string, string> = {}
+	const raw = substituted.serialize(declarations)
+	return substituted.needsCalcWrap() ? `calc(${raw})` : raw
 }
 
-/**
- * Expression tree for color values.
- * Can be serialized to CSS but cannot be evaluated to a number.
- * Cannot be used in arithmetic operations.
- */
-export class ColorExpression<Refs extends string = never> extends BaseExpression<Refs> {
-	protected override create<R extends string>(
-		node: ExpressionNode,
-		refs: ReadonlySet<string>,
-	): ColorExpression<R> {
-		return new ColorExpression<R>(node, refs)
+export function solveImpl(
+	node: ExpressionNode,
+	exprRefs: ReadonlySet<string>,
+	bindings?: Record<string, ExpressionInput>,
+): number {
+	const substituted = applyBindings(node, bindings as Record<string, ExpressionInput>, exprRefs)
+
+	if (!substituted.isConstant()) {
+		throw new Error('Cannot convert expression to number: unbound references remain')
 	}
 
-	override bind<B>(
-		bindings: B & Partial<Record<Refs, ExpressionInput<string>>>,
-	): ColorExpression<Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>> {
-		return super.bind(bindings) as ColorExpression<
-			Exclude<Refs, keyof B & string> | RelevantBindingRefs<B, Refs>
-		>
-	}
+	return substituted.evaluateConstant()
 }

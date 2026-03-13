@@ -1,5 +1,5 @@
 /**
- * Browser integration tests for base color computation.
+ * Browser integration tests for base (active role) color computation.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'

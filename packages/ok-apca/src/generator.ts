@@ -1,192 +1,166 @@
-import * as ct from '@ok-apca/calc-tree'
+import { Calc, Colors, Properties } from '@ok-apca/calc-tree'
 import { softClampApprox } from './apca.ts'
-import {
-	contrastTargetLightness,
-	contrastTargetLightnessWithInversion,
-	yBackground,
-} from './contrast.ts'
-import { computeGamutSlice, type GamutSlice, maxChromaExpr } from './gamut.ts'
-import { outdent } from './util.ts'
-
-export interface HueEntry {
-	readonly name: string
-	readonly hue: number
-	readonly selector: string
-}
-
-export interface ColorsDefinition {
-	readonly output: string
-	readonly baseSelector: string
-	readonly hues: readonly HueEntry[]
-	readonly variants: readonly string[]
-	readonly noContrastInversion: boolean
-}
-
-export interface GeneratedHue {
-	readonly name: string
-	readonly hue: number
-	readonly selector: string
-	readonly slice: GamutSlice
-}
+import type { ColorsDefinition, ResolvedHue, ResolvedRole } from './config.ts'
+import { contrastTargetLightness, yBackground } from './contrast.ts'
+import { computeGamutSlice, maxChromaExpr } from './gamut.ts'
+import { outdent, withPrefix } from './util.ts'
 
 export interface ColorSystem {
 	readonly css: string
-	readonly hues: readonly GeneratedHue[]
+	readonly hues: Record<string, string>
+	readonly roles: Record<string, string>
 }
 
 /**
- * Generate CSS for a multi-hue color system with APCA-based contrast variants.
+ * Build the CSS selector block for a single active role.
  *
- * Accepts a pre-validated `ColorsDefinition` from `defineColors`.
- *
- * The expression tree is built once (hue-independent). Gamut slice constants
- * are left as CSS custom properties, set by per-hue selectors. All variant
- * declarations live in the base selector.
- *
- * Runtime inputs (all normalized):
- * - `--lightness` (0–1), `--chroma` (0–1)
- * - `--contrast-{variant}` (-1.08 to 1.08)
- *
- * Outputs:
- * - `--{output}` (e.g., `--color`)
- * - `--{output}-{variant}` (e.g., `--color-text`)
+ * Creates a child Properties with namespaced gamut inputs, base color, and
+ * contrast target expressions.
  */
-export function generateColorsCss(definition: ColorsDefinition): ColorSystem {
-	const { output, baseSelector, hues, variants, noContrastInversion } = definition
+function buildRoleBlock(parent: Properties.Properties, role: ResolvedRole, prefix: string): string {
+	const sharedPrefix = `_${prefix}-`
+	const rolePrefix = `_${prefix}-${role.name}-`
+	const child = Properties.make(parent)
 
-	// Prefix for internal/intermediate properties
-	const p = `_${output}-`
+	// Gamut slice input properties — shared across roles (inherits: false via _ prefix)
+	const hue = Properties.number(child, `${sharedPrefix}hue`)
+	const apexL = Properties.number(child, `${sharedPrefix}apexL`)
+	const apexC = Properties.number(child, `${sharedPrefix}apexC`)
+	const tentK = Properties.number(child, `${sharedPrefix}tentK`)
+	const fA = Properties.number(child, `${sharedPrefix}fA`)
+	const fB = Properties.number(child, `${sharedPrefix}fB`)
+	const fD = Properties.number(child, `${sharedPrefix}fD`)
 
-	const base = ct.declarations()
-
-	// =========================================================================
-	// Gamut slice input properties (set by hue selectors, inherit: true)
-	// =========================================================================
-
-	const hueInput = base.property(`${p}hue`, 'number', true)
-	const apexLInput = base.property(`${p}apexL`, 'number', true)
-	const apexCInput = base.property(`${p}apexC`, 'number', true)
-	const curvatureInput = base.property(`${p}curvature`, 'number', true)
-	const fAInput = base.property(`${p}fA`, 'number', true)
-	const fBInput = base.property(`${p}fB`, 'number', true)
-	const fDInput = base.property(`${p}fD`, 'number', true)
-
-	// User-facing input properties (inherit: true)
-	const lightnessInput = base.property('lightness', 'number', true)
-	base.property('chroma', 'number', true)
-
-	// =========================================================================
-	// Base color
-	// =========================================================================
-
-	// Max chroma at base lightness — bind gamut refs to input properties
-	const maxChromaProp = base.property(
-		`${p}mc`,
-		maxChromaExpr.bind({
-			lightness: lightnessInput,
-			apexL: apexLInput,
-			apexC: apexCInput,
-			curvature: curvatureInput,
+	// Max chroma at active role's lightness
+	const maxChromaProp = Properties.number(
+		child,
+		`${rolePrefix}mc`,
+		Calc.bind(maxChromaExpr, {
+			lightness: Properties.number('lightness'),
+			apexL,
+			apexC,
+			tentK,
 		}),
 	)
 
-	// Base color output (inherit: true)
-	base.property(output, ct.oklch('lightness', ct.multiply(maxChromaProp, 'chroma'), hueInput), true)
+	// Active role's base color output
+	Properties.color(
+		child,
+		`${prefix}-${role.name}`,
+		Colors.oklch(Calc.ref('lightness'), Calc.multiply(maxChromaProp, Calc.ref('chroma')), hue),
+	)
 
-	// =========================================================================
-	// Variants (contrast colors)
-	// =========================================================================
-
-	if (variants.length > 0) {
-		// Bind gamut slice refs into Y background
-		const yBgExpr = base.property(
-			`${p}ybg`,
-			yBackground.bind({
-				fA: fAInput,
-				fB: fBInput,
-				fD: fDInput,
-			}),
+	// Contrast colors
+	if (role.contrastTargets.length > 0) {
+		const yBg = Properties.number(child, `${rolePrefix}ybg`, Calc.bind(yBackground, { fA, fB, fD }))
+		const scYBg = Properties.number(
+			child,
+			`${rolePrefix}sc`,
+			Calc.bind(softClampApprox, { y: yBg }),
 		)
 
-		// Soft-clamped Y_bg
-		const scYBgExpr = base.property(`${p}sc`, softClampApprox.bind({ y: yBgExpr }))
+		for (const target of role.contrastTargets) {
+			const conL = Calc.bind(contrastTargetLightness(target), { fA, fB, fD, yBg, scYBg })
 
-		for (const variant of variants) {
-			// Declare contrast input property (inherit: true)
-			base.property(`contrast-${variant}`, 'number', true)
-
-			// Contrast target lightness
-			const conLExpr = noContrastInversion
-				? contrastTargetLightness(variant)
-				: contrastTargetLightnessWithInversion(variant)
-			const boundConL = conLExpr.bind({
-				fA: fAInput,
-				fB: fBInput,
-				fD: fDInput,
-				yBg: yBgExpr,
-				scYBg: scYBgExpr,
-			})
-
-			// Max chroma at contrast color's lightness
-			const conMaxChroma = base.property(
-				`${p}mc-${variant}`,
-				maxChromaExpr.bind({
-					lightness: boundConL,
-					apexL: apexLInput,
-					apexC: apexCInput,
-					curvature: curvatureInput,
-				}),
+			const conCMax = Properties.number(
+				child,
+				`${rolePrefix}mc-${target}`,
+				Calc.bind(maxChromaExpr, { lightness: conL, apexL, apexC, tentK }),
 			)
 
-			// Contrast color output (inherit: true)
-			base.property(
-				`${output}-${variant}`,
-				ct.oklch(boundConL, ct.multiply(conMaxChroma, 'chroma'), hueInput),
-				true,
+			Properties.color(
+				child,
+				`${prefix}-${target}`,
+				Colors.oklch(conL, Calc.multiply(conCMax, Calc.ref('chroma')), hue),
 			)
 		}
 	}
 
-	// =========================================================================
-	// Hue selector blocks
-	// =========================================================================
+	return Properties.toRuleset(child, role.selector)
+}
 
-	const generatedHues: GeneratedHue[] = []
-	const hueBlocks: string[] = []
+/**
+ * Build a hue selector block with :is() nesting to assign gamut constants
+ * directly to role elements.
+ */
+function buildHueBlock(
+	hue: ResolvedHue,
+	prefix: string,
+	roleSelectorList: string,
+): string {
+	const slice = computeGamutSlice(hue.hue)
 
-	for (const hueEntry of hues) {
-		const hue = ((hueEntry.hue % 360) + 360) % 360
-		const slice = computeGamutSlice(hue)
+	const hueBlock = Properties.make()
+	Properties.numbers(hueBlock, withPrefix(`_${prefix}-`, slice))
 
-		generatedHues.push({
-			name: hueEntry.name,
-			hue,
-			selector: hueEntry.selector,
-			slice,
-		})
-
-		const hueBlock = ct.declarations()
-		hueBlock.assign(p, {
-			hue,
-			apexL: slice.apexL,
-			apexC: slice.apexC,
-			curvature: slice.curvature,
-			fA: slice.fA,
-			fB: slice.fB,
-			fD: slice.fD,
-		})
-		hueBlocks.push(hueBlock.toSelector(hueEntry.selector))
+	const nestedDecls: string[] = []
+	for (const [propName, entry] of Properties.entries(hueBlock)) {
+		if (entry.declaration !== undefined) {
+			nestedDecls.push(`\t\t${propName}: ${entry.declaration};`)
+		}
 	}
 
-	// =========================================================================
-	// Build CSS output
-	// =========================================================================
+	const nestedSelector = `:is(&, & *):is(${roleSelectorList})`
+	const block = `${hue.selector} {\n\t${nestedSelector} {\n${nestedDecls.join('\n')}\n\t}\n}`
 
-	const css = outdent`
-		${base.toPropertyRules()}
+	return block
+}
 
-		${[base.toSelector(baseSelector), ...hueBlocks].join('\n\n')}
-	`
+/**
+ * Generate CSS for a multi-hue color system with APCA-based contrast roles.
+ *
+ * Accepts a pre-validated `ColorsDefinition` from `defineColors`.
+ *
+ * Each active role gets its own selector block. When active, it sets its own
+ * color from `--lightness`/`--chroma`, and computes contrast colors for its
+ * target roles. Expression trees are built once (hue-independent). Gamut slice
+ * constants are left as CSS custom properties, set by nested hue selectors.
+ *
+ * Runtime inputs (all normalized):
+ * - `--lightness` (0–1), `--chroma` (0–1)
+ * - `--contrast-{role}` (-1.08 to 1.08)
+ *
+ * Outputs:
+ * - `--{prefix}-{role}` (e.g., `--color-fill`, `--color-text`)
+ */
+export function generateColorSystem(definition: ColorsDefinition): ColorSystem {
+	const { prefix, hues, roles } = definition
+	const parent = Properties.make()
 
-	return { css, hues: generatedHues }
+	Properties.number(parent, 'lightness')
+	Properties.number(parent, 'chroma')
+
+	for (const target of new Set<string>(roles.flatMap((role) => role.contrastTargets))) {
+		Properties.number(parent, `contrast-${target}`)
+		Properties.number(parent, `${target}-invertable`)
+	}
+
+	const allRoleNames = new Set<string>()
+	for (const role of roles) {
+		allRoleNames.add(role.name)
+		for (const target of role.contrastTargets) {
+			allRoleNames.add(target)
+		}
+	}
+	for (const roleName of allRoleNames) {
+		Properties.color(parent, `${prefix}-${roleName}`, Colors.oklch(0.5, 0, 0))
+	}
+
+	const roleSelectorList = roles.map((r) => r.selector).join(', ')
+
+	// Build role and hue blocks first so child properties propagate to parent
+	const blocks = [
+		...roles.map((role) => buildRoleBlock(parent, role, prefix)),
+		...hues.map((hueEntry) => buildHueBlock(hueEntry, prefix, roleSelectorList)),
+	]
+
+	return {
+		css: outdent`
+			${Properties.toAtRules(parent)}
+
+			${blocks.join('\n\n')}
+		`,
+		hues: Object.fromEntries(hues.map((h) => [h.name, h.selector])),
+		roles: Object.fromEntries(roles.map((r) => [r.name, r.selector])),
+	}
 }

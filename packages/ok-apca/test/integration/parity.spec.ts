@@ -5,12 +5,13 @@
  * results that match the CSS computed by the browser.
  *
  * The CSS is the source of truth - it computes:
- * - Base color chroma as: maxChroma(lightness) * chromaPercentage
- * - Contrast color chroma as: maxChroma(contrastLightness) * chromaPercentage
+ * - Active role chroma as: maxChroma(lightness) * chromaPercentage
+ * - Contrast role chroma as: maxChroma(contrastLightness) * chromaPercentage
  *
  * The TypeScript functions should be used to match this behavior.
  */
 
+import { Calc } from '@ok-apca/calc-tree'
 import { afterEach, describe, expect, it } from 'vitest'
 import { computeContrastColor } from '../../src/contrast.ts'
 import { computeGamutSlice } from '../../src/gamut.ts'
@@ -24,7 +25,7 @@ import { cleanupAll, createTestHarness } from './harness.ts'
  */
 function computeExpectedColor(hue: number, lightness: number, chromaPct: number) {
 	const L = Math.max(0, Math.min(1, lightness))
-	const maxC = computeGamutSlice(hue).maxChroma.solve({ lightness: L })
+	const maxC = Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: L })
 	const C = maxC * Math.max(0, Math.min(1, chromaPct))
 	return { hue, lightness: L, chroma: C }
 }
@@ -93,7 +94,9 @@ describe('findGamutSlice parity with CSS gamut clamping', () => {
 				const cssChroma = cssColor.get('oklch.c')
 
 				// Compute expected max chroma from TypeScript
-				const expectedMaxChroma = computeGamutSlice(hue).maxChroma.solve({ lightness: lightness })
+				const expectedMaxChroma = Calc.solve(computeGamutSlice(hue).maxChroma, {
+					lightness: lightness,
+				})
 
 				expect(cssChroma).toBeCloseTo(expectedMaxChroma, 2)
 			}
@@ -129,9 +132,10 @@ describe('computeContrastColor parity with CSS', () => {
 
 			// Get result from CSS in browser (contrast input is normalized)
 			const harness = createTestHarness({
-				options: { variants: ['text'] },
+				options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 				hue,
 			})
+			harness.setVar('text-invertable', 1)
 			harness.setVar('lightness', lightness)
 			harness.setVar('chroma', chroma)
 			harness.setVar('contrast-text', contrast)
@@ -145,7 +149,7 @@ describe('computeContrastColor parity with CSS', () => {
 
 			// Compare chroma - CSS computes: maxChroma(contrastL) * chromaPct
 			const expectedContrastChroma =
-				computeGamutSlice(hue).maxChroma.solve({ lightness: cssLightness }) * chroma
+				Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: cssLightness }) * chroma
 			expect(cssChroma).toBeCloseTo(expectedContrastChroma, 1)
 
 			harness.cleanup()
@@ -167,9 +171,10 @@ describe('computeContrastColor parity with CSS', () => {
 			const tsResult = computeContrastColor(baseColor, contrast)
 
 			const harness = createTestHarness({
-				options: { variants: ['text'] },
+				options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 				hue,
 			})
+			harness.setVar('text-invertable', 1)
 			harness.setVar('lightness', lightness)
 			harness.setVar('chroma', chroma)
 			harness.setVar('contrast-text', contrast)
@@ -181,7 +186,8 @@ describe('computeContrastColor parity with CSS', () => {
 
 			// CSS computes chroma as: maxChroma(contrastL) * chromaPct
 			const cssL = cssColor.get('oklch.l')
-			const expectedChroma = computeGamutSlice(hue).maxChroma.solve({ lightness: cssL }) * chroma
+			const expectedChroma =
+				Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: cssL }) * chroma
 			expect(cssColor.get('oklch.c')).toBeCloseTo(expectedChroma, 1)
 
 			harness.cleanup()
@@ -192,7 +198,7 @@ describe('computeContrastColor parity with CSS', () => {
 describe('chroma percentage preservation parity', () => {
 	afterEach(() => cleanupAll())
 
-	it('preserves chroma percentage from base to contrast color', () => {
+	it('preserves chroma percentage from active role to contrast color', () => {
 		const hue = 240
 		const lightness = 0.4
 		const chroma = 0.5 // 50% of max chroma
@@ -200,9 +206,10 @@ describe('chroma percentage preservation parity', () => {
 
 		// CSS computation
 		const harness = createTestHarness({
-			options: { variants: ['text'] },
+			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue,
 		})
+		harness.setVar('text-invertable', 1)
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
 		harness.setVar('contrast-text', contrast)
@@ -212,14 +219,14 @@ describe('chroma percentage preservation parity', () => {
 
 		// Verify base chroma is ~50% of max at that lightness
 		const baseL = cssBaseColor.get('oklch.l')
-		const baseMaxChroma = computeGamutSlice(hue).maxChroma.solve({ lightness: baseL })
+		const baseMaxChroma = Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: baseL })
 		const baseChromaPct = cssBaseColor.get('oklch.c') / baseMaxChroma
 
 		expect(baseChromaPct).toBeCloseTo(0.5, 1) // 50%
 
 		// Verify contrast chroma is also ~50% of max at contrast lightness
 		const contrastL = cssContrastColor.get('oklch.l')
-		const contrastMaxChroma = computeGamutSlice(hue).maxChroma.solve({ lightness: contrastL })
+		const contrastMaxChroma = Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: contrastL })
 		const contrastChromaPct = cssContrastColor.get('oklch.c') / contrastMaxChroma
 
 		expect(contrastChromaPct).toBeCloseTo(0.5, 1) // 50%
@@ -245,9 +252,10 @@ describe('edge case parity', () => {
 		const tsResult = computeContrastColor(baseColor, contrast)
 
 		const harness = createTestHarness({
-			options: { variants: ['text'] },
+			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue,
 		})
+		harness.setVar('text-invertable', 1)
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
 		harness.setVar('contrast-text', contrast)
@@ -271,9 +279,10 @@ describe('edge case parity', () => {
 		const tsResult = computeContrastColor(baseColor, contrast)
 
 		const harness = createTestHarness({
-			options: { variants: ['text'] },
+			options: { roles: [{ name: 'fill' }, { name: 'text' }] },
 			hue,
 		})
+		harness.setVar('text-invertable', 1)
 		harness.setVar('lightness', lightness)
 		harness.setVar('chroma', chroma)
 		harness.setVar('contrast-text', contrast)
@@ -285,7 +294,8 @@ describe('edge case parity', () => {
 
 		// CSS computes chroma as maxChroma(L) * pct
 		const cssL = cssColor.get('oklch.l')
-		const expectedChroma = computeGamutSlice(hue).maxChroma.solve({ lightness: cssL }) * chroma
+		const expectedChroma =
+			Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: cssL }) * chroma
 		expect(cssColor.get('oklch.c')).toBeCloseTo(expectedChroma, 1)
 
 		harness.cleanup()
