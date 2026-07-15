@@ -12,15 +12,15 @@ const GAMUT_SINE_CURVATURE_EXPONENT = 0.95
 
 /**
  * CIE Y extraction weights for each LMS cone channel.
- * Second row of the LMS→XYZ matrix (recalculated D65, from colorjs.io).
+ * Second row of the LMS->XYZ matrix (recalculated D65, from colorjs.io).
  */
 const Y_FROM_L = -0.0405757452148008
 const Y_FROM_M = 1.112286803280317
 const Y_FROM_S = -0.0717110580655164
 
 /**
- * OKLab→LMS' chroma coefficients for each cone channel.
- * Each cone's response to chroma is: k_i = KA_i·cos(hue) + KB_i·sin(hue).
+ * OKLab->LMS' chroma coefficients for each cone channel.
+ * Each cone's response to chroma is: k_i = KA_i*cos(hue) + KB_i*sin(hue).
  * The lightness coefficient is implicitly 1 for all channels.
  */
 const L_PRIME_KA = 0.3963377773761749
@@ -48,16 +48,16 @@ export type GamutSlice = {
 	 * Always negative (actual boundary is inside linear approximation).
 	 */
 	readonly tentK: number
-	/** Y polynomial coefficient for L^2·C term. */
+	/** Y polynomial coefficient for L^2*C term. */
 	readonly yCoeffA: number
-	/** Y polynomial coefficient for L·C^2 term. */
+	/** Y polynomial coefficient for L*C^2 term. */
 	readonly yCoeffB: number
 	/** Y polynomial coefficient for C^3 term. */
 	readonly yCoeffD: number
 	/**
 	 * Pre-scaled Y correction coefficients for the k-polynomial.
-	 * k = (apexC / apexL) · chromaRatio, so the polynomial 1 + A·k + B·k^2 + D·k^3
-	 * becomes 1 + fA·chroma + fB·chroma^2 + fD·chroma^3.
+	 * k = (apexC / apexL) * chromaRatio, so the polynomial 1 + A*k + B*k^2 + D*k^3
+	 * becomes 1 + fA*chroma + fB*chroma^2 + fD*chroma^3.
 	 */
 	readonly fA: number
 	readonly fB: number
@@ -128,6 +128,7 @@ export function computeGamutSlice(hue: number): GamutSlice {
 	return slice
 }
 
+/** Binary-search the largest chroma that still sits inside Display P3 at this hue and lightness. */
 function findMaxChromaAtLightness(hue: number, lightness: number): number {
 	let low = 0
 	let high = 0.4
@@ -153,7 +154,10 @@ function findMaxChromaAtLightness(hue: number, lightness: number): number {
  * Uses pow(sin(t * pi), 0.95) as the basis function, which:
  * - Peaks at t=0.5 (like t*(1-t))
  * - Optimal exponent determined by testing across all 360 hues
- * - Allows single evaluation of t in CSS (sin only uses t once)
+ * - Keeps t to a single reference in the emitted CSS: sin(t * pi) names t once,
+ *   where the algebraic bump t*(1-t) would name it twice. That halving is what
+ *   keeps the fully-expanded maxChromaExpr small (see the DevTools expansion
+ *   constraint in CLAUDE.md).
  */
 function fitCurvature(hue: number, apexL: number, apexC: number): number {
 	const samples = 50
@@ -175,6 +179,19 @@ function fitCurvature(hue: number, apexL: number, apexC: number): number {
 	return sumProduct / sumBasisSquared
 }
 
+/**
+ * Display P3 max chroma as a function of `lightness`, for one hue's geometry.
+ *
+ * A tent: chroma rises linearly from 0 at black to `apexC` at `apexL`, then falls
+ * back to 0 at white. The real boundary bows inward from that right-hand ramp, so
+ * past the apex a sine curvature term scaled by `tentK` (always negative) is added.
+ * Left of the apex the lerp selects the bare linear ramp, so that half stays exact.
+ *
+ * The sine basis is chosen so sin() names its argument once, keeping the
+ * fully-expanded CSS small (see fitCurvature and the DevTools expansion constraint
+ * in CLAUDE.md). Bind `apexL`, `apexC`, and `tentK` from a GamutSlice. `lightness`
+ * stays a runtime input.
+ */
 export const maxChromaExpr: Calc.Expression<'lightness' | 'apexL' | 'apexC' | 'tentK'> = Calc.lerp(
 	Calc.divide(Calc.multiply(Calc.ref('apexC'), Calc.ref('lightness')), Calc.ref('apexL')),
 	Calc.add(

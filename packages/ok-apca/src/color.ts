@@ -1,9 +1,16 @@
 import { getLuminance as _getLuminance, inGamut, OKLCH, P3 } from 'colorjs.io/fn'
 import { clampNumber } from './util.ts'
 
+/** A color in absolute OKLCH coordinates. */
 export interface Color {
+	/** OKLCH lightness in [0, 1]. */
 	readonly lightness: number
+	/**
+	 * OKLCH chroma in absolute coordinates (roughly [0, 0.5]), not the [0, 1]
+	 * ratio the CSS `--chroma` input uses.
+	 */
 	readonly chroma: number
+	/** OKLCH hue angle in degrees, [0, 360). */
 	readonly hue: number
 }
 

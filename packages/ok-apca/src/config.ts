@@ -17,10 +17,15 @@ interface ActiveRoleEntry extends BaseRoleEntry {
 	 * @default `.${name}`
 	 */
 	readonly selector?: string | undefined
+	/** Active roles omit this (or set `false`); a `true` value makes the role passive. */
 	readonly passive?: false | undefined
 }
 
 interface PassiveRoleEntry extends BaseRoleEntry {
+	/**
+	 * Marks a contrast-only role: it appears as an output color on other roles'
+	 * elements but gets no selector block of its own and can never anchor.
+	 */
 	readonly passive: true
 }
 
@@ -78,7 +83,7 @@ function processRoles(roles: readonly RoleEntry[]): readonly ResolvedRole[] {
 	const names: string[] = []
 	const contrastRefs = new Set<string>()
 
-	// Maps role name → set of active roles it wants to appear on (null = all)
+	// Maps role name -> set of active roles it wants to appear on (null = all)
 	const appearsOn = new Map<string, Set<string> | null>()
 
 	for (const role of roles) {
@@ -152,6 +157,14 @@ function processHues(hues: readonly HueEntry[]): readonly ResolvedHue[] {
 	})
 }
 
+/**
+ * Resolve raw `ColorSetOptions` into a validated `ColorsDefinition`: applies the
+ * default prefix, normalizes hue angles into [0, 360), and fills in default names
+ * and selectors.
+ *
+ * Throws on an invalid or duplicate hue/role name, a `contrastsWith` entry naming
+ * an unknown role, or a config with no active role.
+ */
 export function resolveColorSet(options: ColorSetOptions): ColorsDefinition {
 	return {
 		prefix: options.prefix ?? 'color',

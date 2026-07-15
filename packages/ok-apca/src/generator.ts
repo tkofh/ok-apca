@@ -6,8 +6,11 @@ import { computeGamutSlice, maxChromaExpr } from './gamut.ts'
 import { outdent, withPrefix } from './util.ts'
 
 export interface ColorSystem {
+	/** The generated stylesheet, as a single CSS string. */
 	readonly css: string
+	/** Each hue name mapped to its CSS selector. */
 	readonly hues: Record<string, string>
+	/** Each role name mapped to its CSS selector. */
 	readonly roles: Record<string, string>
 }
 

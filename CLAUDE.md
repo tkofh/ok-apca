@@ -140,6 +140,13 @@ pnpm changeset:publish   # Build and publish packages
 - No semicolons (ASI)
 - Use `.ts` extensions in all imports
 
+## Documentation
+
+**Declared reader (for code comments).** A contributor working on ok-apca's internals — the expression trees, solvers, and generator. They know TypeScript, CSS custom properties, and the general shape of APCA (Lc contrast, relative luminance Y, polarity). They are competent with math but new to seeing it expressed through `@ok-apca/calc-tree`'s expression trees, and they do not arrive knowing *why* an expression is shaped the way it is — above all, why one references a variable once instead of twice.
+
+- **Gloss** the rationale behind expression shape: reference-count minimization, single-reference approximations (the Lp-norm soft clamp, the `sin()` curvature basis), and any constant whose value isn't self-evident. The DevTools fully-substituted-expansion constraint (see [CSS Expression Size Constraint](#css-expression-size-constraint)) is the reason most shape choices exist; name it where it drove a choice. Gloss a calc-tree idiom on first encounter in a module.
+- **Assume** TypeScript, CSS custom properties and `@property`, OKLCH, and APCA fundamentals. Don't re-explain what APCA contrast is or what luminance means.
+
 ## Workflow Rules
 
 - After modifying `biome.json`, always run `pnpm check` before proceeding with other work to ensure all files are updated with the new rules/formatting

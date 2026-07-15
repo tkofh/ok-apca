@@ -24,6 +24,9 @@ export type { ColorSystem } from './generator.ts'
  * })
  * console.log(system.css) // Generated CSS string
  * ```
+ *
+ * @returns A `ColorSystem`: the generated `css` string plus `hues` and `roles`
+ * maps from each name to its selector.
  */
 export function defineColors(options: ColorSetOptions): ColorSystem {
 	return generateColorSystem(resolveColorSet(options))

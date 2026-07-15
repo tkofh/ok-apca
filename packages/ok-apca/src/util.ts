@@ -41,6 +41,7 @@ export function outdent(input: string | TemplateStringsArray, ...values: any[]) 
 	return result.replaceAll(edgeSpaceRe, '')
 }
 
+/** Clamp `value` into `[min, max]`. Note the argument order: the value sits in the middle. */
 export function clampNumber(min: number, value: number, max: number): number {
 	return Math.min(Math.max(value, min), max)
 }

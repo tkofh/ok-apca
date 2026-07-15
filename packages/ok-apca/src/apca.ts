@@ -38,15 +38,24 @@ const APCA_SMOOTH_POWER = 2.46
 const INVERSION_THRESHOLD = 0.08 // ~8 Lc
 
 /**
- * Lp-norm approximation of the APCA soft black clamp.
- * pow(pow(Y, p) + K^p, 1/p) approximates sc(Y) with a single reference to Y.
+ * Tuning for the Lp-norm soft-clamp approximation pow(pow(Y, p) + K^p, 1/p).
+ *
+ * p = 1.75 and K = 0.005 fit the true clamp (trueSoftClamp). KP and INV_P are
+ * precomputed so the emitted CSS carries neither. The Lp form exists to name Y
+ * once where the true clamp names it twice. See softClampApprox for why a single
+ * reference matters.
  */
 const LP_SOFT_CLAMP_P = 1.75
 const LP_SOFT_CLAMP_KP = 0.005 ** LP_SOFT_CLAMP_P
 const LP_SOFT_CLAMP_INV_P = 1 / LP_SOFT_CLAMP_P
 
+// APCA contrast pulled back into the luminance domain: (|Lc| + offset) / scale.
+// The polarity solvers subtract this from (normal) or add it to (reverse) yBg's power term.
 const contrastDelta = Calc.divide(Calc.add(Calc.abs(Calc.ref('contrast')), APCA_OFFSET), APCA_SCALE)
 
+// Weight for the near-zero-contrast smoothing branch: 0 at contrast 0, ramping to 1
+// as |contrast| reaches APCA_SMOOTH_THRESHOLD. sin(...)^power is a smooth ramp that
+// references its argument once; a polynomial smoothstep would repeat it.
 const smoothingBlend = Calc.pow(
 	Calc.sin(
 		Calc.multiply(
@@ -57,11 +66,23 @@ const smoothingBlend = Calc.pow(
 	APCA_SMOOTH_POWER,
 )
 
+// 1 once |contrast| clears the smoothing threshold, 0 within it — selects the
+// direct inverse over the smoothed branch.
 const aboveSmoothThreshold = Calc.max(
 	0,
 	Calc.sign(Calc.subtract(Calc.abs(Calc.ref('contrast')), APCA_SMOOTH_THRESHOLD)),
 )
 
+/**
+ * Normal-polarity solve: the foreground luminance that sits `contrast` below the
+ * background. This is the darker of the two directions (dark-on-light).
+ *
+ * Inverts the APCA normal formula for Y_fg: Y_fg^0.57 = yBg^0.56 - contrastDelta.
+ * Within APCA_SMOOTH_THRESHOLD it blends toward a smoothed branch instead of the
+ * raw inverse, which misbehaves near zero contrast. Callers pass the soft-clamped
+ * background as `yBg`. The sign of `contrast` is ignored here, since the caller
+ * chooses the direction.
+ */
 export const normalPolarity: Calc.Expression<'yBg' | 'contrast'> = Calc.lerp(
 	Calc.lerp(
 		Calc.ref('yBg'),
@@ -78,6 +99,14 @@ export const normalPolarity: Calc.Expression<'yBg' | 'contrast'> = Calc.lerp(
 	aboveSmoothThreshold,
 )
 
+/**
+ * Reverse-polarity solve: the foreground luminance that sits `contrast` above the
+ * background. This is the lighter of the two directions (light-on-dark).
+ *
+ * Inverts the APCA reverse formula for Y_fg: Y_fg^0.62 = yBg^0.65 + contrastDelta.
+ * Mirrors normalPolarity: same smoothing near zero contrast, same soft-clamped
+ * `yBg`, sign of `contrast` ignored.
+ */
 export const reversePolarity: Calc.Expression<'yBg' | 'contrast'> = Calc.lerp(
 	Calc.lerp(
 		Calc.ref('yBg'),
@@ -94,6 +123,8 @@ export const reversePolarity: Calc.Expression<'yBg' | 'contrast'> = Calc.lerp(
 	aboveSmoothThreshold,
 )
 
+// Direction pickers derived from the contrast sign: preferLight is 1 for a positive
+// request (lighter), preferDark is 1 for a negative one (darker), isZero is 1 for neither.
 const contrastSign = Calc.sign(Calc.ref('contrast'))
 const contrastPreferLight = Calc.max(0, contrastSign)
 const contrastPreferDark = Calc.max(0, Calc.multiply(-1, contrastSign))
@@ -101,7 +132,10 @@ const contrastIsZero = Calc.subtract(1, Calc.max(contrastPreferLight, contrastPr
 
 /**
  * True APCA soft black clamp: Y + max(0, threshold - Y)^1.414.
- * Used for accurate reference values in the TypeScript runtime.
+ *
+ * Names Y twice, so the generated CSS uses softClampApprox instead. This exact
+ * form backs the TypeScript reference path (measureContrast without
+ * `approximate`), where expression size doesn't matter.
  */
 export const trueSoftClamp: Calc.Expression<'y'> = Calc.add(
 	Calc.ref('y'),

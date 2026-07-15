@@ -20,7 +20,7 @@ import { computeGamutSlice, gamutMap } from './gamut.ts'
 import { clampNumber } from './util.ts'
 
 /**
- * Y-correction polynomial: 1 + fA·chroma + fB·chroma^2 + fD·chroma^3
+ * Y-correction polynomial: 1 + fA*chroma + fB*chroma^2 + fD*chroma^3
  *
  * Converts between OKLCH lightness and CIE Y using pre-scaled coefficients.
  * fA, fB, fD are hue-dependent and incorporate the gamut boundary slope
@@ -34,11 +34,11 @@ const fCorrection: Calc.Expression<'chroma' | 'fA' | 'fB' | 'fD'> = Calc.add(
 )
 
 /**
- * Y background: L^3 · f(chroma)
+ * Y background: L^3 * f(chroma)
  *
  * Computes CIE Y luminance from OKLCH lightness and chroma ratio.
- * Exact on the left half of the gamut tent where k = (apexC/apexL) · chromaRatio
- * is constant; close approximation on the right half.
+ * Exact on the left half of the gamut tent, where k = (apexC/apexL) * chromaRatio
+ * is constant. On the right half it's a close approximation.
  */
 export const yBackground: Calc.Expression<'lightness' | 'chroma' | 'fA' | 'fB' | 'fD'> =
 	Calc.multiply(Calc.pow(Calc.ref('lightness'), 3), fCorrection)
@@ -116,13 +116,26 @@ export function contrastTargetLightness(label?: string): Calc.Expression<string>
 }
 
 /**
- * Measure APCA contrast between two role colors.
- * Returns signed Lc value: positive = dark on light, negative = light on dark.
- * Range: -1.08 to 1.08.
+ * Measure APCA contrast between a background and a foreground color.
  *
- * By default uses the true APCA soft black clamp for accurate reference values.
- * Pass `approximate: true` to use the Lp-norm approximation matching the
- * generated CSS expressions.
+ * Returns a signed Lc value (Lc / 100): positive = dark-on-light (background
+ * lighter than foreground), negative = light-on-dark. Range about -1.08 to 1.06.
+ * Returns 0 when the colors are equal or either luminance falls outside APCA's
+ * usable range.
+ *
+ * Defaults to the true APCA soft black clamp for reference-grade values. Pass
+ * `approximate: true` for the Lp-norm approximation the generated CSS uses, to
+ * get numbers that match the stylesheet.
+ *
+ * @param baseColor - The background color.
+ * @param contrastColor - The foreground color measured against it.
+ * @param options - `approximate` swaps exact APCA for the CSS-matching approximation.
+ *
+ * @example
+ * ```ts
+ * // white background, black foreground: dark-on-light, so positive
+ * measureContrast({ lightness: 1, chroma: 0, hue: 0 }, { lightness: 0, chroma: 0, hue: 0 }) // ~1.0604
+ * ```
  */
 export function measureContrast(
 	baseColor: Color,
@@ -166,15 +179,27 @@ export function measureContrast(
 }
 
 /**
- * Compute a contrast color achieving target APCA Lc value relative to
- * an anchor role color.
- * Positive contrast = lighter result, negative = darker result.
+ * Compute a color that hits a target APCA contrast against an anchor color.
  *
- * @param color - The anchor (active) role color
- * @param contrast - Signed contrast value (-1.08 to 1.08)
- * @param invert - Whether to enable automatic polarity inversion (default: true)
+ * Positive `contrast` returns a lighter color, negative a darker one. This is the
+ * CSS input convention, the opposite sign from what measureContrast reports. The
+ * result keeps the anchor's hue and reuses its chroma ratio at the new lightness.
  *
- * Uses the shared expression trees to ensure parity with CSS generation.
+ * @param color - The anchor color. Clamped to the Display P3 boundary before solving.
+ * @param contrast - Signed target, Lc / 100, clamped to -1.08..1.08.
+ * @param invert - Allow polarity inversion when the requested direction can't reach
+ *   the target (default true). Pass false to always follow the sign, saturating at
+ *   white or black.
+ * @returns A gamut-mapped OKLCH color at the same hue as `color`.
+ *
+ * @example
+ * ```ts
+ * const fill = { lightness: 0.25, chroma: 0.08, hue: 250 }
+ * const text = computeContrastColor(fill, 0.75) // lighter, same hue
+ * measureContrast(fill, text) // ~ -0.76: a positive request measures negative
+ * ```
+ *
+ * Shares the expression trees the CSS generator uses, so results match the stylesheet.
  */
 export function computeContrastColor(color: Color, contrast: number, invert = true): Color {
 	const { hue, lightness, chroma } = gamutMap(color)
