@@ -87,6 +87,11 @@ jobs:
     # tag in step with the `playwright` devDependency in packages/ok-apca.
     container:
       image: mcr.microsoft.com/playwright:v1.58.2-noble
+    env:
+      # The image installs browsers here, but the runner replaces HOME and the
+      # image's PLAYWRIGHT_BROWSERS_PATH does not reach the steps, so Playwright
+      # otherwise looks under /github/home/.cache/ms-playwright and finds nothing.
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     environment:
       name: release
       url: https://www.npmjs.com/package/ok-apca
