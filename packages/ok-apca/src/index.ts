@@ -14,8 +14,8 @@ export type { ColorSystem } from './generator.ts'
  * ```ts
  * const system = defineColors({
  *   hues: [
- *     { name: 'red', hue: 25, selector: '.red' },
- *     { name: 'blue', hue: 240, selector: '.blue' },
+ *     { name: 'red', hue: 25 },
+ *     { name: 'blue', hue: 240 },
  *   ],
  *   roles: [
  *     { name: 'fill' },
@@ -26,7 +26,7 @@ export type { ColorSystem } from './generator.ts'
  * ```
  *
  * @returns A `ColorSystem`: the generated `css` string plus `hues` and `roles`
- * maps from each name to its selector.
+ * maps from each name to its class name.
  */
 export function defineColors(options: ColorSetOptions): ColorSystem {
 	return generateColorSystem(resolveColorSet(options))

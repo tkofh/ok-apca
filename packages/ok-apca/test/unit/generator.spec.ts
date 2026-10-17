@@ -7,21 +7,21 @@ describe('defineColors validation', () => {
 	it('validates role names - rejects invalid formats', () => {
 		expect(() =>
 			defineColors({
-				hues: [{ name: 'red', hue: 30, selector: '.red' }],
+				hues: [{ name: 'red', hue: 30 }],
 				roles: [{ name: '1text' }],
 			}),
 		).toThrow(/Invalid role name/)
 
 		expect(() =>
 			defineColors({
-				hues: [{ name: 'red', hue: 30, selector: '.red' }],
+				hues: [{ name: 'red', hue: 30 }],
 				roles: [{ name: 'text color' }],
 			}),
 		).toThrow(/Invalid role name/)
 
 		expect(() =>
 			defineColors({
-				hues: [{ name: 'red', hue: 30, selector: '.red' }],
+				hues: [{ name: 'red', hue: 30 }],
 				roles: [{ name: 'text!' }],
 			}),
 		).toThrow(/Invalid role name/)
@@ -30,7 +30,7 @@ describe('defineColors validation', () => {
 	it('validates role names - accepts valid formats', () => {
 		expect(() =>
 			defineColors({
-				hues: [{ name: 'red', hue: 30, selector: '.red' }],
+				hues: [{ name: 'red', hue: 30 }],
 				roles: [{ name: 'text' }, { name: 'fill-color' }, { name: 'stroke_2' }],
 			}),
 		).not.toThrow()
@@ -39,7 +39,7 @@ describe('defineColors validation', () => {
 	it('validates unique role names', () => {
 		expect(() =>
 			defineColors({
-				hues: [{ name: 'red', hue: 30, selector: '.red' }],
+				hues: [{ name: 'red', hue: 30 }],
 				roles: [{ name: 'text' }, { name: 'text' }],
 			}),
 		).toThrow(/Duplicate role name/)
@@ -48,7 +48,7 @@ describe('defineColors validation', () => {
 	it('validates hue names', () => {
 		expect(() =>
 			defineColors({
-				hues: [{ name: '1bad', hue: 30, selector: '.bad' }],
+				hues: [{ name: '1bad', hue: 30 }],
 				roles: [{ name: 'fill' }],
 			}),
 		).toThrow(/Invalid hue name/)
@@ -56,31 +56,47 @@ describe('defineColors validation', () => {
 		expect(() =>
 			defineColors({
 				hues: [
-					{ name: 'red', hue: 30, selector: '.red' },
-					{ name: 'red', hue: 60, selector: '.red2' },
+					{ name: 'red', hue: 30 },
+					{ name: 'red', hue: 60, className: 'red2' },
 				],
 				roles: [{ name: 'fill' }],
 			}),
 		).toThrow(/Duplicate hue name/)
 	})
 
-	it('defaults hue name and selector from hue angle', () => {
+	it('defaults hue name and class name from hue angle', () => {
 		const resolved = resolveColorSet({
 			hues: [{ hue: 30 }],
 			roles: [{ name: 'fill' }],
 		})
 
 		expect(resolved.hues[0].name).toBe('hue-30')
-		expect(resolved.hues[0].selector).toBe('.hue-30')
+		expect(resolved.hues[0].className).toBe('hue-30')
 	})
 
-	it('defaults hue selector from name', () => {
+	it('defaults hue class name from name', () => {
 		const resolved = resolveColorSet({
 			hues: [{ hue: 30, name: 'warm' }],
 			roles: [{ name: 'fill' }],
 		})
 
-		expect(resolved.hues[0].selector).toBe('.warm')
+		expect(resolved.hues[0].className).toBe('warm')
+	})
+
+	it('validates class names', () => {
+		expect(() =>
+			resolveColorSet({
+				hues: [{ hue: 30, className: 'a, .b' }],
+				roles: [{ name: 'fill' }],
+			}),
+		).toThrow(/Invalid class name/)
+
+		expect(() =>
+			resolveColorSet({
+				hues: [{ hue: 30 }],
+				roles: [{ name: 'fill', className: '.fill' }],
+			}),
+		).toThrow(/Invalid class name/)
 	})
 
 	it('normalizes hue angle to [0, 360)', () => {
@@ -101,7 +117,7 @@ describe('defineColors validation', () => {
 	it('requires at least one active role', () => {
 		expect(() =>
 			defineColors({
-				hues: [{ name: 'red', hue: 30, selector: '.red' }],
+				hues: [{ name: 'red', hue: 30 }],
 				roles: [{ name: 'focus', passive: true }],
 			}),
 		).toThrow(/At least one active role/)
@@ -110,7 +126,7 @@ describe('defineColors validation', () => {
 	it('validates contrastsWith references exist', () => {
 		expect(() =>
 			defineColors({
-				hues: [{ name: 'red', hue: 30, selector: '.red' }],
+				hues: [{ name: 'red', hue: 30 }],
 				roles: [{ name: 'fill' }, { name: 'text', contrastsWith: ['nonexistent'] }],
 			}),
 		).toThrow(/references unknown role/)
@@ -119,7 +135,7 @@ describe('defineColors validation', () => {
 	it('validates contrastsWith does not self-reference', () => {
 		expect(() =>
 			defineColors({
-				hues: [{ name: 'red', hue: 30, selector: '.red' }],
+				hues: [{ name: 'red', hue: 30 }],
 				roles: [{ name: 'fill', contrastsWith: ['fill'] }],
 			}),
 		).toThrow(/must not reference itself/)
@@ -128,7 +144,7 @@ describe('defineColors validation', () => {
 	it('silently deduplicates contrastsWith entries', () => {
 		expect(() =>
 			defineColors({
-				hues: [{ name: 'red', hue: 30, selector: '.red' }],
+				hues: [{ name: 'red', hue: 30 }],
 				roles: [{ name: 'fill', contrastsWith: ['text', 'text'] }, { name: 'text' }],
 			}),
 		).not.toThrow()
@@ -138,7 +154,7 @@ describe('defineColors validation', () => {
 describe('defineColors API', () => {
 	it('returns css string', () => {
 		const { css } = defineColors({
-			hues: [{ name: 'red', hue: 30, selector: '.red' }],
+			hues: [{ name: 'red', hue: 30 }],
 			roles: [{ name: 'fill' }, { name: 'text' }],
 		})
 
@@ -148,7 +164,7 @@ describe('defineColors API', () => {
 
 	it('includes role selectors in output', () => {
 		const { css } = defineColors({
-			hues: [{ name: 'red', hue: 30, selector: '.red' }],
+			hues: [{ name: 'red', hue: 30 }],
 			roles: [{ name: 'fill' }, { name: 'text' }],
 		})
 
@@ -156,12 +172,12 @@ describe('defineColors API', () => {
 		expect(css).toContain('.text')
 	})
 
-	it('uses custom role selectors', () => {
+	it('uses custom role class names', () => {
 		const { css } = defineColors({
-			hues: [{ name: 'red', hue: 30, selector: '.red' }],
+			hues: [{ name: 'red', hue: 30 }],
 			roles: [
-				{ name: 'fill', selector: '.my-fill' },
-				{ name: 'text', selector: '.my-text' },
+				{ name: 'fill', className: 'my-fill' },
+				{ name: 'text', className: 'my-text' },
 			],
 		})
 
@@ -171,26 +187,26 @@ describe('defineColors API', () => {
 
 	it('defaults role selector to .{name}', () => {
 		const { css } = defineColors({
-			hues: [{ name: 'red', hue: 30, selector: '.red' }],
+			hues: [{ name: 'red', hue: 30 }],
 			roles: [{ name: 'fill' }],
 		})
 
 		expect(css).toContain('.fill')
 	})
 
-	it('includes hue selector in output', () => {
+	it('uses custom hue class names', () => {
 		const { css } = defineColors({
-			hues: [{ name: 'primary', hue: 30, selector: '[data-color="primary"]' }],
+			hues: [{ name: 'primary', hue: 30, className: 'brand-primary' }],
 			roles: [{ name: 'fill' }],
 		})
 
-		expect(css).toContain('[data-color="primary"]')
+		expect(css).toContain('.brand-primary')
 	})
 
 	it('uses custom name in CSS variable names', () => {
 		const { css } = defineColors({
 			prefix: 'theme',
-			hues: [{ name: 'red', hue: 30, selector: '.red' }],
+			hues: [{ name: 'red', hue: 30 }],
 			roles: [{ name: 'fill' }, { name: 'text' }],
 		})
 
@@ -201,7 +217,7 @@ describe('defineColors API', () => {
 
 	it('generates valid CSS number formatting', () => {
 		const { css } = defineColors({
-			hues: [{ name: 'blue', hue: 200, selector: '.blue' }],
+			hues: [{ name: 'blue', hue: 200 }],
 			roles: [{ name: 'fill' }, { name: 'text' }],
 		})
 
@@ -213,8 +229,8 @@ describe('defineColors API', () => {
 	it('generates different hue selectors for different hues', () => {
 		const { css } = defineColors({
 			hues: [
-				{ name: 'warm', hue: 30, selector: '.warm' },
-				{ name: 'cool', hue: 180, selector: '.cool' },
+				{ name: 'warm', hue: 30 },
+				{ name: 'cool', hue: 180 },
 			],
 			roles: [{ name: 'fill' }],
 		})
@@ -226,7 +242,7 @@ describe('defineColors API', () => {
 	it('namespaces internal properties with name', () => {
 		const { css } = defineColors({
 			prefix: 'theme',
-			hues: [{ name: 'red', hue: 30, selector: '.red' }],
+			hues: [{ name: 'red', hue: 30 }],
 			roles: [{ name: 'fill' }, { name: 'text' }],
 		})
 
@@ -237,19 +253,19 @@ describe('defineColors API', () => {
 	it('returns hue metadata', () => {
 		const system = defineColors({
 			hues: [
-				{ name: 'red', hue: 25, selector: '.red' },
-				{ name: 'blue', hue: 240, selector: '.blue' },
+				{ name: 'red', hue: 25 },
+				{ name: 'blue', hue: 240 },
 			],
 			roles: [{ name: 'fill' }],
 		})
 
-		expect(system.hues).toEqual({ red: '.red', blue: '.blue' })
-		expect(system.roles).toEqual({ fill: '.fill' })
+		expect(system.hues).toEqual({ red: 'red', blue: 'blue' })
+		expect(system.roles).toEqual({ fill: 'fill' })
 	})
 
 	it('does not generate contrast output for passive roles', () => {
 		const { css } = defineColors({
-			hues: [{ name: 'red', hue: 30, selector: '.red' }],
+			hues: [{ name: 'red', hue: 30 }],
 			roles: [{ name: 'fill' }, { name: 'focus', passive: true }],
 		})
 
@@ -261,7 +277,7 @@ describe('defineColors API', () => {
 
 	it('respects contrastsWith filtering', () => {
 		const resolved = resolveColorSet({
-			hues: [{ name: 'red', hue: 30, selector: '.red' }],
+			hues: [{ name: 'red', hue: 30 }],
 			roles: [
 				{ name: 'fill' },
 				{ name: 'text', contrastsWith: ['fill'] },
@@ -328,7 +344,7 @@ describe('defineColors API', () => {
 
 	it('generates hue selectors with :is() nesting', () => {
 		const { css } = defineColors({
-			hues: [{ name: 'red', hue: 30, selector: '.red' }],
+			hues: [{ name: 'red', hue: 30 }],
 			roles: [{ name: 'fill' }, { name: 'text' }],
 		})
 

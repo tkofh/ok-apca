@@ -32,7 +32,7 @@ onMounted(() => {
 const generatedCss = computed(
 	() =>
 		defineColors({
-			hues: [{ name: 'current', hue: state.hue, selector: '.preview-hue' }],
+			hues: [{ name: 'current', hue: state.hue, className: 'preview-hue' }],
 			roles: [{ name: 'fill' }, { name: 'text' }],
 		}).css,
 )

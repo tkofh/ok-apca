@@ -11,7 +11,7 @@
  * The TypeScript functions should be used to match this behavior.
  */
 
-import { Calc } from '@ok-apca/calc-tree'
+import { Calc } from 'fashionable/calc'
 import { afterEach, describe, expect, it } from 'vitest'
 import { computeContrastColor } from '../../src/contrast.ts'
 import { computeGamutSlice } from '../../src/gamut.ts'
@@ -25,7 +25,7 @@ import { cleanupAll, createTestHarness } from './harness.ts'
  */
 function computeExpectedColor(hue: number, lightness: number, chromaPct: number) {
 	const L = Math.max(0, Math.min(1, lightness))
-	const maxC = Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: L })
+	const maxC = Calc.solve(computeGamutSlice(hue).maxChroma, { bindings: { lightness: L } })
 	const C = maxC * Math.max(0, Math.min(1, chromaPct))
 	return { hue, lightness: L, chroma: C }
 }
@@ -95,7 +95,7 @@ describe('findGamutSlice parity with CSS gamut clamping', () => {
 
 				// Compute expected max chroma from TypeScript
 				const expectedMaxChroma = Calc.solve(computeGamutSlice(hue).maxChroma, {
-					lightness: lightness,
+					bindings: { lightness: lightness },
 				})
 
 				expect(cssChroma).toBeCloseTo(expectedMaxChroma, 2)
@@ -149,7 +149,8 @@ describe('computeContrastColor parity with CSS', () => {
 
 			// Compare chroma - CSS computes: maxChroma(contrastL) * chromaPct
 			const expectedContrastChroma =
-				Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: cssLightness }) * chroma
+				Calc.solve(computeGamutSlice(hue).maxChroma, { bindings: { lightness: cssLightness } }) *
+				chroma
 			expect(cssChroma).toBeCloseTo(expectedContrastChroma, 1)
 
 			harness.cleanup()
@@ -187,7 +188,7 @@ describe('computeContrastColor parity with CSS', () => {
 			// CSS computes chroma as: maxChroma(contrastL) * chromaPct
 			const cssL = cssColor.get('oklch.l')
 			const expectedChroma =
-				Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: cssL }) * chroma
+				Calc.solve(computeGamutSlice(hue).maxChroma, { bindings: { lightness: cssL } }) * chroma
 			expect(cssColor.get('oklch.c')).toBeCloseTo(expectedChroma, 1)
 
 			harness.cleanup()
@@ -219,14 +220,18 @@ describe('chroma percentage preservation parity', () => {
 
 		// Verify base chroma is ~50% of max at that lightness
 		const baseL = cssBaseColor.get('oklch.l')
-		const baseMaxChroma = Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: baseL })
+		const baseMaxChroma = Calc.solve(computeGamutSlice(hue).maxChroma, {
+			bindings: { lightness: baseL },
+		})
 		const baseChromaPct = cssBaseColor.get('oklch.c') / baseMaxChroma
 
 		expect(baseChromaPct).toBeCloseTo(0.5, 1) // 50%
 
 		// Verify contrast chroma is also ~50% of max at contrast lightness
 		const contrastL = cssContrastColor.get('oklch.l')
-		const contrastMaxChroma = Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: contrastL })
+		const contrastMaxChroma = Calc.solve(computeGamutSlice(hue).maxChroma, {
+			bindings: { lightness: contrastL },
+		})
 		const contrastChromaPct = cssContrastColor.get('oklch.c') / contrastMaxChroma
 
 		expect(contrastChromaPct).toBeCloseTo(0.5, 1) // 50%
@@ -295,7 +300,7 @@ describe('edge case parity', () => {
 		// CSS computes chroma as maxChroma(L) * pct
 		const cssL = cssColor.get('oklch.l')
 		const expectedChroma =
-			Calc.solve(computeGamutSlice(hue).maxChroma, { lightness: cssL }) * chroma
+			Calc.solve(computeGamutSlice(hue).maxChroma, { bindings: { lightness: cssL } }) * chroma
 		expect(cssColor.get('oklch.c')).toBeCloseTo(expectedChroma, 1)
 
 		harness.cleanup()

@@ -29,19 +29,22 @@ export function createTestHarness(config: TestHarnessConfig) {
 	const hue = config.hue ?? 180
 	const name = config.options.prefix ?? 'color'
 
-	// Default roles: a single "fill" role (which defaults selector to ".fill")
+	// Default roles: a single "fill" role (which defaults its class to "fill")
 	// If the caller provided roles, use those
 	const roles = toArray(config.options.roles ?? [{ name: 'fill' }])
 
-	// Derive hue selector from the first active role's selector
+	// Derive the hue class from the first active role's class name.
 	const firstActiveRole = roles.find((r) => !r.passive)
-	const roleSelector = firstActiveRole?.selector ?? `.${firstActiveRole?.name ?? 'fill'}`
-	const hueSelector = `${roleSelector}--hue`
+	const roleClass =
+		(firstActiveRole && !firstActiveRole.passive && firstActiveRole.className) ||
+		firstActiveRole?.name ||
+		'fill'
+	const hueClass = `${roleClass}--hue`
 
 	const { css } = defineColors({
 		...config.options,
 		roles,
-		hues: config.options.hues ?? [{ name: 'test', hue, selector: hueSelector }],
+		hues: config.options.hues ?? [{ name: 'test', hue, className: hueClass }],
 	})
 
 	const styleElement = document.createElement('style')
@@ -50,8 +53,6 @@ export function createTestHarness(config: TestHarnessConfig) {
 
 	const testElement = document.createElement('div')
 	// Apply both role class and hue class to the same element
-	const roleClass = roleSelector.replace(/^\./, '')
-	const hueClass = hueSelector.replace(/^\./, '')
 	testElement.className = `${roleClass} ${hueClass}`
 	testElement.style.width = '100px'
 	testElement.style.height = '100px'

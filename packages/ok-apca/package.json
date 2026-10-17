@@ -6,15 +6,18 @@
 		"email": "tim@tkofh.dev",
 		"url": "https://tkofh.dev"
 	},
+	"files": [
+		"dist"
+	],
 	"type": "module",
 	"types": "./dist/index.d.ts",
 	"exports": {
 		".": "./dist/index.js",
 		"./package.json": "./package.json"
 	},
-	"files": [
-		"dist"
-	],
+	"publishConfig": {
+		"access": "public"
+	},
 	"scripts": {
 		"build": "tsdown",
 		"test": "vitest run",
@@ -24,16 +27,13 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@ok-apca/calc-tree": "workspace:*",
-		"colorjs.io": "^0.6.1"
+		"colorjs.io": "^0.6.1",
+		"fashionable": "^0.4.0"
 	},
 	"devDependencies": {
 		"@vitest/browser-playwright": "^4.1.0",
 		"fast-check": "^4.6.0",
 		"tsdown": "0.21.2",
 		"vitest": "^4.1.0"
-	},
-	"publishConfig": {
-		"access": "public"
 	}
 }

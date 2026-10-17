@@ -1,4 +1,4 @@
-import { Calc, Properties } from '@ok-apca/calc-tree'
+import { Calc } from 'fashionable/calc'
 import {
 	APCA_BG_EXP_NORMAL,
 	APCA_BG_EXP_REVERSE,
@@ -17,7 +17,7 @@ import {
 } from './apca.ts'
 import { type Color, createColor, getLuminance } from './color.ts'
 import { computeGamutSlice, gamutMap } from './gamut.ts'
-import { clampNumber } from './util.ts'
+import { clampNumber, type Reads } from './util.ts'
 
 /**
  * Y-correction polynomial: 1 + fA*chroma + fB*chroma^2 + fD*chroma^3
@@ -26,11 +26,11 @@ import { clampNumber } from './util.ts'
  * fA, fB, fD are hue-dependent and incorporate the gamut boundary slope
  * (apexC/apexL), so chroma here is the normalized ratio (0–1).
  */
-const fCorrection: Calc.Expression<'chroma' | 'fA' | 'fB' | 'fD'> = Calc.add(
+const fCorrection: Calc.Calc<Reads<'chroma' | 'fA' | 'fB' | 'fD'>> = Calc.add(
 	1,
-	Calc.multiply(Calc.ref('fA'), Calc.ref('chroma')),
-	Calc.multiply(Calc.ref('fB'), Calc.pow(Calc.ref('chroma'), 2)),
-	Calc.multiply(Calc.ref('fD'), Calc.pow(Calc.ref('chroma'), 3)),
+	Calc.multiply(Calc.var('fA'), Calc.var('chroma')),
+	Calc.multiply(Calc.var('fB'), Calc.pow(Calc.var('chroma'), 2)),
+	Calc.multiply(Calc.var('fD'), Calc.pow(Calc.var('chroma'), 3)),
 )
 
 /**
@@ -40,8 +40,8 @@ const fCorrection: Calc.Expression<'chroma' | 'fA' | 'fB' | 'fD'> = Calc.add(
  * Exact on the left half of the gamut tent, where k = (apexC/apexL) * chromaRatio
  * is constant. On the right half it's a close approximation.
  */
-export const yBackground: Calc.Expression<'lightness' | 'chroma' | 'fA' | 'fB' | 'fD'> =
-	Calc.multiply(Calc.pow(Calc.ref('lightness'), 3), fCorrection)
+export const yBackground: Calc.Calc<Reads<'lightness' | 'chroma' | 'fA' | 'fB' | 'fD'>> =
+	Calc.multiply(Calc.pow(Calc.var('lightness'), 3), fCorrection)
 
 /**
  * Corrected lightness from target Y: L = pow(Y / f(chroma), 1/3)
@@ -50,67 +50,95 @@ export const yBackground: Calc.Expression<'lightness' | 'chroma' | 'fA' | 'fB' |
  * Uses the same f-correction polynomial as yBackground, depending only on
  * the input chroma ratio (a leaf variable), not the solver output.
  */
-const correctedLightness: Calc.Expression<'yTarget' | 'chroma' | 'fA' | 'fB' | 'fD'> = Calc.pow(
-	Calc.divide(Calc.ref('yTarget'), fCorrection),
+const correctedLightness: Calc.Calc<Reads<'yTarget' | 'chroma' | 'fA' | 'fB' | 'fD'>> = Calc.pow(
+	Calc.divide(Calc.var('yTarget'), fCorrection),
 	1 / 3,
 )
+
+/**
+ * Records an intermediate as a computed property and hands back a reference to
+ * it. The generator supplies this: it registers the `@property` rule, binds the
+ * hue/role-scoped leaf inputs into `expr`, emits the block declaration, and
+ * returns a bare `Calc.var(name)`.
+ *
+ * calc-tree fused "declare an `@property` and read it back" into a single
+ * expression node that hoisted its own declaration at serialization time.
+ * fashionable keeps the value layer (`Calc`) free of that side effect, so the
+ * intermediate chain is threaded through a collector instead. The read it
+ * returns (a bare `Calc.var(name)`) is what keeps each intermediate a single
+ * `var()` in the fully-substituted tree DevTools renders — the read stands in
+ * for the whole sub-expression (see the DevTools expansion constraint in
+ * CLAUDE.md).
+ */
+export type ComputedPropertyCollector = (name: string, expr: Calc.Calc) => Calc.Calc
 
 /**
  * Build contrast target lightness expression with optional polarity inversion.
  *
  * Computes both polarity solutions, measures achieved contrast for each,
- * and selects based on the `{label}-invertable` ref:
+ * and selects based on the `{label}-invertable` read:
  * - `1`: picks whichever direction achieves higher contrast
  * - `0`: always follows the contrast sign (no inversion)
  *
- * Uses two distinct Y_bg refs:
+ * Uses two distinct Y_bg reads:
  * - `scYBg`: soft-clamped Y_bg for the polarity solvers (operates in clamped domain)
  * - `yBg`: original Y_bg for contrast measurement and zero-contrast fallback
  *
- * Unbound refs: `yBg`, `scYBg`, `{label}-invertable`, `contrast-{label}`, `chroma`, `fA`, `fB`, `fD`.
+ * With no `label`, the whole chain is inlined into one expression whose unbound
+ * reads are `yBg`, `scYBg`, `invertable`, `contrast`, `chroma`, `fA`, `fB`, `fD`
+ * — the runtime path (`computeContrastColor`) binds and solves it directly.
+ *
+ * With a `label` and a `collect`or, each intermediate (`_ylr`, `_ydr`, `_yl`,
+ * `_yd`, `_lcl`, `_lcd`, `_yt`, `_cl`) is registered as a `{name}-{label}`
+ * computed property and referenced by name, so the emitted CSS names each Y
+ * value once. The returned expression is just the final `_cl-{label}`
+ * reference; its dependencies live in the declarations `collect` recorded.
  */
-export function contrastTargetLightness(): Calc.Expression<
-	'yBg' | 'chroma' | 'fA' | 'fB' | 'fD' | 'scYBg' | 'invertable' | 'contrast'
+export function contrastTargetLightness(): Calc.Calc<
+	Reads<'yBg' | 'chroma' | 'fA' | 'fB' | 'fD' | 'scYBg' | 'invertable' | 'contrast'>
 >
 export function contrastTargetLightness<const Label extends string>(
 	label: Label,
-): Calc.Expression<
-	'yBg' | 'chroma' | 'fA' | 'fB' | 'fD' | 'scYBg' | `${Label}-invertable` | `contrast-${Label}`
->
-export function contrastTargetLightness(label?: string): Calc.Expression<string> {
-	const prop = <E extends Calc.Expression<string>>(name: string, expr: E): E =>
-		label ? (Properties.number(`${name}-${label}`, expr) as E) : expr
+	collect: ComputedPropertyCollector,
+): Calc.Calc
+export function contrastTargetLightness(
+	label?: string,
+	collect?: ComputedPropertyCollector,
+): Calc.Calc {
+	const prop = (name: string, expr: Calc.Calc): Calc.Calc =>
+		label !== undefined && collect !== undefined ? collect(`${name}-${label}`, expr) : expr
 
-	const contrast = Calc.ref(label ? `contrast-${label}` : 'contrast')
+	const contrast = Calc.var(label !== undefined ? `contrast-${label}` : 'contrast')
+	const invertable = Calc.var(label !== undefined ? `${label}-invertable` : 'invertable')
 
 	// Raw solver outputs in soft-clamped domain
 	const yLightRaw = prop(
 		'_ylr',
-		Calc.clamp(0, Calc.bind(reversePolarity, { yBg: Calc.ref('scYBg'), contrast }), 1),
+		Calc.clamp(0, Calc.bind(reversePolarity, { yBg: Calc.var('scYBg'), contrast }), 1),
 	)
 	const yDarkRaw = prop(
 		'_ydr',
-		Calc.clamp(0, Calc.bind(normalPolarity, { yBg: Calc.ref('scYBg'), contrast }), 1),
+		Calc.clamp(0, Calc.bind(normalPolarity, { yBg: Calc.var('scYBg'), contrast }), 1),
 	)
 
 	// Unclamp to recover actual Y values
 	const yLight = prop('_yl', Calc.bind(softUnclamp, { y: yLightRaw }))
 	const yDark = prop('_yd', Calc.bind(softUnclamp, { y: yDarkRaw }))
 
-	const invertable = Calc.ref(label ? `${label}-invertable` : 'invertable')
-
 	// Solver uses original Y_bg for zero-contrast fallback
-	const yTargetExp = Calc.bind(contrastSolver, {
-		contrast,
-		invertable,
-		yLight,
-		yDark,
-		yLightRaw,
-		yDarkRaw,
-		lcLight: prop('_lcl', Calc.bind(contrastMeasurementReverse, { yFg: yLight })),
-		lcDark: prop('_lcd', Calc.bind(contrastMeasurementNormal, { yFg: yDark })),
-	})
-	const yTarget = prop('_yt', yTargetExp)
+	const yTarget = prop(
+		'_yt',
+		Calc.bind(contrastSolver, {
+			contrast,
+			invertable,
+			yLight,
+			yDark,
+			yLightRaw,
+			yDarkRaw,
+			lcLight: prop('_lcl', Calc.bind(contrastMeasurementReverse, { yFg: yLight })),
+			lcDark: prop('_lcd', Calc.bind(contrastMeasurementNormal, { yFg: yDark })),
+		}),
+	)
 
 	return prop('_cl', Calc.bind(correctedLightness, { yTarget }))
 }
@@ -158,13 +186,13 @@ export function measureContrast(
 	if (approximate) {
 		// Use expression trees directly to ensure alignment with the CSS implementation
 		if (yBg >= yFg) {
-			return Calc.solve(contrastMeasurementNormal, { yBg, yFg })
+			return Calc.solve(contrastMeasurementNormal, { bindings: { yBg, yFg } })
 		}
-		return -Calc.solve(contrastMeasurementReverse, { yBg, yFg })
+		return -Calc.solve(contrastMeasurementReverse, { bindings: { yBg, yFg } })
 	}
 
-	const scBg = Calc.solve(trueSoftClamp, { y: yBg })
-	const scFg = Calc.solve(trueSoftClamp, { y: yFg })
+	const scBg = Calc.solve(trueSoftClamp, { bindings: { y: yBg } })
+	const scFg = Calc.solve(trueSoftClamp, { bindings: { y: yFg } })
 
 	if (yBg >= yFg) {
 		return Math.max(
@@ -204,33 +232,37 @@ export function measureContrast(
 export function computeContrastColor(color: Color, contrast: number, invert = true): Color {
 	const { hue, lightness, chroma } = gamutMap(color)
 	const slice = computeGamutSlice(hue)
-	const maxChromaAtBase = Calc.solve(slice.maxChroma, { lightness })
+	const maxChromaAtBase = Calc.solve(slice.maxChroma, { bindings: { lightness } })
 	const chromaRatio = maxChromaAtBase > 0 ? clampNumber(0, chroma / maxChromaAtBase, 1) : 0
 
 	const clampedContrast = clampNumber(-1.08, contrast, 1.08)
+	// Hoisted rather than inlined into the solve call: bind's data-last
+	// overload makes TypeScript defer an inline bind call's inference, and
+	// solve's conditional options type then fixes Vars/R at their constraints
+	// (see fashionable's docs/solve-inference.md). Hoisting sidesteps both.
+	const boundLightness = Calc.bind(
+		Calc.bind(contrastTargetLightness(), {
+			yBg: yBackground,
+			scYBg: Calc.bind(softClampApprox, { y: yBackground }),
+		}),
+		slice,
+	)
 	const targetLightness = clampNumber(
 		0,
-		Calc.solve(
-			Calc.bind(
-				Calc.bind(contrastTargetLightness(), {
-					yBg: yBackground,
-					scYBg: Calc.bind(softClampApprox, { y: yBackground }),
-				}),
-				slice,
-			),
-			{
+		Calc.solve(boundLightness, {
+			bindings: {
 				lightness,
 				chroma: chromaRatio,
 				invertable: invert ? 1 : 0,
 				contrast: clampedContrast,
 			},
-		),
+		}),
 		1,
 	)
 
 	return createColor({
 		lightness: targetLightness,
-		chroma: Calc.solve(slice.maxChroma, { lightness: targetLightness }) * chromaRatio,
+		chroma: Calc.solve(slice.maxChroma, { bindings: { lightness: targetLightness } }) * chromaRatio,
 		hue,
 	})
 }

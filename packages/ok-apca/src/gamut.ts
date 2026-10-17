@@ -1,6 +1,6 @@
-import { Calc } from '@ok-apca/calc-tree'
+import { Calc } from 'fashionable/calc'
 import { type Color, createColor, inP3 } from './color.ts'
-import { clampNumber } from './util.ts'
+import { clampNumber, type Reads } from './util.ts'
 
 /**
  * Exponent for sine-based curvature correction on the right half of the
@@ -48,12 +48,6 @@ export type GamutSlice = {
 	 * Always negative (actual boundary is inside linear approximation).
 	 */
 	readonly tentK: number
-	/** Y polynomial coefficient for L^2*C term. */
-	readonly yCoeffA: number
-	/** Y polynomial coefficient for L*C^2 term. */
-	readonly yCoeffB: number
-	/** Y polynomial coefficient for C^3 term. */
-	readonly yCoeffD: number
 	/**
 	 * Pre-scaled Y correction coefficients for the k-polynomial.
 	 * k = (apexC / apexL) * chromaRatio, so the polynomial 1 + A*k + B*k^2 + D*k^3
@@ -63,7 +57,7 @@ export type GamutSlice = {
 	readonly fB: number
 	readonly fD: number
 	/** Max chroma expression tree pre-bound to this slice's geometry. */
-	readonly maxChroma: Calc.Expression<'lightness'>
+	readonly maxChroma: Calc.Calc<Reads<'lightness'>>
 }
 
 const gamutSliceCache = new Map<number, GamutSlice>()
@@ -115,9 +109,6 @@ export function computeGamutSlice(hue: number): GamutSlice {
 		apexL,
 		apexC,
 		tentK,
-		yCoeffA,
-		yCoeffB,
-		yCoeffD,
 		fA: yCoeffA * kScale,
 		fB: yCoeffB * kScale ** 2,
 		fD: yCoeffD * kScale ** 3,
@@ -192,24 +183,24 @@ function fitCurvature(hue: number, apexL: number, apexC: number): number {
  * in CLAUDE.md). Bind `apexL`, `apexC`, and `tentK` from a GamutSlice. `lightness`
  * stays a runtime input.
  */
-export const maxChromaExpr: Calc.Expression<'lightness' | 'apexL' | 'apexC' | 'tentK'> = Calc.lerp(
-	Calc.divide(Calc.multiply(Calc.ref('apexC'), Calc.ref('lightness')), Calc.ref('apexL')),
+export const maxChromaExpr: Calc.Calc<Reads<'lightness' | 'apexL' | 'apexC' | 'tentK'>> = Calc.lerp(
+	Calc.divide(Calc.multiply(Calc.var('apexC'), Calc.var('lightness')), Calc.var('apexL')),
 	Calc.add(
 		Calc.divide(
-			Calc.multiply(Calc.ref('apexC'), Calc.subtract(1, Calc.ref('lightness'))),
-			Calc.subtract(1, Calc.ref('apexL')),
+			Calc.multiply(Calc.var('apexC'), Calc.subtract(1, Calc.var('lightness'))),
+			Calc.subtract(1, Calc.var('apexL')),
 		),
 		Calc.multiply(
 			Calc.multiply(
-				Calc.ref('tentK'),
+				Calc.var('tentK'),
 				Calc.pow(
 					Calc.sin(
 						Calc.multiply(
 							Calc.max(
 								0,
 								Calc.divide(
-									Calc.subtract(Calc.ref('lightness'), Calc.ref('apexL')),
-									Calc.subtract(1, Calc.ref('apexL')),
+									Calc.subtract(Calc.var('lightness'), Calc.var('apexL')),
+									Calc.subtract(1, Calc.var('apexL')),
 								),
 							),
 							Math.PI,
@@ -218,10 +209,10 @@ export const maxChromaExpr: Calc.Expression<'lightness' | 'apexL' | 'apexC' | 't
 					GAMUT_SINE_CURVATURE_EXPONENT,
 				),
 			),
-			Calc.ref('apexC'),
+			Calc.var('apexC'),
 		),
 	),
-	Calc.max(0, Calc.sign(Calc.subtract(Calc.ref('lightness'), Calc.ref('apexL')))),
+	Calc.max(0, Calc.sign(Calc.subtract(Calc.var('lightness'), Calc.var('apexL')))),
 )
 
 /**
@@ -234,7 +225,7 @@ export function gamutMap(color: Color): Color {
 
 	return createColor({
 		hue,
-		chroma: clampNumber(0, chroma, Calc.solve(slice.maxChroma, { lightness })),
+		chroma: clampNumber(0, chroma, Calc.solve(slice.maxChroma, { bindings: { lightness } })),
 		lightness,
 	})
 }

@@ -177,11 +177,11 @@ describe('Different hues', () => {
 	it('produces different gamut boundaries for different hues', () => {
 		// Orange and cyan have very different gamut shapes
 		const orangeHarness = createTestHarness({
-			options: { roles: [{ name: 'fill', selector: '.test-orange' }] },
+			options: { roles: [{ name: 'fill', className: 'test-orange' }] },
 			hue: 30,
 		})
 		const cyanHarness = createTestHarness({
-			options: { roles: [{ name: 'fill', selector: '.test-cyan' }] },
+			options: { roles: [{ name: 'fill', className: 'test-cyan' }] },
 			hue: 200,
 		})
 

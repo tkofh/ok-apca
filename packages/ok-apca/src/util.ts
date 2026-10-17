@@ -1,45 +1,15 @@
-const hasFirstLineContentRe = /^[ \t]*\S/
-const leadingIndentRe = /^[ \t]+/
-const newlineWithIndentRe = /(?:\r\n|\r|\n)([ \t]*)(?:\S|$)/
-const edgeSpaceRe = /^[ \t]*(?:\r\n|\r|\n)|(?:\r\n|\r|\n)[ \t]*$/g
-const newlineSplitRe = /\r\n|\r|\n/
+import type { Var } from 'fashionable/var'
 
-function printValue(value: unknown, prefix: string) {
-	if (
-		typeof value === 'string' ||
-		(Array.isArray(value) && value.every((v) => typeof v === 'string'))
-	) {
-		return outdent(Array.isArray(value) ? value.join('\n') : value)
-			.split(newlineSplitRe)
-			.map((line, i) => (i === 0 || !line ? line : `${prefix}${line}`))
-			.join('\n')
-	}
-
-	return String(value)
-}
-
-// biome-ignore lint/suspicious/noExplicitAny: the official way to type variadic template literal values
-export function outdent(input: string | TemplateStringsArray, ...values: any[]) {
-	const parts = typeof input === 'string' ? [input] : input
-
-	const stripIndentRe = new RegExp(
-		String.raw`(\r\n|\r|\n).{0,${parts[0] ? ((hasFirstLineContentRe.test(parts[0]) ? parts[0].match(leadingIndentRe)?.[0]?.length : parts[0].match(newlineWithIndentRe)?.[1]?.length) ?? 0) : 0}}`,
-		'g',
-	)
-
-	let result = ''
-	for (const [index, part] of parts.entries()) {
-		result += part.replaceAll(stripIndentRe, '$1')
-		if (index < values.length) {
-			result += printValue(
-				values[index],
-				(result.split(newlineSplitRe).at(-1) ?? '').match(leadingIndentRe)?.[0] ?? '',
-			)
-		}
-	}
-
-	return result.replaceAll(edgeSpaceRe, '')
-}
+/**
+ * A union of custom-property names as fashionable `Var` identities:
+ * `Reads<'yBg' | 'contrast'>` is `Var.Var<'yBg'> | Var.Var<'contrast'>`.
+ *
+ * fashionable's `Vars` phantom carries per-name identities, not a name
+ * union — the distribution here keeps each name separately subtractable
+ * by `Calc.bind`. This is the annotation shorthand for expression trees
+ * whose reads are all undeclared.
+ */
+export type Reads<Names extends string> = Names extends string ? Var.Var<Names> : never
 
 /** Clamp `value` into `[min, max]`. Note the argument order: the value sits in the middle. */
 export function clampNumber(min: number, value: number, max: number): number {
@@ -63,13 +33,4 @@ export function toArray<T>(value: ZeroOrMore<T>): readonly T[] {
 		return value as never
 	}
 	return [value] as never
-}
-
-export function withPrefix<const Prefix extends string, const B extends Record<string, unknown>>(
-	prefix: Prefix,
-	obj: B,
-): { [K in keyof B as `${Prefix}${string & K}`]: B[K] } {
-	return Object.fromEntries(
-		Object.entries(obj).map(([key, value]) => [`${prefix}${key}`, value]),
-	) as never
 }

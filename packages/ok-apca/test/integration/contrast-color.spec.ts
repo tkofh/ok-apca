@@ -119,7 +119,7 @@ describe('Contrast inversion timing', () => {
 	beforeEach(() => {
 		harness = createTestHarness({
 			options: {
-				roles: [{ name: 'fill', selector: '.test-inv' }, { name: 'text' }],
+				roles: [{ name: 'fill', className: 'test-inv' }, { name: 'text' }],
 			},
 			hue: 240,
 		})

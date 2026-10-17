@@ -8,61 +8,58 @@ ok-apca is a TypeScript monorepo for generating static CSS that produces gamut-m
 
 ## Architecture
 
-This is a turborepo monorepo using pnpm workspaces with three packages:
+This is a turborepo monorepo using pnpm workspaces with two packages. Expression trees and CSS emission come from the external [`fashionable`](https://www.npmjs.com/package/fashionable) library (previously an in-repo `@ok-apca/calc-tree` package, removed once fashionable replaced it).
 
-### `@ok-apca/calc-tree`
+### `fashionable` (external dependency)
 
-A standalone expression tree library for building CSS `calc()` expressions. Organized into three namespaces with expressions as opaque data types:
+Imported by subpath, one namespace per module. The pieces ok-apca uses:
 
-- **`Calc` namespace** — math constructors and expression operations:
-  - Constructors: `add`, `subtract`, `multiply`, `divide`, `pow`, `signedPow`, `clamp`, `min`, `max`, `abs`, `sign`, `sin`, `lerp`
-  - Operations: `Calc.bind(expr, bindings)`, `Calc.solve(expr, bindings?)`, `Calc.serialize(expr, bindings?)`
-  - References: String literals (e.g. `'lightness'`) become unbound variables tracked at the type level
-- **`Colors` namespace** — color expression constructors:
-  - `Colors.oklch(l, c, h)` returns a `ColorExpression`
-  - `Colors.bind(expr, bindings)`, `Colors.serialize(expr, bindings?)`
-- **`Properties` namespace** — CSS `@property` rule generation:
-  - `Properties.number(name)` — declare numeric input property (returns expression)
-  - `Properties.number(name, expr)` — declare computed numeric property (registers rule + declaration)
-  - `Properties.color(name, expr)` — declare computed color property
-  - The `_` prefix convention determines `inherits`: names starting with `_` get `inherits: false`, others get `inherits: true`
-- **Two opaque expression types** (interfaces with `@internal` fields, phantom `Refs` type parameter):
-  - `NumberExpression<Refs>` — numeric expressions
-  - `ColorExpression<Refs>` — color expressions (prevents misuse in arithmetic)
-- **File structure**: `calc.ts` (Calc namespace), `colors.ts` (Colors namespace), `expression.ts` (types + factories), `properties.ts` (Properties namespace), `nodes.ts` (AST internals)
+- **`fashionable/calc`** — `Calc` namespace. Math constructors (`add`, `subtract`, `multiply`, `divide`, `pow`, `clamp`, `min`, `max`, `abs`, `sign`, `sin`, `lerp`), `Calc.var(nameOrHandle)` to read a custom property, `Calc.bind(expr, bindings)` to substitute reads with other expressions, and `Calc.solve(expr, { bindings })` to evaluate numerically at build time. Unbound reads are tracked in the `Calc.Calc<Reads>` phantom type; `util.ts` exports `Reads<'a' | 'b'>` as shorthand for the `Var.Var<'a'> | Var.Var<'b'>` union it expects.
+- **`fashionable/var`** — `Var.number(name)` / `Var.color(name)` make typed property handles. One handle is shared by the `@property` rule, every declaration writing it, and every `Calc.var` reading it; that is what keeps a computed-property chain in sync.
+- **`fashionable/property`** — `PropertyRule.make(handle, initial)` registers an `@property` (defaults to `inherits: false`); `PropertyRule.inheritable` opts in to inheritance.
+- **`fashionable/declaration`**, **`fashionable/rule`**, **`fashionable/selector`**, **`fashionable/stylesheet`** — `Declaration.make(handle, expr)`, `StyleRule.make(selector, RuleSet.make(...decls))`, selector combinators (`Selector.class`, `Selector.is`, `Selector.and`, `Selector.nest`, `Selector.descendant`, `Selector.universal`), and `Stylesheet.make`/`Stylesheet.render`.
+- **`fashionable/data`** — `Color.oklch(l, c, h)` builds a color value from numeric expressions.
+
+Unlike calc-tree, `Calc` has no side effects: nothing in the value layer registers an `@property` or hoists a declaration. Intermediate computed properties are therefore threaded explicitly through a collector callback (see `contrast.ts` and `generator.ts`).
 
 ### `ok-apca`
 
-The main library that uses `@ok-apca/calc-tree` to generate CSS for OKLCH colors with APCA contrast. Key modules:
+The main library. Key modules:
 
-- **`gamut.ts`** - Expression tree for gamut boundary:
-  - `maxChroma` - tent function with sine-based curvature correction
+- **`gamut.ts`** — gamut boundary:
+  - `computeGamutSlice(hue)` (cached) returns a `GamutSlice`: `apexL`, `apexC`, `tentK` (sine-basis curvature correction), the pre-scaled Y-correction coefficients `fA`/`fB`/`fD`, and a `maxChroma` expression pre-bound to the slice for the TypeScript runtime
+  - `maxChromaExpr` — tent function with sine-based curvature correction, reading `lightness`, `apexL`, `apexC`, `tentK`
+  - `gamutMap(color)` — runtime chroma clamp to the P3 boundary
 
-- **`apca.ts`** - Expression trees for APCA contrast:
-  - `contrastSolver` - solves for target Y given signed contrast value
-  - `contrastSolverWithInversion` - solver with automatic polarity inversion
-  - `contrastMeasurementNormal`, `contrastMeasurementReverse` - measure achieved contrast
-  - `normalPolarity`, `reversePolarity` - polarity direction solvers
-  - `softClampApprox`, `softUnclamp` - Lp-norm approximation of APCA soft black clamp
+- **`apca.ts`** — expression trees for APCA contrast, all with unbound reads:
+  - `contrastSolver` — selects the target Y given signed contrast, the `invertable` flag, both polarity solutions, and their measured contrasts
+  - `normalPolarity`, `reversePolarity` — polarity direction solvers
+  - `contrastMeasurementNormal`, `contrastMeasurementReverse` — measure achieved contrast
+  - `trueSoftClamp`, `softClampApprox`, `softUnclamp` — APCA soft black clamp and its single-reference Lp-norm approximation
 
-- **`generator.ts`** - Builds complete CSS from role definitions using `Properties` namespace:
-  - Creates a parent `Properties` for shared `@property` rules
-  - Per active role: creates a child `Properties` with namespaced gamut inputs, base color, Y_bg, and contrast targets
-  - Hue selectors use `:is(&, & *):is(.role1, .role2)` nesting to assign gamut constants directly to role elements
+- **`contrast.ts`** — shared by the CSS generator and the TypeScript runtime:
+  - `yBackground` — CIE Y from OKLCH lightness and chroma ratio via the `fA`/`fB`/`fD` correction polynomial
+  - `contrastTargetLightness(label?, collect?)` — builds the contrast-target lightness chain. Called with no arguments it returns one inlined expression for the runtime to solve; called with a `label` and a `ComputedPropertyCollector` it registers each intermediate (`_ylr`, `_ydr`, `_yl`, `_yd`, `_lcl`, `_lcd`, `_yt`, `_cl`) as a `{name}-{label}` property and returns a bare read of the last one
+  - `measureContrast(background, foreground, options?)` and `computeContrastColor(color, contrast, invert?)` — runtime equivalents of what the CSS computes
 
-- **`color.ts`** - Gamut boundary computation using colorjs.io:
-  - `findGamutSlice(hue)` returns `{ apex: { lightness, chroma }, curvature }`
+- **`generator.ts`** — assembles the stylesheet:
+  - `PropertyRegistry` — hands out `Var` handles and registers each `@property` once; the `_` prefix convention sets `inherits: false`, everything else is inheritable
+  - `makeGamutInputs` — one handle per hue-dependent constant (`_{prefix}-hue`, `-apexL`, `-apexC`, `-tentK`, `-fA`, `-fB`, `-fD`); role rules read them, hue rules write them
+  - `buildRoleRule` — one `StyleRule` per active role: max chroma, base color, then per contrast target the lightness chain and its gamut-mapped color. Its `computeNumber` closure is the collector that registers an intermediate, emits its declaration, and returns a `Calc.var` read
+  - `buildHueRule` — `.{hueClass} { :is(&, & *):is(.role1, .role2) { …constants } }`, writing the slice constants directly onto role elements so role properties can stay `inherits: false`
+  - `generateColorSystem(definition)` — registers inputs/outputs, builds all rules, renders one `Stylesheet`, returns `{ css, hues, roles }`
 
-- **`contrast.ts`** - TypeScript runtime for contrast computation:
-  - `measureContrast(baseColor, contrastColor)` - measure APCA contrast between role colors
-  - `computeContrastColor(color, contrast, invert?)` - compute contrast color relative to an anchor role
+- **`config.ts`** — option types and validation:
+  - `ColorSetOptions`: `prefix` (default `'color'`), `hues` (`HueEntry | HueEntry[]`), `roles` (`RoleEntry | RoleEntry[]`)
+  - `HueEntry`: `{ hue, name?, className? }`; `RoleEntry`: `{ name, className?, contrastsWith?, passive? }`
+  - `className` is a plain class name without the dot (defaults to `name`). Classes are the only selector shape until fashionable can parse selector text, and class names are validated because `Selector.class` would otherwise interpolate arbitrary text
+  - `resolveColorSet(options)` validates names, uniqueness, class names, `contrastsWith` references, and the at-least-one-active-role rule, then normalizes hues into `[0, 360)`
 
-- **`index.ts`** - Main API entry point:
-  - `defineColors(options)` - accepts `ColorSetOptions` (single set) or `{ sets }` (multiple sets)
-  - `ColorSetOptions`: `name` (property namespace), `hues`, `roles` (array of `ActiveRoleEntry | PassiveRoleEntry`), `noContrastInversion`
-  - Active roles get a CSS selector (default `.{name}`), passive roles are contrast-only targets
-  - `contrastsWith` on roles filters which contrast pairs are generated
-  - Validates role names, uniqueness, contrastsWith references, at least one active role
+- **`color.ts`** — `Color` type plus colorjs.io helpers: `createColor` (clamps), `getLuminance`, `inP3`
+
+- **`index.ts`** — public entry: `defineColors(options)` = `generateColorSystem(resolveColorSet(options))`, plus re-exports of `resolveColorSet`, `measureContrast`, `computeContrastColor`, and the option/result types
+
+Tests live in `test/unit` (node) and `test/integration` (Chromium via Playwright, renders the generated CSS and reads back computed colors).
 
 ### `playground`
 
@@ -72,10 +69,10 @@ A Nuxt app for interactive testing and visualization.
 
 1. Given a fixed hue, compute the Display P3 gamut boundary (L_apex, C_apex, curvature)
 2. For each active role, build expression trees for the active color and its contrast targets
-3. Serialize per-role expressions to CSS with intermediate values as `@property` declarations
+3. Register each intermediate as an `@property` and reference it by name, so downstream expressions carry a single `var()`
 4. Each active role gets a selector block; hue selectors use `:is()` nesting to set gamut constants on role elements
 5. Runtime inputs: `--lightness` (0–1), `--chroma` (0–1), `--contrast-{role}` (-1.08 to 1.08)
-6. Outputs: `--{name}-{role}` color properties (e.g., `--color-fill`, `--color-text`)
+6. Outputs: `--{prefix}-{role}` color properties (e.g., `--color-fill`, `--color-text`)
 
 ## CSS Expression Size Constraint
 
@@ -128,6 +125,7 @@ pnpm changeset:publish   # Build and publish packages
 - **Testing**: Vitest (unit + browser tests via Playwright)
 - **Building**: tsdown
 - **Color Math**: colorjs.io
+- **CSS Expression Trees / Emission**: fashionable
 - **Versioning**: Changesets
 
 ## Code Style
@@ -142,9 +140,9 @@ pnpm changeset:publish   # Build and publish packages
 
 ## Documentation
 
-**Declared reader (for code comments).** A contributor working on ok-apca's internals — the expression trees, solvers, and generator. They know TypeScript, CSS custom properties, and the general shape of APCA (Lc contrast, relative luminance Y, polarity). They are competent with math but new to seeing it expressed through `@ok-apca/calc-tree`'s expression trees, and they do not arrive knowing *why* an expression is shaped the way it is — above all, why one references a variable once instead of twice.
+**Declared reader (for code comments).** A contributor working on ok-apca's internals — the expression trees, solvers, and generator. They know TypeScript, CSS custom properties, and the general shape of APCA (Lc contrast, relative luminance Y, polarity). They are competent with math but new to seeing it expressed through fashionable's `Calc` expression trees, and they do not arrive knowing *why* an expression is shaped the way it is — above all, why one references a variable once instead of twice.
 
-- **Gloss** the rationale behind expression shape: reference-count minimization, single-reference approximations (the Lp-norm soft clamp, the `sin()` curvature basis), and any constant whose value isn't self-evident. The DevTools fully-substituted-expansion constraint (see [CSS Expression Size Constraint](#css-expression-size-constraint)) is the reason most shape choices exist; name it where it drove a choice. Gloss a calc-tree idiom on first encounter in a module.
+- **Gloss** the rationale behind expression shape: reference-count minimization, single-reference approximations (the Lp-norm soft clamp, the `sin()` curvature basis), and any constant whose value isn't self-evident. The DevTools fully-substituted-expansion constraint (see [CSS Expression Size Constraint](#css-expression-size-constraint)) is the reason most shape choices exist; name it where it drove a choice. Gloss a fashionable idiom (shared `Var` handles, `Calc.bind`, the collector pattern) on first encounter in a module.
 - **Assume** TypeScript, CSS custom properties and `@property`, OKLCH, and APCA fundamentals. Don't re-explain what APCA contrast is or what luminance means.
 
 ## Workflow Rules

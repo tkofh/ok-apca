@@ -13,10 +13,11 @@ interface BaseRoleEntry {
 
 interface ActiveRoleEntry extends BaseRoleEntry {
 	/**
-	 * CSS selector for this role's active-color class.
-	 * @default `.${name}`
+	 * Class name (no leading dot) for this role's active-color elements.
+	 * Selectors are class-based until fashionable can parse selector text.
+	 * @default `name`
 	 */
-	readonly selector?: string | undefined
+	readonly className?: string | undefined
 	/** Active roles omit this (or set `false`); a `true` value makes the role passive. */
 	readonly passive?: false | undefined
 }
@@ -40,10 +41,10 @@ export interface HueEntry {
 	 */
 	readonly name?: string | undefined
 	/**
-	 * CSS selector for this hue.
-	 * @default `.${name}`
+	 * Class name (no leading dot) for this hue's subtree.
+	 * @default `name`
 	 */
-	readonly selector?: string | undefined
+	readonly className?: string | undefined
 }
 
 export interface ColorSetOptions {
@@ -61,12 +62,12 @@ export interface ColorSetOptions {
 export interface ResolvedHue {
 	readonly name: string
 	readonly hue: number
-	readonly selector: string
+	readonly className: string
 }
 
 export interface ResolvedRole {
 	readonly name: string
-	readonly selector: string
+	readonly className: string
 	readonly contrastTargets: readonly string[]
 }
 
@@ -77,6 +78,16 @@ export interface ColorsDefinition {
 }
 
 const LABEL_REGEX = /^[a-z][a-z0-9_-]*$/i
+
+// fashionable's `Selector.class` only rejects empty strings, so an
+// unvalidated class name would be interpolated into the rendered CSS
+// verbatim (e.g. `'a, .b'` becomes a second selector).
+function requireClassName(className: string): void {
+	invariant(
+		LABEL_REGEX.test(className),
+		`Invalid class name '${className}'. Must start with a letter and contain only letters, numbers, hyphens, and underscores.`,
+	)
+}
 
 function processRoles(roles: readonly RoleEntry[]): readonly ResolvedRole[] {
 	const active: ActiveRoleEntry[] = []
@@ -125,17 +136,22 @@ function processRoles(roles: readonly RoleEntry[]): readonly ResolvedRole[] {
 		`contrastsWith references unknown role: ${[...unknownRefs].join(', ')}`,
 	)
 
-	return active.map((role) => ({
-		name: role.name,
-		selector: role.selector ?? `.${role.name}`,
-		contrastTargets: names.filter((target) => {
-			if (target === role.name) {
-				return false
-			}
-			const targets = appearsOn.get(target) as Set<string>
-			return targets === null || targets.has(role.name)
-		}),
-	}))
+	return active.map((role) => {
+		const className = role.className ?? role.name
+		requireClassName(className)
+
+		return {
+			name: role.name,
+			className,
+			contrastTargets: names.filter((target) => {
+				if (target === role.name) {
+					return false
+				}
+				const targets = appearsOn.get(target) as Set<string>
+				return targets === null || targets.has(role.name)
+			}),
+		}
+	})
 }
 
 function processHues(hues: readonly HueEntry[]): readonly ResolvedHue[] {
@@ -144,7 +160,6 @@ function processHues(hues: readonly HueEntry[]): readonly ResolvedHue[] {
 	return hues.map((entry) => {
 		const hue = ((entry.hue % 360) + 360) % 360
 		const name = entry.name ?? `hue-${hue}`
-		const selector = entry.selector ?? `.${name}`
 
 		invariant(
 			LABEL_REGEX.test(name),
@@ -153,17 +168,20 @@ function processHues(hues: readonly HueEntry[]): readonly ResolvedHue[] {
 		invariant(!names.has(name), `Duplicate hue name '${name}'. Each hue name must be unique.`)
 		names.add(name)
 
-		return { name, hue, selector }
+		const className = entry.className ?? name
+		requireClassName(className)
+
+		return { name, hue, className }
 	})
 }
 
 /**
  * Resolve raw `ColorSetOptions` into a validated `ColorsDefinition`: applies the
  * default prefix, normalizes hue angles into [0, 360), and fills in default names
- * and selectors.
+ * and class names.
  *
- * Throws on an invalid or duplicate hue/role name, a `contrastsWith` entry naming
- * an unknown role, or a config with no active role.
+ * Throws on an invalid or duplicate hue/role name, an invalid class name, a
+ * `contrastsWith` entry naming an unknown role, or a config with no active role.
  */
 export function resolveColorSet(options: ColorSetOptions): ColorsDefinition {
 	return {

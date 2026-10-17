@@ -61,7 +61,7 @@ const { css } = defineColors({
 writeFileSync('src/colors.css', css)
 ```
 
-Each hue name and role name becomes a class (selectors are configurable). Put the hue class on the element or any ancestor, the role class on the element itself:
+Each hue name and role name becomes a class (class names are configurable). Put the hue class on the element or any ancestor, the role class on the element itself:
 
 ```html
 <link rel="stylesheet" href="colors.css" />
@@ -157,11 +157,13 @@ defineColors({
 
 ### `defineColors(options): ColorSystem`
 
-- `hues` (`HueEntry | HueEntry[]`): `{ hue, name?, selector? }`. `hue` is degrees, normalized into `[0, 360)`. `name` defaults to `hue-{angle}`, `selector` to `.{name}`.
-- `roles` (`RoleEntry | RoleEntry[]`): `{ name, selector?, contrastsWith?, passive? }`. `selector` defaults to `.{name}`. At least one non-passive role is required.
+- `hues` (`HueEntry | HueEntry[]`): `{ hue, name?, className? }`. `hue` is degrees, normalized into `[0, 360)`. `name` defaults to `hue-{angle}`, `className` to `name`.
+- `roles` (`RoleEntry | RoleEntry[]`): `{ name, className?, contrastsWith?, passive? }`. `className` defaults to `name`. At least one non-passive role is required.
 - `prefix` (`string`): namespace for output properties (`--{prefix}-{role}`) and internals. Defaults to `'color'`.
 
-Returns `{ css, hues, roles }`: `css` is the stylesheet string. `hues` and `roles` map names to their selectors, handy for building pickers or docs from the same config. Throws early on invalid or duplicate names, `contrastsWith` references to unknown roles, or a config with no active role.
+Class names are plain strings, written without the leading dot: `className: 'brand-primary'` emits `.brand-primary`. Classes are the only selector shape for now; richer selectors will come once fashionable can parse selector text.
+
+Returns `{ css, hues, roles }`: `css` is the stylesheet string. `hues` and `roles` map names to their class names, handy for building pickers or docs from the same config. Throws early on invalid or duplicate names, invalid class names, `contrastsWith` references to unknown roles, or a config with no active role.
 
 ### `measureContrast(background, foreground, options?): number`
 

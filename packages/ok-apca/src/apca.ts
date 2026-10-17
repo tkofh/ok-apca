@@ -1,4 +1,5 @@
-import { Calc } from '@ok-apca/calc-tree'
+import { Calc } from 'fashionable/calc'
+import type { Reads } from './util.ts'
 
 /** Exponents for Y (luminance) in APCA contrast formula. */
 export const APCA_BG_EXP_NORMAL = 0.56
@@ -51,7 +52,7 @@ const LP_SOFT_CLAMP_INV_P = 1 / LP_SOFT_CLAMP_P
 
 // APCA contrast pulled back into the luminance domain: (|Lc| + offset) / scale.
 // The polarity solvers subtract this from (normal) or add it to (reverse) yBg's power term.
-const contrastDelta = Calc.divide(Calc.add(Calc.abs(Calc.ref('contrast')), APCA_OFFSET), APCA_SCALE)
+const contrastDelta = Calc.divide(Calc.add(Calc.abs(Calc.var('contrast')), APCA_OFFSET), APCA_SCALE)
 
 // Weight for the near-zero-contrast smoothing branch: 0 at contrast 0, ramping to 1
 // as |contrast| reaches APCA_SMOOTH_THRESHOLD. sin(...)^power is a smooth ramp that
@@ -59,7 +60,7 @@ const contrastDelta = Calc.divide(Calc.add(Calc.abs(Calc.ref('contrast')), APCA_
 const smoothingBlend = Calc.pow(
 	Calc.sin(
 		Calc.multiply(
-			Calc.min(Calc.divide(Calc.abs(Calc.ref('contrast')), APCA_SMOOTH_THRESHOLD), 1),
+			Calc.min(Calc.divide(Calc.abs(Calc.var('contrast')), APCA_SMOOTH_THRESHOLD), 1),
 			Math.PI / 2,
 		),
 	),
@@ -70,7 +71,7 @@ const smoothingBlend = Calc.pow(
 // direct inverse over the smoothed branch.
 const aboveSmoothThreshold = Calc.max(
 	0,
-	Calc.sign(Calc.subtract(Calc.abs(Calc.ref('contrast')), APCA_SMOOTH_THRESHOLD)),
+	Calc.sign(Calc.subtract(Calc.abs(Calc.var('contrast')), APCA_SMOOTH_THRESHOLD)),
 )
 
 /**
@@ -83,17 +84,17 @@ const aboveSmoothThreshold = Calc.max(
  * background as `yBg`. The sign of `contrast` is ignored here, since the caller
  * chooses the direction.
  */
-export const normalPolarity: Calc.Expression<'yBg' | 'contrast'> = Calc.lerp(
+export const normalPolarity: Calc.Calc<Reads<'yBg' | 'contrast'>> = Calc.lerp(
 	Calc.lerp(
-		Calc.ref('yBg'),
+		Calc.var('yBg'),
 		Calc.signedPow(
-			Calc.subtract(Calc.pow(Calc.ref('yBg'), APCA_BG_EXP_NORMAL), APCA_SMOOTH_THRESHOLD_OFFSET),
+			Calc.subtract(Calc.pow(Calc.var('yBg'), APCA_BG_EXP_NORMAL), APCA_SMOOTH_THRESHOLD_OFFSET),
 			APCA_NORMAL_INV_EXP,
 		),
 		smoothingBlend,
 	),
 	Calc.signedPow(
-		Calc.subtract(Calc.pow(Calc.ref('yBg'), APCA_BG_EXP_NORMAL), contrastDelta),
+		Calc.subtract(Calc.pow(Calc.var('yBg'), APCA_BG_EXP_NORMAL), contrastDelta),
 		APCA_NORMAL_INV_EXP,
 	),
 	aboveSmoothThreshold,
@@ -107,17 +108,17 @@ export const normalPolarity: Calc.Expression<'yBg' | 'contrast'> = Calc.lerp(
  * Mirrors normalPolarity: same smoothing near zero contrast, same soft-clamped
  * `yBg`, sign of `contrast` ignored.
  */
-export const reversePolarity: Calc.Expression<'yBg' | 'contrast'> = Calc.lerp(
+export const reversePolarity: Calc.Calc<Reads<'yBg' | 'contrast'>> = Calc.lerp(
 	Calc.lerp(
-		Calc.ref('yBg'),
+		Calc.var('yBg'),
 		Calc.pow(
-			Calc.add(Calc.pow(Calc.ref('yBg'), APCA_BG_EXP_REVERSE), APCA_SMOOTH_THRESHOLD_OFFSET),
+			Calc.add(Calc.pow(Calc.var('yBg'), APCA_BG_EXP_REVERSE), APCA_SMOOTH_THRESHOLD_OFFSET),
 			APCA_REVERSE_INV_EXP,
 		),
 		smoothingBlend,
 	),
 	Calc.pow(
-		Calc.add(Calc.pow(Calc.ref('yBg'), APCA_BG_EXP_REVERSE), contrastDelta),
+		Calc.add(Calc.pow(Calc.var('yBg'), APCA_BG_EXP_REVERSE), contrastDelta),
 		APCA_REVERSE_INV_EXP,
 	),
 	aboveSmoothThreshold,
@@ -125,7 +126,7 @@ export const reversePolarity: Calc.Expression<'yBg' | 'contrast'> = Calc.lerp(
 
 // Direction pickers derived from the contrast sign: preferLight is 1 for a positive
 // request (lighter), preferDark is 1 for a negative one (darker), isZero is 1 for neither.
-const contrastSign = Calc.sign(Calc.ref('contrast'))
+const contrastSign = Calc.sign(Calc.var('contrast'))
 const contrastPreferLight = Calc.max(0, contrastSign)
 const contrastPreferDark = Calc.max(0, Calc.multiply(-1, contrastSign))
 const contrastIsZero = Calc.subtract(1, Calc.max(contrastPreferLight, contrastPreferDark))
@@ -137,9 +138,9 @@ const contrastIsZero = Calc.subtract(1, Calc.max(contrastPreferLight, contrastPr
  * form backs the TypeScript reference path (measureContrast without
  * `approximate`), where expression size doesn't matter.
  */
-export const trueSoftClamp: Calc.Expression<'y'> = Calc.add(
-	Calc.ref('y'),
-	Calc.pow(Calc.max(0, Calc.subtract(APCA_SMOOTH_THRESHOLD, Calc.ref('y'))), APCA_BLACK_CLAMP),
+export const trueSoftClamp: Calc.Calc<Reads<'y'>> = Calc.add(
+	Calc.var('y'),
+	Calc.pow(Calc.max(0, Calc.subtract(APCA_SMOOTH_THRESHOLD, Calc.var('y'))), APCA_BLACK_CLAMP),
 )
 
 /**
@@ -148,8 +149,8 @@ export const trueSoftClamp: Calc.Expression<'y'> = Calc.add(
  * Formula: pow(pow(Y, p) + K^p, 1/p)
  * References Y exactly once, avoiding DevTools expression expansion.
  */
-export const softClampApprox: Calc.Expression<'y'> = Calc.pow(
-	Calc.add(Calc.pow(Calc.ref('y'), LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP),
+export const softClampApprox: Calc.Calc<Reads<'y'>> = Calc.pow(
+	Calc.add(Calc.pow(Calc.var('y'), LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP),
 	LP_SOFT_CLAMP_INV_P,
 )
 
@@ -161,8 +162,8 @@ export const softClampApprox: Calc.Expression<'y'> = Calc.pow(
  * References Y exactly once. Naturally approaches identity for Y >> K
  * without needing a conditional branch, avoiding expression expansion.
  */
-export const softUnclamp: Calc.Expression<'y'> = Calc.pow(
-	Calc.max(0, Calc.subtract(Calc.pow(Calc.ref('y'), LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP)),
+export const softUnclamp: Calc.Calc<Reads<'y'>> = Calc.pow(
+	Calc.max(0, Calc.subtract(Calc.pow(Calc.var('y'), LP_SOFT_CLAMP_P), LP_SOFT_CLAMP_KP)),
 	LP_SOFT_CLAMP_INV_P,
 )
 
@@ -172,15 +173,15 @@ export const softUnclamp: Calc.Expression<'y'> = Calc.pow(
 // solver so each Y input is referenced once instead of twice. Measurements are
 // only used for comparison (which direction achieved higher contrast), so the
 // monotonic Lp-norm preserves ranking while halving expansion.
-const yBgSoftclamped = Calc.bind(softClampApprox, { y: Calc.ref('yBg') })
-const yFgSoftclamped = Calc.bind(softClampApprox, { y: Calc.ref('yFg') })
+const yBgSoftclamped = Calc.bind(softClampApprox, { y: Calc.var('yBg') })
+const yFgSoftclamped = Calc.bind(softClampApprox, { y: Calc.var('yFg') })
 
 /**
  * Measure achieved contrast for reverse polarity (light text on dark background).
  *
  * Formula: max(0, 1.14 * (clamp(Y_fg)^0.62 - clamp(Y_bg)^0.65) - 0.027)
  */
-export const contrastMeasurementReverse: Calc.Expression<'yBg' | 'yFg'> = Calc.max(
+export const contrastMeasurementReverse: Calc.Calc<Reads<'yBg' | 'yFg'>> = Calc.max(
 	0,
 	Calc.subtract(
 		Calc.multiply(
@@ -199,7 +200,7 @@ export const contrastMeasurementReverse: Calc.Expression<'yBg' | 'yFg'> = Calc.m
  *
  * Formula: max(0, 1.14 * (clamp(Y_bg)^0.56 - clamp(Y_fg)^0.57) - 0.027)
  */
-export const contrastMeasurementNormal: Calc.Expression<'yBg' | 'yFg'> = Calc.max(
+export const contrastMeasurementNormal: Calc.Calc<Reads<'yBg' | 'yFg'>> = Calc.max(
 	0,
 	Calc.subtract(
 		Calc.multiply(
@@ -217,16 +218,16 @@ export const contrastMeasurementNormal: Calc.Expression<'yBg' | 'yFg'> = Calc.ma
 // or when both contrasts are below the inversion threshold.
 // When invertable=0, force usePreference=1 (always follow contrast sign, no inversion).
 const usePreference = Calc.max(
-	Calc.subtract(1, Calc.ref('invertable')),
+	Calc.subtract(1, Calc.var('invertable')),
 	Calc.multiply(
-		Calc.max(0, Calc.sign(Calc.subtract(INVERSION_THRESHOLD, Calc.ref('lcLight')))),
-		Calc.max(0, Calc.sign(Calc.subtract(INVERSION_THRESHOLD, Calc.ref('lcDark')))),
+		Calc.max(0, Calc.sign(Calc.subtract(INVERSION_THRESHOLD, Calc.var('lcLight')))),
+		Calc.max(0, Calc.sign(Calc.subtract(INVERSION_THRESHOLD, Calc.var('lcDark')))),
 	),
 	Calc.add(
-		Calc.multiply(contrastPreferDark, Calc.max(0, Calc.sign(Calc.ref('yDarkRaw')))),
+		Calc.multiply(contrastPreferDark, Calc.max(0, Calc.sign(Calc.var('yDarkRaw')))),
 		Calc.multiply(
 			contrastPreferLight,
-			Calc.max(0, Calc.sign(Calc.subtract(1, Calc.ref('yLightRaw')))),
+			Calc.max(0, Calc.sign(Calc.subtract(1, Calc.var('yLightRaw')))),
 		),
 	),
 )
@@ -235,7 +236,7 @@ const usePreference = Calc.max(
 // bias (~0.1 Lc), the preferred direction wins. This replaces epsilon-based
 // tie-breaking with fewer lcLight/lcDark references (2 each instead of 6).
 const compDiff = Calc.add(
-	Calc.subtract(Calc.ref('lcLight'), Calc.ref('lcDark')),
+	Calc.subtract(Calc.var('lcLight'), Calc.var('lcDark')),
 	Calc.subtract(
 		Calc.multiply(contrastPreferLight, 0.001),
 		Calc.multiply(contrastPreferDark, 0.001),
@@ -263,20 +264,22 @@ const compDiff = Calc.add(
  * - Lc_dark: achieved contrast for dark solution
  * - Selection: preference when not exhausted, comparison when exhausted
  */
-export const contrastSolver: Calc.Expression<
-	| 'yBg'
-	| 'contrast'
-	| 'invertable'
-	| 'yLight'
-	| 'yDark'
-	| 'yLightRaw'
-	| 'yDarkRaw'
-	| 'lcLight'
-	| 'lcDark'
+export const contrastSolver: Calc.Calc<
+	Reads<
+		| 'yBg'
+		| 'contrast'
+		| 'invertable'
+		| 'yLight'
+		| 'yDark'
+		| 'yLightRaw'
+		| 'yDarkRaw'
+		| 'lcLight'
+		| 'lcDark'
+	>
 > = Calc.add(
 	Calc.multiply(
 		Calc.lerp(Calc.max(0, Calc.sign(compDiff)), contrastPreferLight, usePreference),
-		Calc.ref('yLight'),
+		Calc.var('yLight'),
 	),
 	Calc.multiply(
 		Calc.lerp(
@@ -284,7 +287,7 @@ export const contrastSolver: Calc.Expression<
 			contrastPreferDark,
 			usePreference,
 		),
-		Calc.ref('yDark'),
+		Calc.var('yDark'),
 	),
-	Calc.multiply(contrastIsZero, Calc.ref('yBg')),
+	Calc.multiply(contrastIsZero, Calc.var('yBg')),
 )
