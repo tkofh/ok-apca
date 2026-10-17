@@ -20,7 +20,8 @@
 		},
 		"test": {
 			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", ".env*"]
+			"inputs": ["$TURBO_DEFAULT$", ".env*"],
+			"passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH"]
 		},
 		"typecheck": {
 			"dependsOn": ["^typecheck"]

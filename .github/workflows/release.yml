@@ -88,9 +88,9 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright:v1.58.2-noble
     env:
-      # The image installs browsers here, but the runner replaces HOME and the
-      # image's PLAYWRIGHT_BROWSERS_PATH does not reach the steps, so Playwright
-      # otherwise looks under /github/home/.cache/ms-playwright and finds nothing.
+      # The image installs browsers here. turbo's strict env mode strips the
+      # variable from task environments unless turbo.json passes it through
+      # (see the `test` task), so set it explicitly and keep both in step.
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     environment:
       name: release
