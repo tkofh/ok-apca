@@ -1,6 +1,6 @@
 {
 	"name": "ok-apca",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Generate static CSS that solves APCA contrast for gamut-mapped OKLCH colors in the cascade",
 	"license": "MIT",
 	"homepage": "https://github.com/tkofh/ok-apca#readme",
