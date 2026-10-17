@@ -38,3 +38,6 @@ yarn-error.log*
 .DS_Store
 *.pem
 .idea
+
+# Claude Code
+.claude/settings.local.json
