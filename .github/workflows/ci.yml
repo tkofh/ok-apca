@@ -19,6 +19,11 @@ jobs:
   verify:
     name: Check, build, test, typecheck
     runs-on: ubuntu-latest
+    # The official Playwright image ships Chromium and its system libraries,
+    # so the browser tests need no apt or `playwright install` step. Keep the
+    # tag in step with the `playwright` devDependency in packages/ok-apca.
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
     permissions:
       contents: read
     steps:
@@ -39,10 +44,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      # The ok-apca integration tests render the generated CSS in headless Chromium.
-      - name: Install Playwright browser
-        run: pnpm --filter ok-apca exec playwright install --with-deps chromium
 
       # check:report is the read-only biome run; `check` would write fixes.
       - name: Check, build, test, typecheck
